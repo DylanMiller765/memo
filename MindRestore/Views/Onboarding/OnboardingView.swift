@@ -41,10 +41,31 @@ enum OnboardingPage: Int, Equatable {
     case planPersonalizing = 13
     case focusMode = 14
     case notificationPriming = 15
+    case targetSelection = 16
+    case unlockLoopDemo = 17
+    case attentionTime = 18
+    case motivationBridge = 19
+}
+
+private enum MemoOnboardingVariant: String, CaseIterable {
+    case control
+    case concise
+
+    static func resolve() -> Self {
+        #if DEBUG
+        if let index = ProcessInfo.processInfo.arguments.firstIndex(of: "--onboarding-variant"),
+           ProcessInfo.processInfo.arguments.indices.contains(index + 1),
+           let override = Self(rawValue: ProcessInfo.processInfo.arguments[index + 1]) {
+            return override
+        }
+        #endif
+
+        return .concise
+    }
 }
 
 struct OnboardingFlowOrder {
-    static let pageCount = 16
+    static let pageCount = 20
     static let monetizationPages: [OnboardingPage] = [
         .trialTrustBridge,
         .planPersonalizing
@@ -144,10 +165,13 @@ struct OnboardingView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Query private var users: [User]
     @State private var currentPage = 0
+    @State private var onboardingVariant: MemoOnboardingVariant
     @State private var pageNavigationDirection: PageNavigationDirection = .forward
     @State private var selectedGoals: Set<UserFocusGoal> = []
     @State private var selectedGoalOrder: [UserFocusGoal] = []
-    @State private var selectedTrapApps: Set<OnboardingTrapApp> = [.tiktok, .youtube, .instagram]
+    @State private var selectedTrapApps: Set<OnboardingTrapApp> = []
+    @State private var selectedDistractingAppHours: Double?
+    @State private var trialReminderDaysBefore = NotificationService.selectedTrialReminderDaysBefore
     @State private var unlockLoopDemoStartedTracked = false
     @State private var assessmentResult: BrainScoreResult?
     @State private var notificationsEnabled = false
@@ -224,6 +248,7 @@ struct OnboardingView: View {
     /// Page to navigate to once the active beat finishes.
     @State private var beatTargetPage: Int?
     @State private var didRouteAfterPaywallConversion = false
+    @State private var isCompletingConciseOnboarding = false
     @State private var onboardingStartedAt = Date()
     @State private var currentStepStartedAt = Date()
     @State private var hasTrackedOnboardingStart = false
@@ -236,18 +261,63 @@ struct OnboardingView: View {
 
     var onComplete: () -> Void
 
-    private let totalPages = OnboardingFlowOrder.pageCount
+    private var routePages: [OnboardingPage] {
+        switch onboardingVariant {
+        case .control:
+            return [
+                .welcome, .name, .goals, .age, .screenTimeAccess, .lifetimeShock,
+                .lifeSquaresReceipt, .protectTarget, .feedWinMoment, .personalizationBeat,
+                .memoPlan, .trialTrustBridge, .planPersonalizing, .focusMode, .notificationPriming
+            ]
+        case .concise:
+            return [
+                .welcome, .motivationBridge, .goals,
+                .trialTrustBridge, .trialReminderBridge
+            ]
+        }
+    }
+
+    private var totalPages: Int { routePages.count }
+
+    private var currentRouteIndex: Int {
+        guard let page = OnboardingPage(rawValue: currentPage),
+              let index = routePages.firstIndex(of: page) else { return 0 }
+        return index
+    }
+
+    private var preConversionPageCount: Int {
+        routePages.firstIndex(of: .focusMode) ?? routePages.count
+    }
+
+    private var hasScreenTimeInput: Bool {
+        useScreenTimeEstimate || hasReached(.lifetimeShock)
+    }
+
+    private var annualPlanDisplayPrice: String? {
+        storeService.products.first(where: { $0.id == StoreService.annualUltraProductID })?.displayPrice
+    }
 
     init(startPage: Int = 0, previewName: String = "", onComplete: @escaping () -> Void) {
         self.onComplete = onComplete
         _currentPage = State(initialValue: startPage)
+        _onboardingVariant = State(initialValue: MemoOnboardingVariant.resolve())
         _enteredName = State(initialValue: previewName)
         #if DEBUG
         _selectedAge = State(initialValue: Self.screenshotInitialAge())
+        _selectedDistractingAppHours = State(initialValue: Self.screenshotInitialDistractingAppHours())
         #endif
     }
 
     #if DEBUG
+    private static func screenshotInitialDistractingAppHours() -> Double? {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard arguments.contains("--screenshot-mode"),
+              let index = arguments.firstIndex(of: "--screenshot-target"),
+              arguments.indices.contains(index + 1),
+              arguments[index + 1] == "onboarding-attention-result" else { return nil }
+        return 4
+    }
+
     private static func screenshotInitialAge() -> Int {
         let arguments = ProcessInfo.processInfo.arguments
         guard arguments.contains("--screenshot-mode") else { return 0 }
@@ -387,7 +457,8 @@ struct OnboardingView: View {
             // Dev-only: jump straight to the paywall to test conversion +
             // everything downstream without walking all 16 screens. Compiled
             // out of release builds.
-            if currentPage == 0 && presentedCover == nil {
+            if currentPage == 0 && presentedCover == nil &&
+                !ProcessInfo.processInfo.arguments.contains("--hide-dev-controls") {
                 Button {
                     presentedCover = .paywall
                 } label: {
@@ -409,14 +480,16 @@ struct OnboardingView: View {
         .preferredColorScheme(.dark)
         .environment(\.colorScheme, .dark)
         .onAppear {
+            SoundService.shared.isSuppressed = true
             trackOnboardingStartedIfNeeded()
         }
         .onDisappear {
+            SoundService.shared.isSuppressed = false
             if users.first?.hasCompletedOnboarding != true, presentedCover == nil, !onboardingCompletionQueued {
                 Analytics.onboardingDroppedOff(
-                    lastStep: Analytics.onboardingStepName(for: currentPage),
-                    totalSteps: currentPage,
-                    stepIndex: currentPage,
+                    lastStep: onboardingStepName(for: currentPage),
+                    totalSteps: totalPages,
+                    stepIndex: currentRouteIndex,
                     secondsSinceStart: onboardingElapsed,
                     secondsOnStep: currentStepElapsed,
                     goals: onboardingGoalValues,
@@ -425,7 +498,8 @@ struct OnboardingView: View {
                     screenTimeIsEstimate: collectedScreenTimeEstimateFlagForAnalytics,
                     brainAge: assessmentResult?.brainAge,
                     brainScore: assessmentResult?.brainScore,
-                    receiptCount: receiptCount
+                    receiptCount: receiptCount,
+                    variant: onboardingVariant.rawValue
                 )
             }
         }
@@ -442,12 +516,13 @@ struct OnboardingView: View {
             case .paywall:
                 PaywallView(
                     isHighIntent: true,
-                    triggerSource: "onboarding_personalized_plan",
+                    triggerSource: "onboarding_\(onboardingVariant.rawValue)",
                     isHardPaywall: true,
                     dailyScreenTimeHours: effectiveDailyScreenTimeHours,
-                    onboardingAge: selectedAge > 0 ? selectedAge : 25,
+                    onboardingAge: hasReached(.age) && selectedAge > 0 ? selectedAge : nil,
                     onboardingGoalSummary: onboardingPlanGoalSummary,
-                    screenTimeIsEstimate: projectionIsEstimate,
+                    screenTimeIsEstimate: hasScreenTimeInput ? projectionIsEstimate : true,
+                    hasScreenTimeInput: hasScreenTimeInput,
                     protectTarget: selectedProtectTarget,
                     feedWinMoment: selectedFeedWinMoment,
                     onConversionComplete: routeAfterPaywallConversion
@@ -472,9 +547,15 @@ struct OnboardingView: View {
             trackOnboardingStepCompleted("revealDismissed")
             goToPage(OnboardingPage.screenTimeAccess.rawValue)
         case .paywall:
-            guard !didRouteAfterPaywallConversion else { break }
-            if storeService.isProUser {
+            if didRouteAfterPaywallConversion {
+                if onboardingVariant == .concise {
+                    finishConciseOnboardingAfterConversion()
+                }
+            } else if storeService.isProUser {
                 routeAfterPaywallConversion()
+                if onboardingVariant == .concise {
+                    finishConciseOnboardingAfterConversion()
+                }
             } else {
                 trackOnboardingStepCompleted("paywallHardDismissBlocked", extraProperties: [
                     "hard_paywall": true
@@ -492,6 +573,12 @@ struct OnboardingView: View {
     private func routeAfterPaywallConversion() {
         guard !didRouteAfterPaywallConversion else { return }
         didRouteAfterPaywallConversion = true
+        if onboardingVariant == .concise {
+            trackOnboardingStepCompleted("paywallConverted", extraProperties: [
+                "next_step": "home"
+            ])
+            return
+        }
         trackOnboardingStepCompleted("paywallConverted", extraProperties: [
             "next_step": "focus_mode_setup"
         ])
@@ -504,6 +591,22 @@ struct OnboardingView: View {
                 showingPostPurchaseCelebration = true
             }
             UINotificationFeedbackGenerator().notificationOccurred(.success)
+        }
+    }
+
+    private func finishConciseOnboardingAfterConversion() {
+        guard !isCompletingConciseOnboarding else { return }
+        isCompletingConciseOnboarding = true
+
+        Task { @MainActor in
+            if NotificationService.shared.hasUpcomingTrialReminder {
+                notificationsEnabled = await NotificationService.shared.requestPermission()
+                if notificationsEnabled {
+                    NotificationService.shared.scheduleStoredTrialRemindersIfAuthorized()
+                }
+            }
+            onboardingCompletionQueued = true
+            completeOnboarding()
         }
     }
 
@@ -534,7 +637,7 @@ struct OnboardingView: View {
                     .foregroundStyle(OB.fg)
                     .padding(.top, 18)
 
-                Text("7 days free. Let's get your time back.")
+                Text("Memo is ready when you are.")
                     .font(.system(size: 16, weight: .bold, design: .rounded))
                     .foregroundStyle(OB.fg2)
                     .padding(.top, 6)
@@ -585,14 +688,6 @@ struct OnboardingView: View {
         Array(selectedGoals).map(\.rawValue).sorted()
     }
 
-    private var selectedTrapAppValues: [String] {
-        selectedTrapApps.map(\.rawValue).sorted()
-    }
-
-    private var selectedTrapAppNames: [String] {
-        selectedTrapApps.sorted { $0.sortOrder < $1.sortOrder }.map(\.displayName)
-    }
-
     private var onboardingPlanGoalSummary: String {
         PlanBuildBeatContent.goalSummary(selectedGoals, selectedGoalOrder: selectedGoalsInChoiceOrder)
     }
@@ -602,11 +697,11 @@ struct OnboardingView: View {
     }
 
     private var collectedAgeForAnalytics: Int? {
-        currentPage >= 4 ? selectedAgeForAnalytics : nil
+        hasReached(.age) ? selectedAgeForAnalytics : nil
     }
 
     private var collectedScreenTimeHoursForAnalytics: Double? {
-        guard currentPage >= 5 || useScreenTimeEstimate else { return nil }
+        guard hasScreenTimeInput else { return nil }
         return effectiveDailyScreenTimeHours
     }
 
@@ -621,32 +716,46 @@ struct OnboardingView: View {
         onboardingStartedAt = now
         currentStepStartedAt = now
         hasTrackedOnboardingStart = true
-        Analytics.onboardingStarted(totalSteps: totalPages)
+        Analytics.onboardingStarted(totalSteps: totalPages, variant: onboardingVariant.rawValue)
         Analytics.onboardingStepViewed(
-            step: Analytics.onboardingStepName(for: currentPage),
-            stepIndex: currentPage,
+            step: onboardingStepName(for: currentPage),
+            stepIndex: currentRouteIndex,
             totalSteps: totalPages,
-            secondsSinceStart: 0
+            secondsSinceStart: 0,
+            variant: onboardingVariant.rawValue
         )
     }
 
     private func trackOnboardingStepViewed(from oldPage: Int, to newPage: Int) {
         let now = Date()
         Analytics.onboardingStepViewed(
-            step: Analytics.onboardingStepName(for: newPage),
-            stepIndex: newPage,
+            step: onboardingStepName(for: newPage),
+            stepIndex: currentRouteIndex,
             totalSteps: totalPages,
             secondsSinceStart: now.timeIntervalSince(onboardingStartedAt),
-            previousStep: Analytics.onboardingStepName(for: oldPage),
-            secondsOnPreviousStep: now.timeIntervalSince(currentStepStartedAt)
+            previousStep: onboardingStepName(for: oldPage),
+            secondsOnPreviousStep: now.timeIntervalSince(currentStepStartedAt),
+            variant: onboardingVariant.rawValue
         )
         currentStepStartedAt = now
+    }
+
+    private func onboardingStepName(for page: Int) -> String {
+        guard onboardingVariant == .concise else { return Analytics.onboardingStepName(for: page) }
+        switch OnboardingPage(rawValue: page) {
+        case .welcome: return "story_block"
+        case .motivationBridge: return "story_bridge"
+        case .goals: return "story_playable_loop"
+        case .trialTrustBridge: return "trial_offer"
+        case .trialReminderBridge: return "trial_reminder"
+        default: return Analytics.onboardingStepName(for: page)
+        }
     }
 
     private func trackOnboardingStepCompleted(_ step: String, extraProperties: [String: Any] = [:]) {
         Analytics.onboardingStep(
             step: step,
-            stepIndex: currentPage,
+            stepIndex: currentRouteIndex,
             totalSteps: totalPages,
             secondsSinceStart: onboardingElapsed,
             secondsOnStep: currentStepElapsed,
@@ -657,7 +766,8 @@ struct OnboardingView: View {
             brainAge: assessmentResult?.brainAge,
             brainScore: assessmentResult?.brainScore,
             receiptCount: receiptCount,
-            extraProperties: extraProperties
+            extraProperties: extraProperties,
+            variant: onboardingVariant.rawValue
         )
     }
 
@@ -685,12 +795,14 @@ struct OnboardingView: View {
         case 9: personalizationBeatPage
         case 10: memoPlanPage
         case 11: trialTrustBridgePage
-        // 12 (trialReminderBridge) merged into trialTrustBridge — nothing
-        // routes here anymore; fall through to the plan beat as a safety net.
-        case 12: planPersonalizingPage
+        case 12: trialReminderPage
         case 13: planPersonalizingPage
         case 14: focusModePage
         case 15: notificationPrimingPage
+        case 16: trapSelectionPage
+        case 17: unlockLoopDemoPage
+        case 18: attentionTimePage
+        case 19: motivationBridgePage
         default: EmptyView()
         }
     }
@@ -699,9 +811,9 @@ struct OnboardingView: View {
     private var pageAtmosphere: some View {
         switch currentPage {
         case 0:
-            welcomeAtmosphere
-        case OnboardingPage.trialTrustBridge.rawValue, OnboardingPage.trialReminderBridge.rawValue:
-            trialTrustBridgeAtmosphere
+            if onboardingVariant == .control { welcomeAtmosphere }
+        case OnboardingPage.trialTrustBridge.rawValue:
+            if onboardingVariant == .control { trialTrustBridgeAtmosphere }
         case OnboardingPage.planPersonalizing.rawValue:
             // The build-beat gradient must own the whole screen, including
             // the strip behind the progress bar — a black band up top reads
@@ -755,15 +867,28 @@ struct OnboardingView: View {
     /// focusMode onward are post-conversion setup, and stepping back would
     /// drop them into the plan-beat / paywall funnel they already passed.
     private var canGoBack: Bool {
-        currentPage > 0 && currentPage < OnboardingPage.focusMode.rawValue
+        currentRouteIndex > 0 && currentRouteIndex < preConversionPageCount
     }
 
     private func goToPage(_ page: Int) {
-        guard (0..<totalPages).contains(page), page != currentPage else { return }
-        pageNavigationDirection = page > currentPage ? .forward : .backward
+        guard let targetPage = OnboardingPage(rawValue: page),
+              let targetIndex = routePages.firstIndex(of: targetPage),
+              page != currentPage else { return }
+        pageNavigationDirection = targetIndex > currentRouteIndex ? .forward : .backward
         withAnimation(onboardingPageAnimation) {
             currentPage = page
         }
+    }
+
+    private func goToNextRoute() {
+        let nextIndex = currentRouteIndex + 1
+        guard routePages.indices.contains(nextIndex) else { return }
+        goToPage(routePages[nextIndex].rawValue)
+    }
+
+    private func hasReached(_ page: OnboardingPage) -> Bool {
+        guard let index = routePages.firstIndex(of: page) else { return false }
+        return currentRouteIndex >= index
     }
 
     /// Keep the onboarding chrome fixed while the page layer moves as one
@@ -812,7 +937,49 @@ struct OnboardingView: View {
         if let target { goToPage(target) }
     }
 
+    @ViewBuilder
     private var onboardingProgressHeader: some View {
+        if onboardingVariant == .concise {
+            // Equal-width side slots keep the progress bar on the true
+            // center line whether or not the back button is showing.
+            HStack(spacing: 0) {
+                Button {
+                    let previousIndex = currentRouteIndex - 1
+                    guard routePages.indices.contains(previousIndex) else { return }
+                    goToPage(routePages[previousIndex].rawValue)
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(OB.fg2)
+                        .frame(width: 44, height: 44, alignment: .leading)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .opacity(canGoBack ? 1 : 0)
+                .disabled(!canGoBack)
+                .accessibilityLabel("Back")
+                .accessibilityHidden(!canGoBack)
+
+                Spacer(minLength: 8)
+
+                HStack(spacing: 5) {
+                    ForEach(routePages.indices, id: \.self) { index in
+                        Capsule()
+                            .fill(index <= currentRouteIndex ? OB.accent : Color.white.opacity(0.14))
+                            .frame(width: index == currentRouteIndex ? 26 : 16, height: 5)
+                    }
+                }
+                .animation(.easeInOut(duration: 0.3), value: currentRouteIndex)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Step \(currentRouteIndex + 1) of \(totalPages)")
+
+                Spacer(minLength: 8)
+
+                Color.clear.frame(width: 44, height: 44)
+            }
+            .frame(height: 44)
+            .padding(.horizontal, 16)
+        } else {
         ZStack {
             GeometryReader { proxy in
                 let barWidth = min(proxy.size.width * 0.76, 320)
@@ -832,7 +999,9 @@ struct OnboardingView: View {
 
             Button {
                 guard canGoBack else { return }
-                goToPage(max(0, currentPage - 1))
+                let previousIndex = currentRouteIndex - 1
+                guard routePages.indices.contains(previousIndex) else { return }
+                goToPage(routePages[previousIndex].rawValue)
             } label: {
                 Image(systemName: "chevron.left")
                     .font(.system(size: 18, weight: .bold))
@@ -848,6 +1017,7 @@ struct OnboardingView: View {
         .padding(.top, currentPage == 4 ? 28 : 10)
         .padding(.bottom, currentPage == 4 ? 0 : 4)
         .animation(.spring(response: 0.35, dampingFraction: 0.85), value: currentPage)
+        }
     }
 
     /// Pages 14–15 (focusMode, notificationPriming) are post-conversion setup,
@@ -855,14 +1025,13 @@ struct OnboardingView: View {
     /// paywall — telling the user a quarter remained at the exact moment they
     /// should feel finished. Post-conversion pages run their own 0→100 pass.
     private var onboardingProgress: CGFloat {
-        let preConversionCount = OnboardingPage.focusMode.rawValue // 14
-        if currentPage >= preConversionCount {
-            let postCount = totalPages - preConversionCount
+        if currentRouteIndex >= preConversionPageCount {
+            let postCount = totalPages - preConversionPageCount
             guard postCount > 1 else { return 1 }
-            return CGFloat(currentPage - preConversionCount + 1) / CGFloat(postCount)
+            return CGFloat(currentRouteIndex - preConversionPageCount + 1) / CGFloat(postCount)
         }
-        guard preConversionCount > 1 else { return 1 }
-        return CGFloat(currentPage + 1) / CGFloat(preConversionCount)
+        guard preConversionPageCount > 1 else { return 1 }
+        return CGFloat(currentRouteIndex + 1) / CGFloat(preConversionPageCount)
     }
 
     private var onboardingGoalOrder: [UserFocusGoal] {
@@ -979,7 +1148,23 @@ struct OnboardingView: View {
         }
     }
 
+    @ViewBuilder
     private var welcomePage: some View {
+        if onboardingVariant == .concise {
+            conciseWelcomePage
+        } else {
+            legacyWelcomePage
+        }
+    }
+
+    private var conciseWelcomePage: some View {
+        OnboardingIntroPage(isActive: currentPage == OnboardingPage.welcome.rawValue) {
+            trackOnboardingStepCompleted("story_block", extraProperties: ["product_demo": true])
+            goToNextRoute()
+        }
+    }
+
+    private var legacyWelcomePage: some View {
         ZStack {
             // Atmosphere is rendered at the outer body so it can extend behind
             // the progress bar. The page body itself sits on the global pageBg.
@@ -1050,7 +1235,7 @@ struct OnboardingView: View {
             VStack(spacing: 14) {
                 OBContinueButton(title: "Show me how") {
                     trackOnboardingStepCompleted("welcome")
-                    goToPage(1)
+                    goToNextRoute()
                 }
                 // Disable taps until the bezel has finished materializing.
                 // Otherwise the button is hit-testable behind its .opacity(0)
@@ -1359,7 +1544,25 @@ struct OnboardingView: View {
         goToPage(2)
     }
 
+    @ViewBuilder
     private var goalsPage: some View {
+        if onboardingVariant == .concise {
+            OnboardingPlayableLoopPage(previewStage: screenshotTryItStage) { levelsCleared in
+                trackOnboardingStepCompleted("story_playable_loop", extraProperties: [
+                    "demo_game": "visual_memory",
+                    "used_product_slot": true,
+                    "used_product_game": true,
+                    "preview_levels_cleared": levelsCleared,
+                    "preview_only": true
+                ])
+                goToNextRoute()
+            }
+        } else {
+            legacyGoalsPage
+        }
+    }
+
+    private var legacyGoalsPage: some View {
         GeometryReader { proxy in
             let isCompact = proxy.size.height < 900
             let headerHeight: CGFloat = isCompact ? 74 : 104
@@ -1443,38 +1646,97 @@ struct OnboardingView: View {
     }
 
     private var trapSelectionPage: some View {
-        OnboardingTrapSelectionView(selectedApps: $selectedTrapApps) {
-            trackOnboardingStepCompleted("trapSelection", extraProperties: [
-                "blocked_app_count": selectedTrapApps.count,
-                "blocked_apps": selectedTrapAppValues.joined(separator: ","),
-                "used_real_logos": true
+        OnboardingVisualMemoryPage(previewCompleted: screenshotGameReward) { completed in
+            trackOnboardingStepCompleted("story_play", extraProperties: [
+                "demo_game": "visual_memory",
+                "used_product_game": true,
+                "preview_round_completed": completed,
+                "leaderboard_teaser_viewed": completed
             ])
-            goToPage(3) // → unlockLoopDemo
+            goToNextRoute()
+        }
+    }
+
+    /// Screenshot-mode entry point into the Try it page's later beats.
+    private var screenshotTryItStage: Int? {
+        #if DEBUG
+        let arguments = ProcessInfo.processInfo.arguments
+        guard arguments.contains("--screenshot-mode"),
+              let index = arguments.firstIndex(of: "--screenshot-target"),
+              arguments.indices.contains(index + 1) else { return nil }
+        switch arguments[index + 1] {
+        case "onboarding-game-reward": return 2
+        case "onboarding-rank": return 3
+        default: return nil
+        }
+        #else
+        return nil
+        #endif
+    }
+
+    private var screenshotGameReward: Bool {
+        #if DEBUG
+        let arguments = ProcessInfo.processInfo.arguments
+        guard arguments.contains("--screenshot-mode"),
+              let index = arguments.firstIndex(of: "--screenshot-target"),
+              arguments.indices.contains(index + 1) else { return false }
+        return arguments[index + 1] == "onboarding-game-reward"
+        #else
+        return false
+        #endif
+    }
+
+    private var attentionTimePage: some View {
+        OnboardingAttentionTimePage(selectedHours: $selectedDistractingAppHours) {
+            var properties: [String: Any] = [
+                "estimate_skipped": selectedDistractingAppHours == nil
+            ]
+            if let hours = selectedDistractingAppHours {
+                properties["estimated_distracting_app_hours_daily"] = hours
+                properties["estimated_distracting_app_days_annual"] = Int((hours * 365 / 24).rounded())
+            }
+            trackOnboardingStepCompleted("story_attention_time", extraProperties: properties)
+            goToNextRoute()
+        }
+    }
+
+    private var motivationBridgePage: some View {
+        OnboardingMotivationBridgePage {
+            trackOnboardingStepCompleted("story_bridge")
+            goToNextRoute()
         }
     }
 
     private var unlockLoopDemoPage: some View {
-        OnboardingUnlockLoopDemoView(
-            blockedApps: selectedTrapApps,
-            onStarted: {
-                guard !unlockLoopDemoStartedTracked else { return }
-                unlockLoopDemoStartedTracked = true
-                trackOnboardingStepCompleted("unlockLoopDemoStarted", extraProperties: [
-                    "demo_game": "random_rotation_preview",
-                    "demo_interactive": false,
-                    "blocked_apps": selectedTrapAppValues.joined(separator: ",")
-                ])
-            },
-            onComplete: { attempts in
-                trackOnboardingStepCompleted("unlockLoopDemoCompleted", extraProperties: [
-                    "demo_game": "random_rotation_preview",
-                    "demo_interactive": false,
-                    "demo_attempts": attempts,
-                    "blocked_apps": selectedTrapAppValues.joined(separator: ",")
-                ])
-                goToPage(4) // → planPersonalizing
+        OnboardingUnlockedFocusPage {
+            trackOnboardingStepCompleted("story_unlock", extraProperties: [
+                "product_focus_card": true,
+                "preview_only": true
+            ])
+            goToNextRoute()
+        }
+    }
+
+    private var trialReminderPage: some View {
+        OnboardingTrialReminderView(
+            trialLabel: storeService.annualFreeTrialLabel,
+            trialDays: storeService.annualFreeTrialDays,
+            selectedDaysBefore: $trialReminderDaysBefore,
+            onContinue: {
+            NotificationService.shared.setTrialReminderDaysBefore(trialReminderDaysBefore)
+            trackOnboardingStepCompleted("trialReminderBridge", extraProperties: [
+                "reminder_requires_notification_permission": true,
+                "reminder_days_before_trial_end": trialReminderDaysBefore
+            ])
+            presentedCover = .paywall
+        })
+        .task {
+            // Reminder dates come from the StoreKit trial length; make sure the
+            // offer is loaded even if this page is reached first.
+            if storeService.products.isEmpty {
+                await storeService.loadProducts()
             }
-        )
+        }
     }
 
     private var lifetimeShockPage: some View {
@@ -1616,24 +1878,42 @@ struct OnboardingView: View {
         )
     }
 
-    /// Single trial-reassurance page: $0.00 trust + billing-reminder proof
-    /// merged into one card. Two consecutive same-shape pages right before
-    /// the paywall read as padding at the moment attention is most precious.
     private var trialTrustBridgePage: some View {
-        OnboardingTrialPrimerView(
-            headline: "We want you to try Memo for $0.00.",
-            subhead: "Start with 7 days on us.",
-            footnote: "No payment today · Cancel anytime in Settings",
-            mascotName: "mascot-unlocked",
-            tint: OB.success,
-            ctaTitle: "Claim my free week",
+        OnboardingTrialOfferView(
+            hasTrial: storeService.annualFreeTrialLabel != nil,
+            isLoadingOffer: storeService.isLoading ||
+                (storeService.products.isEmpty && storeService.purchaseError == nil),
+            loadFailed: !storeService.isLoading &&
+                storeService.products.isEmpty && storeService.purchaseError != nil,
+            onRetry: {
+                storeService.purchaseError = nil
+                Task { await storeService.loadProducts() }
+            },
             onContinue: {
+                let hasTrial = storeService.annualFreeTrialLabel != nil
                 trackOnboardingStepCompleted("trialTrustBridge", extraProperties: [
-                    "next_step": "plan_personalizing"
+                    "next_step": onboardingVariant == .control
+                        ? "plan_personalizing"
+                        : (hasTrial ? "trial_reminder" : "paywall"),
+                    "trial_eligible": hasTrial,
+                    "annual_price_loaded": annualPlanDisplayPrice != nil
                 ])
-                goToPage(OnboardingFlowOrder.page(afterTrialTrustBridge: true).rawValue)
+                if onboardingVariant == .concise {
+                    if hasTrial {
+                        goToNextRoute()
+                    } else {
+                        presentedCover = .paywall
+                    }
+                } else {
+                    goToPage(OnboardingFlowOrder.page(afterTrialTrustBridge: true).rawValue)
+                }
             }
         )
+        .task {
+            if storeService.products.isEmpty {
+                await storeService.loadProducts()
+            }
+        }
     }
 
     // MARK: - Screen Time Access Page
@@ -3181,9 +3461,15 @@ struct OnboardingView: View {
         user.userAge = selectedAge > 0 ? selectedAge : 0
         UserDefaults.standard.removeObject(forKey: "onboarding_selected_trap_apps")
         let sharedDefaults = UserDefaults(suiteName: "group.com.memori.shared")
-        sharedDefaults?.set(effectiveDailyScreenTimeHours, forKey: "onboarding_projection_daily_hours")
-        sharedDefaults?.set(projectionIsEstimate, forKey: "onboarding_projection_is_estimate")
-        sharedDefaults?.set(projectedScreenTimeHours, forKey: "onboarding_projected_screen_time_hours")
+        if hasScreenTimeInput {
+            sharedDefaults?.set(effectiveDailyScreenTimeHours, forKey: "onboarding_projection_daily_hours")
+            sharedDefaults?.set(projectionIsEstimate, forKey: "onboarding_projection_is_estimate")
+            sharedDefaults?.set(projectedScreenTimeHours, forKey: "onboarding_projected_screen_time_hours")
+        } else {
+            sharedDefaults?.removeObject(forKey: "onboarding_projection_daily_hours")
+            sharedDefaults?.removeObject(forKey: "onboarding_projection_is_estimate")
+            sharedDefaults?.removeObject(forKey: "onboarding_projected_screen_time_hours")
+        }
 
         // Save brain score result — assessment does NOT count toward daily session/limit
         if let result = assessmentResult {
@@ -3193,15 +3479,17 @@ struct OnboardingView: View {
 
         Analytics.onboardingCompleted(
             goals: onboardingGoalValues,
-            selectedAge: selectedAgeForAnalytics,
-            screenTimeHours: effectiveDailyScreenTimeHours,
-            screenTimeIsEstimate: projectionIsEstimate,
+            selectedAge: collectedAgeForAnalytics,
+            screenTimeHours: collectedScreenTimeHoursForAnalytics,
+            screenTimeIsEstimate: collectedScreenTimeEstimateFlagForAnalytics,
             brainAge: assessmentResult?.brainAge,
             brainScore: assessmentResult?.brainScore,
             receiptCount: receiptCount,
             focusModeWasSetUp: focusModeWasSetUp,
             notificationsEnabled: notificationsEnabled,
-            secondsSinceStart: onboardingElapsed
+            secondsSinceStart: onboardingElapsed,
+            totalSteps: totalPages,
+            variant: onboardingVariant.rawValue
         )
 
         try? modelContext.save()
@@ -4263,7 +4551,9 @@ struct WelcomeDemoBezel: View {
         GeometryReader { geo in
             // PNG aspect = 450 / 920 ≈ 0.489. Use the asset's exact ratio so
             // the screen cutout matches up with the video underneath.
-            let bezelWidth: CGFloat = min(geo.size.width * widthFraction, maxWidth)
+            // Clamp by height too so a short container can't push the phone
+            // past its bounds and into the copy above or below it.
+            let bezelWidth: CGFloat = min(geo.size.width * widthFraction, maxWidth, geo.size.height * (450.0 / 920.0))
             let bezelHeight: CGFloat = bezelWidth * (920.0 / 450.0)
             // The PNG's chrome is roughly 4% of width on each side. Inset the
             // video by that much so it sits flush inside the screen cutout

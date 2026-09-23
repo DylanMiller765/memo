@@ -401,3 +401,19 @@ final class FocusUnlockPayoutTests: XCTestCase {
         XCTAssertNil(FocusUnlockPayout.weightedRandomGame(from: [], roll: 0.5))
     }
 }
+
+@MainActor
+final class VisualMemoryGridGrowthTests: XCTestCase {
+    /// The grid keeps growing so long runs never plateau on a 5x5 board.
+    func testGridGrowsWithLevel() {
+        let viewModel = VisualMemoryViewModel()
+        let expected: [(level: Int, grid: Int)] = [(1, 4), (3, 4), (4, 5), (7, 5), (8, 6), (12, 6), (13, 7), (20, 7)]
+        for (level, grid) in expected {
+            viewModel.level = level
+            viewModel.startLevel()
+            XCTAssertEqual(viewModel.gridSize, grid, "level \(level)")
+            XCTAssertEqual(viewModel.highlightedCells.count, min(2 + level, grid * grid - 1), "level \(level)")
+        }
+        viewModel.reset()
+    }
+}

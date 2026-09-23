@@ -297,7 +297,8 @@ struct FocusUnlockSlotMachine: View {
             if let selectedGame, phase == .landed {
                 FocusUnlockRewardTicket(
                     minutes: FocusUnlockPayout.minutes(for: selectedGame.type),
-                    color: windowTint
+                    color: windowTint,
+                    isPreview: mode == .demo
                 )
                 .padding(.top, 14)
                 .transition(.scale.combined(with: .opacity))
@@ -758,6 +759,7 @@ private struct FocusSlotMarquee: View {
 private struct FocusUnlockRewardTicket: View {
     let minutes: Int
     let color: Color
+    let isPreview: Bool
 
     var body: some View {
         HStack(spacing: 10) {
@@ -766,7 +768,7 @@ private struct FocusUnlockRewardTicket: View {
                 .foregroundStyle(color)
 
             VStack(alignment: .leading, spacing: 1) {
-                Text("TIME BACK")
+                Text(isPreview ? "IF YOU FINISH" : "TIME BACK")
                     .font(.system(size: 9, weight: .heavy, design: .monospaced))
                     .tracking(1.1)
                     .foregroundStyle(OB.fg2)
@@ -784,7 +786,9 @@ private struct FocusUnlockRewardTicket: View {
                 .strokeBorder(color.opacity(0.7), style: StrokeStyle(lineWidth: 1.2, dash: [5, 3]))
         )
         .shadow(color: color.opacity(0.20), radius: 12, y: 5)
-        .accessibilityLabel("\(minutes) minutes back")
+        .accessibilityLabel(isPreview
+            ? "\(minutes) minutes if you complete the game"
+            : "\(minutes) minutes back")
     }
 }
 

@@ -204,14 +204,37 @@ final class NotificationService: Sendable {
 
     // MARK: - Trial Reminders
 
+    static func trialReminderTitle(daysBefore: Int) -> String {
+        "Your Memo trial ends in \(daysBefore) \(daysBefore == 1 ? "day" : "days")"
+    }
+    static let trialReminderBody = "Keep Memo guarding the feed, or cancel anytime in App Store."
+
     private static let trialEndDateKey = "memo_trial_end_date"
+    private static let trialReminderPreferenceKey = "memo_trial_reminder_days_before"
     private static let trialReminderIdentifiers = [
         "trial_reminder_day5",
-        "trial_reminder_last_day"
+        "trial_reminder_last_day",
+        "trial_reminder_selected"
     ]
 
-    func recordTrialStarted(days: Int) {
-        guard let endDate = Calendar.current.date(byAdding: .day, value: days, to: Date.now) else { return }
+    static var selectedTrialReminderDaysBefore: Int {
+        UserDefaults.standard.integer(forKey: trialReminderPreferenceKey) == 1 ? 1 : 2
+    }
+
+    var hasUpcomingTrialReminder: Bool {
+        guard let endDate = UserDefaults.standard.object(forKey: Self.trialEndDateKey) as? Date else {
+            return false
+        }
+        return endDate > Date.now
+    }
+
+    func setTrialReminderDaysBefore(_ days: Int) {
+        UserDefaults.standard.set(days == 1 ? 1 : 2, forKey: Self.trialReminderPreferenceKey)
+        scheduleStoredTrialRemindersIfAuthorized()
+    }
+
+    func recordTrialStarted(endDate: Date) {
+        guard endDate > Date.now else { return }
         UserDefaults.standard.set(endDate, forKey: Self.trialEndDateKey)
         scheduleStoredTrialRemindersIfAuthorized()
     }
@@ -235,38 +258,19 @@ final class NotificationService: Sendable {
         let center = UNUserNotificationCenter.current()
         center.removePendingNotificationRequests(withIdentifiers: Self.trialReminderIdentifiers)
 
-        let calendar = Calendar.current
-        let reminderDates: [(id: String, offsetDays: Int, hour: Int, minute: Int, title: String, body: String)] = [
-            (
-                "trial_reminder_day5",
-                -2,
-                10,
-                0,
-                "Your Memo trial ends in 2 days",
-                "Keep Memo guarding the feed, or cancel anytime in App Store."
-            )
-        ]
+        let daysBefore = Self.selectedTrialReminderDaysBefore
+        let fireDate = endDate.addingTimeInterval(-TimeInterval(daysBefore * 24 * 60 * 60))
+        guard fireDate > Date.now else { return }
 
-        for reminder in reminderDates {
-            guard let reminderDay = calendar.date(byAdding: .day, value: reminder.offsetDays, to: endDate),
-                  let fireDate = calendar.date(
-                    bySettingHour: reminder.hour,
-                    minute: reminder.minute,
-                    second: 0,
-                    of: reminderDay
-                  ),
-                  fireDate > Date.now else { continue }
+        let content = UNMutableNotificationContent()
+        content.title = Self.trialReminderTitle(daysBefore: daysBefore)
+        content.body = Self.trialReminderBody
+        content.sound = .default
+        content.userInfo = ["deepLink": "memo://profile"]
 
-            let content = UNMutableNotificationContent()
-            content.title = reminder.title
-            content.body = reminder.body
-            content.sound = .default
-            content.userInfo = ["deepLink": "memo://profile"]
-
-            let trigger = UNTimeIntervalNotificationTrigger(timeInterval: max(1, fireDate.timeIntervalSinceNow), repeats: false)
-            let request = UNNotificationRequest(identifier: reminder.id, content: content, trigger: trigger)
-            center.add(request)
-        }
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: fireDate.timeIntervalSinceNow, repeats: false)
+        let request = UNNotificationRequest(identifier: "trial_reminder_selected", content: content, trigger: trigger)
+        center.add(request)
     }
 
     // MARK: - Brain Score Follow-Up

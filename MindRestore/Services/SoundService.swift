@@ -6,6 +6,10 @@ final class SoundService {
 
     private init() {}
 
+    /// Onboarding and its paywall run silent: the stock system sounds read as
+    /// cheap there, so those moments lean on haptics until custom audio exists.
+    var isSuppressed = false
+
     private var isEnabled: Bool {
         let defaults = UserDefaults.standard
         if defaults.object(forKey: "soundEnabled") == nil {
@@ -47,7 +51,7 @@ final class SoundService {
     }
 
     private func play(systemSoundID: SystemSoundID) {
-        guard isEnabled else { return }
+        guard isEnabled, !isSuppressed else { return }
         AudioServicesPlaySystemSound(systemSoundID)
     }
 }

@@ -152,7 +152,8 @@ struct ContentView: View {
         .fullScreenCover(isPresented: $showingScreenshotHardPaywall) {
             PaywallView(
                 isHighIntent: true,
-                triggerSource: "onboarding_personalized_plan",
+                triggerSource: screenshotTargetArgument == "paywall-concise"
+                    ? "onboarding_concise" : "onboarding_personalized_plan",
                 isHardPaywall: true,
                 dailyScreenTimeHours: 50.2 / 7.0,
                 onboardingAge: 25,
@@ -511,6 +512,12 @@ struct ContentView: View {
         guard let target = screenshotTargetArgument else { return nil }
 
         switch target {
+        case "onboarding-welcome":
+            return OnboardingPage.welcome.rawValue
+        case "onboarding-attention", "onboarding-attention-result", "onboarding-bridge":
+            return OnboardingPage.motivationBridge.rawValue
+        case "onboarding-slot", "onboarding-game", "onboarding-game-reward", "onboarding-rank":
+            return OnboardingPage.goals.rawValue
         case "onboarding-name":
             return OnboardingPage.name.rawValue
         case "onboarding-goals":
@@ -538,9 +545,8 @@ struct ContentView: View {
             return OnboardingPage.memoPlan.rawValue
         case "onboarding-trial-free":
             return OnboardingPage.trialTrustBridge.rawValue
-        // trial-reminder page merged into trial-free; keep the link alive.
         case "onboarding-trial-reminder":
-            return OnboardingPage.trialTrustBridge.rawValue
+            return OnboardingPage.trialReminderBridge.rawValue
         case "onboarding-loader", "onboarding-plan-personalizing":
             return OnboardingPage.planPersonalizing.rawValue
         case "onboarding-focus-mode":
@@ -581,7 +587,7 @@ struct ContentView: View {
             switch screenshotTargetArgument {
             case "focus-setup":
                 showingScreenshotFocusSetup = true
-            case "paywall-hard":
+            case "paywall-hard", "paywall-concise":
                 showingScreenshotHardPaywall = true
             case "brain-age":
                 showingScreenshotBrainAge = true

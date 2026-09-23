@@ -19,6 +19,7 @@ final class VisualMemoryViewModel {
     private var rng: SeededGenerator?
     private var showTimer: Timer?
     var levelsCompleted = 0
+    var isOnboardingPreview = false
 
     var score: Double {
         Double(levelsCompleted) / 10.0
@@ -42,21 +43,26 @@ final class VisualMemoryViewModel {
         max(0.6, 1.5 - Double(level - 1) * 0.1)
     }
 
-    // Grid grows: levels 1-3 = 4x4 (matches onboarding assessment), levels 4+ = 5x5.
+    // Grid grows with the run so strong players never plateau: levels 1-3 =
+    // 4x4 (matches onboarding assessment), 4-7 = 5x5, 8-12 = 6x6, 13+ = 7x7.
     // No 3x3 entry tier — Visual Memory is intentionally non-trivial.
     private func updateGridForLevel() {
         switch level {
         case 1...3:
             gridSize = 4
-        default:
+        case 4...7:
             gridSize = 5
+        case 8...12:
+            gridSize = 6
+        default:
+            gridSize = 7
         }
         // Highlight count increases each level: starts at 3, +1 per level
         highlightCount = min(2 + level, totalCells - 1)
     }
 
     func startGame() {
-        level = max(1, AdaptiveDifficultyEngine.shared.currentLevel(for: .visualMemory))
+        level = isOnboardingPreview ? 1 : max(1, AdaptiveDifficultyEngine.shared.currentLevel(for: .visualMemory))
         levelsCompleted = 0
         startTime = Date.now
         if let seed = challengeSeed {
@@ -167,6 +173,9 @@ struct VisualMemoryView: View {
     /// where the user already pressed "Train" — landing on a Tap-to-Begin
     /// screen is one step too many.
     var autoStart: Bool = false
+    var isOnboardingPreview: Bool = false
+    var onPreviewComplete: (() -> Void)? = nil
+    var onPreviewProgress: ((Int) -> Void)? = nil
 
     @State private var viewModel = VisualMemoryViewModel()
     @State private var showingPaywall = false
@@ -199,8 +208,13 @@ struct VisualMemoryView: View {
                 wrongRevealView
                     .transition(.opacity)
             case .finished:
-                resultsView
-                    .transition(.scale(scale: 0.95).combined(with: .opacity))
+                if isOnboardingPreview {
+                    previewResultView
+                        .transition(.opacity)
+                } else {
+                    resultsView
+                        .transition(.scale(scale: 0.95).combined(with: .opacity))
+                }
             }
         }
         .animation(.easeInOut(duration: 0.3), value: viewModel.phase == .finished)
@@ -211,12 +225,17 @@ struct VisualMemoryView: View {
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             if autoStart && viewModel.phase == .setup {
-                Analytics.exerciseStarted(game: ExerciseType.visualMemory.rawValue)
+                viewModel.isOnboardingPreview = isOnboardingPreview
+                if !isOnboardingPreview {
+                    Analytics.exerciseStarted(game: ExerciseType.visualMemory.rawValue)
+                }
                 viewModel.startGame()
             }
         }
         .onDisappear {
-            if viewModel.phase != .setup && viewModel.phase != .finished {
+            if isOnboardingPreview {
+                viewModel.reset()
+            } else if viewModel.phase != .setup && viewModel.phase != .finished {
                 Analytics.exerciseAbandoned(game: ExerciseType.visualMemory.rawValue, roundReached: viewModel.level)
             }
         }
@@ -228,6 +247,10 @@ struct VisualMemoryView: View {
                 withAnimation(.default) { shakeAmount += 1 }
             }
             if newPhase == .finished {
+                if isOnboardingPreview {
+                    onPreviewComplete?()
+                    return
+                }
                 isNewPersonalBest = PersonalBestTracker.shared.record(score: viewModel.maxLevelReached, for: .visualMemory)
                 if isNewPersonalBest {
                     Analytics.personalBest(game: ExerciseType.visualMemory.rawValue, score: viewModel.maxLevelReached)
@@ -250,6 +273,9 @@ struct VisualMemoryView: View {
                 )
                 shareImage = card.renderAsImage(size: CGSize(width: 360, height: 640), scale: 3)
             }
+        }
+        .onChange(of: viewModel.levelsCompleted) { _, newValue in
+            if isOnboardingPreview && newValue > 0 { onPreviewProgress?(newValue) }
         }
     }
 
@@ -321,7 +347,8 @@ struct VisualMemoryView: View {
     // MARK: - Game View
 
     private func gameView(interactable: Bool) -> some View {
-        VStack(spacing: 20) {
+        let compactPreview = isOnboardingPreview && UIScreen.main.bounds.height < 700
+        return VStack(spacing: compactPreview ? 9 : 20) {
             // Header
             Text("Level \(viewModel.level)")
                 .font(.headline)
@@ -345,18 +372,20 @@ struct VisualMemoryView: View {
                     .contentTransition(.numericText())
             }
 
-            Spacer()
+            if !compactPreview { Spacer() }
 
-            // Grid
-            let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: viewModel.gridSize)
-            LazyVGrid(columns: columns, spacing: 8) {
+            // Grid — tighter gutters once the grid passes 5x5 so cells stay tappable.
+            let cellSpacing: CGFloat = viewModel.gridSize >= 6 ? 6 : 8
+            let columns = Array(repeating: GridItem(.flexible(), spacing: cellSpacing), count: viewModel.gridSize)
+            LazyVGrid(columns: columns, spacing: cellSpacing) {
                 ForEach(0..<viewModel.totalCells, id: \.self) { index in
                     gridCell(index: index, interactable: interactable)
                 }
             }
-            .padding(.horizontal, 32)
+            .frame(maxWidth: compactPreview ? (viewModel.gridSize >= 6 ? 300 : 228) : .infinity)
+            .padding(.horizontal, compactPreview ? 0 : 32)
 
-            Spacer()
+            if !compactPreview { Spacer() }
 
             // Always reserve space for button so grid doesn't shift between phases
             Button {
@@ -369,7 +398,8 @@ struct VisualMemoryView: View {
             .opacity(interactable && viewModel.selectedCells.count == viewModel.highlightCount ? 1.0 : interactable ? 0.5 : 0)
             .padding(.horizontal, 32)
         }
-        .padding(.vertical, 24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        .padding(.vertical, compactPreview ? 8 : 24)
         .modifier(ShakeEffect(animatableData: shakeAmount))
         .scaleEffect(correctPulse ? 1.03 : 1.0)
         .animation(.spring(response: 0.2, dampingFraction: 0.5), value: correctPulse)
@@ -481,6 +511,23 @@ struct VisualMemoryView: View {
     }
 
     // MARK: - Results
+
+    private var previewResultView: some View {
+        VStack(spacing: 16) {
+            Spacer()
+            TrainingTileMiniPreview(type: .visualMemory, color: AppColors.indigo, scale: 1.7)
+                .frame(width: 180, height: 130)
+            Text(viewModel.levelsCompleted > 0 ? "Pattern remembered." : "That's the game.")
+                .font(.system(size: 26, weight: .bold, design: .rounded))
+                .foregroundStyle(.white)
+            Text("A full game earns the unlock time shown on the slot.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            Spacer()
+        }
+        .padding(.horizontal, 28)
+    }
 
     private var resultsView: some View {
         return GameResultView(

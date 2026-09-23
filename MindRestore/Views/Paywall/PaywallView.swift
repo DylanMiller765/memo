@@ -88,13 +88,6 @@ private extension PlanBuildBeatContent.FeedWinMoment {
 /// A single horizontal line, stroked dashed for the receipt perforation.
 /// Lets the exit sheet report its intrinsic height so the detent fits the
 /// content — `.medium` left a slab of dead black below the buttons.
-private struct ExitSheetHeightKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = max(value, nextValue())
-    }
-}
-
 private struct PWDashRule: Shape {
     func path(in rect: CGRect) -> Path {
         var path = Path()
@@ -216,6 +209,179 @@ private struct PaywallPlanOptionCard: View {
     }
 }
 
+// MARK: - Onboarding paywall pieces
+
+/// The three feeds from earlier in onboarding, padlocked, with Memo standing
+/// guard on the headline — the product's promise in one image.
+private struct PaywallUnlockHero: View {
+    let compact: Bool
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var appeared = false
+
+    private let apps: [(asset: String, x: CGFloat, y: CGFloat, angle: Double)] = [
+        ("logo-instagram", -96, -30, -11),
+        ("logo-tiktok", 0, -54, 0),
+        ("logo-youtube", 96, -30, 11)
+    ]
+
+    var body: some View {
+        let scale: CGFloat = compact ? 0.74 : 1
+        let tile: CGFloat = 62 * scale
+        ZStack(alignment: .bottom) {
+            Circle()
+                .fill(OB.accent.opacity(0.28))
+                .frame(width: 220 * scale, height: 220 * scale)
+                .blur(radius: 60)
+                .offset(y: -30 * scale)
+
+            ForEach(apps.indices, id: \.self) { index in
+                let app = apps[index]
+                ZStack(alignment: .bottomTrailing) {
+                    OnboardingAppIcon(asset: app.asset, size: tile)
+
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: tile * 0.17, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: tile * 0.38, height: tile * 0.38)
+                        .background(Circle().fill(OB.coral))
+                        .overlay(Circle().stroke(PW.bg, lineWidth: 3))
+                        .offset(x: tile * 0.12, y: tile * 0.12)
+                }
+                .rotationEffect(.degrees(app.angle))
+                .offset(x: app.x * scale, y: app.y * scale - (appeared ? 0 : 12))
+                .opacity(appeared ? 1 : 0)
+                .shadow(color: .black.opacity(0.45), radius: 12, y: 8)
+            }
+
+            // Feet on the headline: nudged below the hero's frame so Memo
+            // stands on the title instead of covering the TikTok icon.
+            RiveMascotView(mood: .happy, size: 112 * scale, playbackPolicy: .continuous)
+                .offset(y: 26 * scale)
+                .accessibilityHidden(true)
+        }
+        .frame(height: 162 * scale, alignment: .bottom)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Instagram, TikTok and YouTube, locked by Memo")
+        .onAppear(perform: play)
+    }
+
+    private func play() {
+        guard !appeared else { return }
+        if reduceMotion {
+            appeared = true
+            return
+        }
+        withAnimation(.spring(response: 0.55, dampingFraction: 0.75)) { appeared = true }
+    }
+}
+
+/// Feature tiles drawn from the product itself instead of stock glyphs.
+private struct PaywallFeatureTile: View {
+    enum Kind { case block, play, rank }
+    let kind: Kind
+    let compact: Bool
+
+    private var title: String {
+        switch kind {
+        case .block: return "Block any app"
+        case .play: return "Play to unlock"
+        case .rank: return "Climb the ranks"
+        }
+    }
+
+    var body: some View {
+        VStack(spacing: compact ? 6 : 9) {
+            visual
+                .frame(height: compact ? 42 : 52)
+            Text(title)
+                .font(.system(size: compact ? 12 : 13, weight: .bold, design: .rounded))
+                .foregroundStyle(.white)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .minimumScaleFactor(0.85)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, compact ? 10 : 14)
+        .padding(.horizontal, 6)
+        .background(Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color.white.opacity(0.08), lineWidth: 1))
+        .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder
+    private var visual: some View {
+        let unit: CGFloat = compact ? 0.82 : 1
+        switch kind {
+        case .block:
+            ZStack {
+                appTile("logo-instagram", size: 32 * unit)
+                    .rotationEffect(.degrees(-10))
+                    .offset(x: -9 * unit, y: -3 * unit)
+                appTile("logo-tiktok", size: 34 * unit)
+                    .offset(x: 7 * unit, y: 2 * unit)
+                OnboardingPadlock(isOpen: false, size: 22 * unit)
+                    .offset(x: 22 * unit, y: 12 * unit)
+            }
+        case .play:
+            TimelineView(.periodic(from: .now, by: 1.1)) { context in
+                let patterns: [Set<Int>] = [[0, 4, 7], [2, 3, 8], [1, 5, 6], [0, 2, 7]]
+                let lit = patterns[Int(context.date.timeIntervalSinceReferenceDate / 1.1) % patterns.count]
+                let cell = 11 * unit
+                VStack(spacing: 3) {
+                    ForEach(0..<3, id: \.self) { row in
+                        HStack(spacing: 3) {
+                            ForEach(0..<3, id: \.self) { column in
+                                RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                    .fill(lit.contains(row * 3 + column) ? OB.accent : Color.white.opacity(0.12))
+                                    .frame(width: cell, height: cell)
+                                    .animation(.easeInOut(duration: 0.25), value: lit)
+                            }
+                        }
+                    }
+                }
+                .padding(6 * unit)
+                .background(RoundedRectangle(cornerRadius: 10 * unit, style: .continuous).fill(OB.surface))
+            }
+        case .rank:
+            Image("mascot-podium")
+                .resizable()
+                .scaledToFit()
+        }
+    }
+
+    private func appTile(_ asset: String, size: CGFloat) -> some View {
+        OnboardingAppIcon(asset: asset, size: size)
+    }
+}
+
+/// The yearly saving as a tab that breaks the card's top edge.
+private struct PaywallSaveTab: View {
+    let text: String
+    @State private var popped = false
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 12, weight: .black, design: .rounded))
+            .tracking(0.4)
+            .foregroundStyle(PW.bg)
+            .padding(.horizontal, 11)
+            .padding(.vertical, 5)
+            .background(
+                Capsule().fill(
+                    LinearGradient(colors: [OB.amber, Color(red: 1.0, green: 0.62, blue: 0.2)], startPoint: .top, endPoint: .bottom)
+                )
+            )
+            .shadow(color: OB.amber.opacity(0.55), radius: 10, y: 3)
+            .rotationEffect(.degrees(-3))
+            .scaleEffect(popped ? 1 : 0.4)
+            .opacity(popped ? 1 : 0)
+            .onAppear {
+                withAnimation(.spring(response: 0.42, dampingFraction: 0.5).delay(0.9)) { popped = true }
+            }
+    }
+}
+
 // MARK: - PaywallView
 
 struct PaywallView: View {
@@ -230,40 +396,39 @@ struct PaywallView: View {
     var onboardingAge: Int? = nil
     var onboardingGoalSummary: String = "hours back"
     var screenTimeIsEstimate: Bool = false
+    var hasScreenTimeInput: Bool = true
     var protectTarget: PlanBuildBeatContent.ProtectTarget? = nil
     var feedWinMoment: PlanBuildBeatContent.FeedWinMoment? = nil
     var onConversionComplete: (() -> Void)? = nil
 
     @Environment(\.dismiss) private var dismiss
     @Environment(StoreService.self) private var storeService
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var selectedPlan: PaywallPlan = .annual
-    @State private var showExitOffer = false
-    @State private var exitSheetHeight: CGFloat = 420
-    private let exitOfferDisplayedPriceFallback = 29.99
+    @State private var showCodeRedemption = false
+    /// Set when the offer-code sheet opens; cleared once a redemption lands.
+    @State private var awaitingOfferCode = false
+    private var compactPhone: Bool { UIScreen.main.bounds.height < 700 }
     private let exitOfferRegularPriceFallback = 59.99
-    private let exitOfferDisplayedPriceTextFallback = "$29.99"
     private let exitOfferRegularPriceTextFallback = "$59.99"
-    private let exitOfferDiscountLabel = "founder_forever_offer"
-    private var canShowExitOffer: Bool {
-        storeService.products.contains { $0.id == StoreService.annualUltraExitOfferProductID }
-    }
 
     private var shouldShowCloseButton: Bool {
-        // The X always opens the limited-time offer sheet.
-        true
+        // The onboarding paywall has no dismiss route. An X that opened a
+        // different offer looked like a broken close control.
+        !isHardPaywall
     }
 
     /// Keyed off the SELECTED PLAN, not off trial presence. There are three
     /// states, not two — annual-with-trial, annual-without, and weekly — and
     /// the old copy collapsed the middle one into weekly wording.
     private var ctaTitle: String {
-        if selectedPlanHasTrial { return "Start 7-Day Free Trial" }
+        if selectedPlanHasTrial { return "Start free trial" }
         return selectedPlan == .annual ? "Continue with Yearly" : "Start Weekly Access"
     }
 
     private var planSubtitle: String {
-        if selectedPlanHasTrial { return "Seven days on us. Then it renews." }
+        if selectedPlanHasTrial { return "Free for \(trialLabel ?? "the trial period"). Then it renews." }
         return selectedPlan == .annual
             ? "Full access to Memo Pro, billed yearly."
             : "Full access to Memo Pro, billed weekly."
@@ -297,6 +462,20 @@ struct PaywallView: View {
         selectedPlan == .annual && annualTrialLabel != nil
     }
 
+    private var annualTrialBadge: String {
+        if let trialLabel { return "\(trialLabel.uppercased()) FREE" }
+        if let configuredTrialLabel { return "\(configuredTrialLabel.uppercased()) FOR ELIGIBLE" }
+        return "FULL ACCESS"
+    }
+
+    private var personalizationSummary: String {
+        var inputs: [String] = []
+        if hasScreenTimeInput { inputs.append("your \(screenTimeSourceText.lowercased())") }
+        if onboardingAge != nil { inputs.append("your age") }
+        inputs.append("your \(planGoalText) goal")
+        return "Built around \(inputs.joined(separator: ", "))."
+    }
+
     var body: some View {
         GeometryReader { proxy in
             ZStack(alignment: .top) {
@@ -309,7 +488,9 @@ struct PaywallView: View {
                     closeButton(safeTop: proxy.safeAreaInsets.top, width: proxy.size.width)
                 }
                 #if DEBUG
-                debugSkipButton(safeTop: proxy.safeAreaInsets.top)
+                if !ProcessInfo.processInfo.arguments.contains("--hide-dev-controls") {
+                    debugSkipButton(safeTop: proxy.safeAreaInsets.top)
+                }
                 #endif
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
@@ -327,32 +508,21 @@ struct PaywallView: View {
         }
         .preferredColorScheme(.dark)
         .interactiveDismissDisabled(isHardPaywall)
-        .sheet(isPresented: $showExitOffer) {
-            ExitOfferSheet(
-                regularPriceText: regularAnnualPriceText,
-                founderPriceText: founderPriceText,
-                founderWeeklyText: founderWeeklyText,
-                secondaryActionTitle: isHardPaywall ? "Keep 7-day trial" : "Not today"
-            ) {
-                showExitOffer = false
-                Task { await purchaseExitOffer() }
-            } onDismiss: {
-                showExitOffer = false
-                Analytics.paywallDismissed(
-                    trigger: isHardPaywall ? "onboarding_founder_offer" : "exitOffer",
-                    selectedPlan: "annual_founder",
-                    isHighIntent: isHighIntent
-                )
-                if !isHardPaywall {
-                    dismiss()
+        .offerCodeRedemption(isPresented: $showCodeRedemption)
+        .onChange(of: showCodeRedemption) { wasShowing, isShowing in
+            guard wasShowing && !isShowing else { return }
+            Task {
+                await storeService.updateSubscriptionStatus(source: "offer_code_redemption")
+                if storeService.isProUser {
+                    completeOfferCodeRedemption()
                 }
             }
-            .onPreferenceChange(ExitSheetHeightKey.self) { height in
-                if height > 0 { exitSheetHeight = height }
-            }
-            .presentationDetents([.height(exitSheetHeight)])
-            .presentationDragIndicator(.visible)
-            .presentationBackground(PW.bg)
+        }
+        // Apple can grant a redeemed code a beat after its sheet closes; the
+        // transaction listener flips `isProUser` then, so finish from here too.
+        .onChange(of: storeService.isProUser) { _, isPro in
+            guard isPro, awaitingOfferCode else { return }
+            completeOfferCodeRedemption()
         }
         // Purchase failures were silent — the error string was set but never
         // rendered, so a failed buy looked like a dead button.
@@ -389,34 +559,22 @@ struct PaywallView: View {
 
     private var atmosphere: some View {
         ZStack {
-            Image("paywall-twilight-hill-bg")
-                .renderingMode(.original)
-                .resizable()
-                .scaledToFill()
+            if triggerSource == "onboarding_concise" {
+                PW.bg.ignoresSafeArea()
+            } else {
+                Image("paywall-twilight-hill-bg")
+                    .renderingMode(.original)
+                    .resizable()
+                    .scaledToFill()
+                    .ignoresSafeArea()
+
+                LinearGradient(
+                    colors: [PW.bg.opacity(0.0), PW.bg.opacity(0.10), PW.bg.opacity(0.70), PW.bg.opacity(0.93)],
+                    startPoint: .center,
+                    endPoint: .bottom
+                )
                 .ignoresSafeArea()
-
-            LinearGradient(
-                colors: [
-                    PW.bg.opacity(0.0),
-                    PW.bg.opacity(0.10),
-                    PW.bg.opacity(0.70),
-                    PW.bg.opacity(0.93)
-                ],
-                startPoint: .center,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
-
-            LinearGradient(
-                colors: [
-                    PW.bg.opacity(0.20),
-                    PW.bg.opacity(0.0),
-                    PW.bg.opacity(0.0)
-                ],
-                startPoint: .top,
-                endPoint: .center
-            )
-            .ignoresSafeArea()
+            }
         }
         .allowsHitTesting(false)
     }
@@ -426,11 +584,10 @@ struct PaywallView: View {
     private func content(safeTop: CGFloat, safeBottom: CGFloat, height: CGFloat) -> some View {
         let compact = height < 720
 
-        return cutePaywallContent(
-            safeTop: safeTop,
-            safeBottom: safeBottom,
-            compact: compact
-        )
+        if triggerSource == "onboarding_concise" {
+            return AnyView(conciseOnboardingContent(safeTop: safeTop, safeBottom: safeBottom, compact: compact))
+        }
+        return AnyView(cutePaywallContent(safeTop: safeTop, safeBottom: safeBottom, compact: compact))
     }
 
     private func hardPaywallContent(
@@ -446,9 +603,6 @@ struct PaywallView: View {
 
             personalizedPlanHeader(compact: compact)
                 .padding(.bottom, compact ? 10 : 12)
-
-            researchCredibility(compact: compact)
-                .padding(.bottom, compact ? 13 : 16)
 
             planToggle
                 .frame(maxWidth: 268)
@@ -490,8 +644,10 @@ struct PaywallView: View {
             readyHeadline(compact: compact)
                 .padding(.bottom, compact ? 8 : 10)
 
-            researchCredibility(compact: compact)
-                .padding(.bottom, compact ? 12 : 16)
+            if triggerSource != "onboarding_concise" {
+                researchCredibility(compact: compact)
+                    .padding(.bottom, compact ? 12 : 16)
+            }
 
             cutePlanHero(compact: compact)
                 .padding(.bottom, compact ? 10 : 14)
@@ -514,6 +670,341 @@ struct PaywallView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .padding(.horizontal, 22)
+    }
+
+    /// The paywall that ends onboarding. Everything priced here comes from
+    /// StoreKit: product display prices, the per-week math, the savings
+    /// figure, and whether this Apple ID can actually use the annual trial.
+    private func conciseOnboardingContent(
+        safeTop: CGFloat,
+        safeBottom: CGFloat,
+        compact: Bool
+    ) -> some View {
+        VStack(spacing: 0) {
+            GeometryReader { scrollArea in
+                ScrollView(showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        PaywallUnlockHero(compact: compact)
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, compact ? 0 : 8)
+                            .zIndex(1)
+
+                        Text(conciseHeadline)
+                            .font(.brand(size: compact ? 26 : 33, weight: .heavy))
+                            .tracking(-0.5)
+                            .foregroundStyle(.white)
+                            .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, compact ? 6 : 12)
+                            .accessibilityAddTraits(.isHeader)
+                            .animation(nil, value: selectedPlan)
+
+                        // Short phones keep the hero and plans on one screen; the
+                        // hero already shows what blocking looks like.
+                        if !compact {
+                            HStack(alignment: .top, spacing: 10) {
+                                PaywallFeatureTile(kind: .block, compact: compact)
+                                PaywallFeatureTile(kind: .play, compact: compact)
+                                PaywallFeatureTile(kind: .rank, compact: compact)
+                            }
+                            .padding(.top, 20)
+                        }
+
+                        Spacer(minLength: compact ? 16 : 24)
+
+                        VStack(spacing: 10) {
+                            annualPlanCard(compact: compact)
+                            weeklyPlanCard(compact: compact)
+                        }
+                        .padding(.top, 13)
+
+                        if storeService.products.isEmpty && !storeService.isLoading {
+                            HStack {
+                                Text("Couldn't load prices.")
+                                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                                    .foregroundStyle(PW.fgMuted)
+                                Spacer()
+                                Button("Try again") {
+                                    storeService.purchaseError = nil
+                                    Task { await storeService.loadProducts() }
+                                }
+                                .font(.system(size: 14, weight: .bold, design: .rounded))
+                                .foregroundStyle(OB.accent)
+                                .buttonStyle(.plain)
+                            }
+                            .frame(minHeight: 44)
+                            .padding(.top, 6)
+                        }
+
+                    }
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 10)
+                    .frame(maxWidth: 500, minHeight: scrollArea.size.height, alignment: .top)
+                    .frame(maxWidth: .infinity)
+                }
+                .scrollBounceBehavior(.basedOnSize)
+            }
+
+            VStack(spacing: compact ? 6 : 8) {
+                Text(conciseSummaryLine)
+                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+                    .multilineTextAlignment(.center)
+                    .contentTransition(.opacity)
+
+                Button {
+                    Task { await purchaseSelectedPlan() }
+                } label: {
+                    Text(storeService.isLoading && !storeService.products.isEmpty ? "Opening App Store…" : conciseCTATitle)
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity, minHeight: compact ? 52 : 56)
+                        .background(OB.accent, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .disabled(storeService.isLoading || !conciseSelectedProductAvailable)
+                .opacity(storeService.isLoading || !conciseSelectedProductAvailable ? 0.5 : 1)
+
+                if selectedPlanHasTrial {
+                    OBReassurance(text: "No payment due now")
+                }
+
+                Text(conciseDisclosure)
+                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                    .foregroundStyle(PW.fgMuted)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity)
+
+                HStack(spacing: compact ? 16 : 22) {
+                    Button("Promo code") {
+                        Analytics.paywallPromoCodeTapped(trigger: triggerSource, isHighIntent: isHighIntent)
+                        awaitingOfferCode = true
+                        showCodeRedemption = true
+                    }
+                        .accessibilityHint("Redeem an Apple offer or promo code")
+                    Button("Restore") {
+                        Task {
+                            Analytics.paywallRestoreTapped(trigger: triggerSource, isHighIntent: isHighIntent)
+                            let restored = await storeService.restorePurchases()
+                            Analytics.paywallRestoreCompleted(trigger: triggerSource, isHighIntent: isHighIntent, isProUser: restored)
+                            if restored {
+                                onConversionComplete?()
+                                dismiss()
+                            }
+                        }
+                    }
+                    Link("Terms", destination: URL(string: "https://getmemoriapp.com/terms")!)
+                    Link("Privacy", destination: URL(string: "https://getmemoriapp.com/privacy")!)
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .foregroundStyle(PW.fgMuted)
+                .frame(maxWidth: .infinity, minHeight: 28)
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, compact ? 10 : 12)
+            .padding(.bottom, safeBottom > 0 ? 2 : 10)
+            .frame(maxWidth: 500)
+            .frame(maxWidth: .infinity)
+            .background(
+                PW.bg
+                    .shadow(color: .black.opacity(0.5), radius: 12, y: -6)
+                    .ignoresSafeArea(edges: .bottom)
+            )
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .animation(.easeInOut(duration: 0.2), value: selectedPlan)
+    }
+
+    private func annualPlanCard(compact: Bool) -> some View {
+        concisePlanCard(
+            plan: .annual,
+            title: "Yearly",
+            highlight: trialLabel.map { "\($0) free" },
+            strikePrice: conciseSavingsPercent == nil ? nil : conciseWeeklyAnnualizedPrice,
+            subtitle: conciseAnnualPrice.map { "\($0) billed yearly" } ?? "Billed yearly",
+            bigPrice: conciseAnnualPerWeekPrice,
+            badge: conciseSavingsPercent.map { "SAVE \($0)%" },
+            compact: compact
+        )
+    }
+
+    private func weeklyPlanCard(compact: Bool) -> some View {
+        concisePlanCard(
+            plan: .weekly,
+            title: "Weekly",
+            highlight: nil,
+            strikePrice: nil,
+            subtitle: "No free trial · billed weekly",
+            bigPrice: conciseWeeklyPrice,
+            badge: nil,
+            compact: compact
+        )
+    }
+
+    /// Both plans quote a per-week price so the yearly saving is obvious at a
+    /// glance; the billed amount sits underneath.
+    private func concisePlanCard(
+        plan: PaywallPlan,
+        title: String,
+        highlight: String?,
+        strikePrice: String?,
+        subtitle: String,
+        bigPrice: String?,
+        badge: String?,
+        compact: Bool
+    ) -> some View {
+        let selected = selectedPlan == plan
+        return Button { selectPlan(plan) } label: {
+            HStack(spacing: 14) {
+                ZStack {
+                    Circle()
+                        .stroke(selected ? OB.accent : Color.white.opacity(0.3), lineWidth: 2)
+                    if selected {
+                        Circle().fill(OB.accent).padding(5)
+                            .transition(.scale)
+                    }
+                }
+                .frame(width: 22, height: 22)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.system(size: 18, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white)
+                    if let highlight {
+                        Text(highlight)
+                            .font(.system(size: 13, weight: .heavy, design: .rounded))
+                            .foregroundStyle(OB.success)
+                    }
+                    HStack(spacing: 5) {
+                        if let strikePrice {
+                            Text(strikePrice)
+                                .strikethrough(true, color: OB.coral)
+                                .foregroundStyle(PW.fgMuted.opacity(0.8))
+                        }
+                        Text(subtitle)
+                            .foregroundStyle(PW.fgMuted)
+                    }
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                }
+
+                Spacer(minLength: 6)
+
+                VStack(alignment: .trailing, spacing: 0) {
+                    if let bigPrice {
+                        Text(bigPrice)
+                            .font(.system(size: compact ? 22 : 24, weight: .heavy, design: .rounded))
+                            .foregroundStyle(.white)
+                            .monospacedDigit()
+                    } else {
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(Color.white.opacity(0.12))
+                            .frame(width: 60, height: 22)
+                            .accessibilityLabel("Loading price")
+                    }
+                    Text("per week")
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .foregroundStyle(PW.fgMuted)
+                }
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, badge == nil ? 12 : 18)
+            .padding(.bottom, 12)
+            .frame(maxWidth: .infinity, minHeight: compact ? 66 : 78)
+            .background(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(selected ? OB.accent.opacity(0.16) : Color.white.opacity(0.05))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(selected ? OB.accent : Color.white.opacity(0.12), lineWidth: selected ? 2 : 1)
+            )
+            .overlay(alignment: .topLeading) {
+                if let badge {
+                    PaywallSaveTab(text: badge)
+                        .offset(x: 16, y: -13)
+                }
+            }
+            .shadow(color: selected ? OB.accent.opacity(0.25) : .clear, radius: 16, y: 8)
+            .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(selected ? [.isSelected] : [])
+    }
+
+    private var conciseWeeklyAnnualizedPrice: String? {
+        guard let weekly = storeService.products.first(where: { $0.id == StoreService.weeklyUltraProductID }) else { return nil }
+        return weekly.priceFormatStyle.format(weekly.price * Decimal(52))
+    }
+
+    private var conciseSavingsPercent: Int? {
+        guard let weekly = storeService.products.first(where: { $0.id == StoreService.weeklyUltraProductID }),
+              let annual = storeService.products.first(where: { $0.id == StoreService.annualUltraProductID }) else { return nil }
+        let yearlyAtWeeklyRate = NSDecimalNumber(decimal: weekly.price).doubleValue * 52
+        guard yearlyAtWeeklyRate > 0 else { return nil }
+        let fraction = 1 - NSDecimalNumber(decimal: annual.price).doubleValue / yearlyAtWeeklyRate
+        let percent = Int((fraction * 100).rounded(.down))
+        return percent > 0 ? percent : nil
+    }
+
+    private var conciseAnnualPerWeekPrice: String? {
+        guard let annual = storeService.products.first(where: { $0.id == StoreService.annualUltraProductID }) else { return nil }
+        return annual.priceFormatStyle.format(annual.price / Decimal(52))
+    }
+
+    private var conciseAnnualPrice: String? {
+        storeService.products.first(where: { $0.id == StoreService.annualUltraProductID })?.displayPrice
+    }
+
+    private var conciseWeeklyPrice: String? {
+        storeService.products.first(where: { $0.id == StoreService.weeklyUltraProductID })?.displayPrice
+    }
+
+    private var conciseSelectedProductAvailable: Bool {
+        selectedPlan == .annual ? conciseAnnualPrice != nil : conciseWeeklyPrice != nil
+    }
+
+    private var conciseHeadline: String {
+        if selectedPlanHasTrial, let trialLabel { return "Try Memo Pro free for \(trialLabel)." }
+        return selectedPlan == .annual ? "Keep the feed locked all year." : "Keep the feed locked, week by week."
+    }
+
+    private var conciseSummaryLine: String {
+        if selectedPlanHasTrial, let trialLabel, let price = conciseAnnualPrice {
+            return "\(trialLabel) free, then \(price)/year"
+        }
+        switch selectedPlan {
+        case .annual: return conciseAnnualPrice.map { "\($0) per year" } ?? "Loading prices…"
+        case .weekly: return conciseWeeklyPrice.map { "\($0) per week" } ?? "Loading prices…"
+        }
+    }
+
+    private var conciseCTATitle: String {
+        if selectedPlanHasTrial { return "Start free trial" }
+        return selectedPlan == .annual ? "Subscribe yearly" : "Subscribe weekly"
+    }
+
+    /// Auto-renew terms, stated with the live price for the selected plan.
+    private var conciseDisclosure: String {
+        let cancel = "Cancel in Settings › Apple ID › Subscriptions"
+        if selectedPlanHasTrial {
+            let start = storeService.annualFreeTrialDays
+                .flatMap { Calendar.current.date(byAdding: .day, value: $0, to: .now) }
+                .map { " from \($0.formatted(.dateTime.month(.abbreviated).day()))" } ?? " after the trial"
+            return "Renews at \(conciseAnnualPrice ?? "the yearly price")/year\(start) until canceled. \(cancel) at least 24 hours before the trial ends to avoid the charge."
+        }
+        if selectedPlan == .annual {
+            return "\(conciseAnnualPrice ?? "The yearly price") charged today, then every year until canceled. \(cancel) at least 24 hours before renewal."
+        }
+        return "\(conciseWeeklyPrice ?? "The weekly price") charged today, then every week until canceled. \(cancel) at least 24 hours before renewal."
     }
 
     private var screenTimeReceiptValue: String {
@@ -547,16 +1038,8 @@ struct PaywallView: View {
         productDisplayPrice(for: StoreService.annualUltraProductID, fallback: exitOfferRegularPriceTextFallback)
     }
 
-    private var founderPriceText: String {
-        productDisplayPrice(for: StoreService.annualUltraExitOfferProductID, fallback: exitOfferDisplayedPriceTextFallback)
-    }
-
     private var regularAnnualMonthlyText: String {
         monthlyPriceText(for: StoreService.annualUltraProductID, fallbackAnnualPrice: exitOfferRegularPriceFallback)
-    }
-
-    private var founderWeeklyText: String {
-        weeklyPriceText(for: StoreService.annualUltraExitOfferProductID, fallbackAnnualPrice: exitOfferDisplayedPriceFallback)
     }
 
     private var annualWeeklyText: String {
@@ -582,7 +1065,9 @@ struct PaywallView: View {
 
     private func readyHeadline(compact: Bool) -> some View {
         VStack(spacing: compact ? 5 : 7) {
-            Text("Your personalized\nplan is ready")
+            Text(triggerSource == "onboarding_concise"
+                 ? (selectedPlanHasTrial ? "Your Memo trial\nstarts here" : "Your Memo plan\nstarts here")
+                 : "Your personalized\nplan is ready")
                 .font(.system(size: compact ? 29 : 34, weight: .black, design: .rounded))
                 .foregroundStyle(.white)
                 .multilineTextAlignment(.center)
@@ -608,8 +1093,6 @@ struct PaywallView: View {
         .accessibilityElement(children: .combine)
     }
 
-    /// Mascot only. The offer lives in the headline block now — the middle of
-    /// this illustration is bright green and nothing legible sits on it.
     private func cutePlanHero(compact: Bool) -> some View {
         Image("mascot-unlocked")
             .renderingMode(.original)
@@ -621,22 +1104,21 @@ struct PaywallView: View {
             .accessibilityHidden(true)
     }
 
-    /// The one number that matters today.
     private var heroLine: String {
-        if selectedPlan == .annual, annualTrialLabel != nil { return "Annual includes 7 days free" }
+        if selectedPlan == .annual, let annualTrialLabel { return "Annual includes \(annualTrialLabel) free" }
         return selectedPlan == .annual ? "\(regularAnnualPriceText) a year" : "\(weeklyDisplayPriceText) a week"
     }
 
     private var heroSubline: String {
         if selectedPlanHasTrial {
-            return "Then \(regularAnnualPriceText)/year. Cancel before day 7 and pay nothing."
+            return "Then \(regularAnnualPriceText)/year. Cancel before the trial ends to avoid the annual charge."
         }
         if selectedPlan == .annual, annualTrialLabel != nil {
             return "For eligible new subscribers. Otherwise \(regularAnnualPriceText)/year."
         }
         return selectedPlan == .annual
-            ? "Billed yearly. Cancel anytime in Settings."
-            : "Billed weekly. Cancel anytime in Settings."
+            ? "Billed yearly. Cancel anytime in the App Store."
+            : "Billed weekly. Cancel anytime in the App Store."
     }
 
     private func miniPlanCard<Content: View>(
@@ -678,10 +1160,10 @@ struct PaywallView: View {
 
                 Spacer(minLength: 8)
 
-                Text(annualTrialLabel.map { "\($0.uppercased()) FREE" } ?? "FULL ACCESS")
+                Text(selectedPlan == .annual ? annualTrialBadge : "WEEKLY")
                     .font(.system(size: 11, weight: .black, design: .monospaced))
                     .tracking(0.9)
-                    .foregroundStyle(selectedPlanHasTrial ? PW.mint : PW.amber)
+                    .foregroundStyle(selectedPlan == .annual && selectedPlanHasTrial ? PW.mint : PW.amber)
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
             }
@@ -689,12 +1171,16 @@ struct PaywallView: View {
 
             receiptPerforation
 
-            // The user's own Screen Time figure leads — it's the number the
-            // whole funnel was built to earn.
-            receiptLine("Your screen time", screenTimeReceiptValue, compact: compact)
+            if hasScreenTimeInput {
+                receiptLine("Your screen time", screenTimeReceiptValue, compact: compact)
+            }
             receiptLine("Brain training", "10 games", compact: compact)
-            receiptLine("Protecting", protectTarget?.title ?? "Your time", compact: compact)
-            receiptLine("Weakest moment", feedWinMoment?.title ?? "All day", compact: compact)
+            if triggerSource != "onboarding_concise" {
+                receiptLine("Protecting", protectTarget?.title ?? "Your time", compact: compact)
+                receiptLine("Weakest moment", feedWinMoment?.title ?? "To be discovered", compact: compact)
+            } else {
+                receiptLine("Unlock loop", "Block · Play · Unlock", compact: compact)
+            }
 
             receiptPerforation
 
@@ -842,7 +1328,9 @@ struct PaywallView: View {
                 // selected plan read as a flat yearly price.
                 purchasePlanCard(
                     plan: .annual,
-                    badge: annualTrialLabel.map { "\($0.uppercased()) FREE" } ?? "BEST VALUE",
+                    badge: trialLabel.map { "\($0.uppercased()) FREE" }
+                        ?? configuredTrialLabel.map { "\($0.uppercased()) FOR ELIGIBLE" }
+                        ?? "BEST VALUE",
                     title: "Yearly",
                     price: "\(regularAnnualPriceText)/year",
                     detail: annualPlanDetail,
@@ -872,7 +1360,7 @@ struct PaywallView: View {
             return "Free \(trialLabel), then \(annualWeeklyText)"
         }
         if annualTrialLabel != nil {
-            return "Trial for eligible new subscribers"
+            return "\(annualTrialLabel ?? "Free trial") for eligible new subscribers"
         }
         return "\(annualWeeklyText) billed yearly"
     }
@@ -956,6 +1444,22 @@ struct PaywallView: View {
                     .underline()
             }
             .buttonStyle(.plain)
+
+            Circle()
+                .fill(.white.opacity(0.35))
+                .frame(width: 3, height: 3)
+
+            Button {
+                Analytics.paywallPromoCodeTapped(trigger: triggerSource, isHighIntent: isHighIntent)
+                awaitingOfferCode = true
+                showCodeRedemption = true
+            } label: {
+                Text("Promo code")
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.74))
+                    .underline()
+            }
+            .buttonStyle(.plain)
         }
     }
 
@@ -1010,7 +1514,7 @@ struct PaywallView: View {
                         .lineSpacing(-2)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    Text("Built from your \(screenTimeSourceText.lowercased()), age, and \(planGoalText) goal.")
+                    Text(personalizationSummary)
                         .font(.system(size: compact ? 13 : 14, weight: .semibold, design: .rounded))
                         .foregroundStyle(PW.fgMuted)
                         .lineSpacing(2)
@@ -1036,7 +1540,7 @@ struct PaywallView: View {
 
                     Spacer()
 
-                    Text(selectedPlanHasTrial ? "7 days $0.00" : "weekly access")
+                Text(selectedPlanHasTrial ? "\(trialLabel ?? "Trial") $0" : (selectedPlan == .annual ? "YEARLY" : "WEEKLY"))
                         .font(.system(size: 12, weight: .black, design: .rounded))
                         .foregroundStyle(selectedPlanHasTrial ? PW.mint : PW.amber)
                         .lineLimit(1)
@@ -1049,8 +1553,12 @@ struct PaywallView: View {
                     ],
                     spacing: 8
                 ) {
-                    planProofChip(label: "AGE", value: planAgeText, color: PW.accent)
-                    planProofChip(label: screenTimeSourceText.uppercased(), value: screenTimeReceiptValue, color: PW.coral)
+                    if let onboardingAge {
+                        planProofChip(label: "AGE", value: "\(onboardingAge)", color: PW.accent)
+                    }
+                    if hasScreenTimeInput {
+                        planProofChip(label: screenTimeSourceText.uppercased(), value: screenTimeReceiptValue, color: PW.coral)
+                    }
                     planProofChip(label: "GOAL", value: planGoalText, color: PW.mint)
                     planProofChip(label: "TRAINING", value: "10 games", color: PW.amber)
                 }
@@ -1123,8 +1631,10 @@ struct PaywallView: View {
         }
 
         return VStack(spacing: 0) {
-            receiptRow(label: "Your daily screen time", value: screenTimeReceiptValue, color: PW.coral, compact: compact)
-            receiptDivider
+            if hasScreenTimeInput {
+                receiptRow(label: "Your daily screen time", value: screenTimeReceiptValue, color: PW.coral, compact: compact)
+                receiptDivider
+            }
             receiptRow(label: "Estimated ad value", value: "~$200/yr", color: PW.coral, compact: compact)
             receiptDivider
             receiptRow(label: "Memo costs", value: memoCost, color: PW.mint, compact: compact)
@@ -1262,12 +1772,21 @@ struct PaywallView: View {
     }
 
     private var trialTerms: some View {
-        Text(selectedPlanHasTrial ? "First 7 days $0.00, then \(regularAnnualPriceText)/year" : "\(weeklyDisplayPriceText)/week. Cancel anytime.")
+        Text(trialTermsText)
             .font(.system(size: 14, weight: .semibold, design: .rounded))
             .foregroundStyle(PW.fgMuted)
             .multilineTextAlignment(.center)
             .lineLimit(1)
             .minimumScaleFactor(0.86)
+    }
+
+    private var trialTermsText: String {
+        if selectedPlanHasTrial {
+            return "Free for \(trialLabel ?? "the trial period"), then \(regularAnnualPriceText)/year."
+        }
+        return selectedPlan == .annual
+            ? "\(regularAnnualPriceText)/year. Cancel anytime."
+            : "\(weeklyDisplayPriceText)/week. Cancel anytime."
     }
 
     // MARK: - Research Proof
@@ -1370,18 +1889,20 @@ struct PaywallView: View {
             )
             trialStep(
                 icon: selectedPlanHasTrial ? "bell.fill" : "xmark.circle.fill",
-                title: selectedPlanHasTrial ? "In 5 days" : "Anytime",
+                title: selectedPlanHasTrial && (storeService.annualFreeTrialDays ?? 0) > 2 ? "2 days before end" : "Anytime",
                 body: selectedPlanHasTrial
-                    ? "Memo reminds you before billing starts."
+                    ? ((storeService.annualFreeTrialDays ?? 0) > 2
+                        ? "If notifications are on, Memo can send one reminder."
+                        : "Cancel in the App Store before the trial ends.")
                     : "Cancel in the App Store whenever you want.",
                 compact: compact
             )
             trialStep(
                 icon: "creditcard.fill",
-                title: selectedPlanHasTrial ? "In 7 days" : "Every 7 days",
+                title: selectedPlanHasTrial ? "After \(trialLabel ?? "trial")" : (selectedPlan == .annual ? "Yearly" : "Every week"),
                 body: selectedPlan == .annual
-                    ? "Your annual plan starts unless canceled."
-                    : "Your weekly plan starts unless canceled.",
+                    ? "Your annual plan renews at \(regularAnnualPriceText) unless canceled."
+                    : "Your weekly plan renews at \(weeklyDisplayPriceText) unless canceled.",
                 compact: compact
             )
         }
@@ -1460,10 +1981,10 @@ struct PaywallView: View {
 
     private var trialPaymentNoticeText: String {
         if selectedPlanHasTrial {
-            return "No payment today. \(regularAnnualPriceText)/year after the trial."
+            return "No payment today. \(regularAnnualPriceText)/year after \(trialLabel ?? "the trial")."
         }
         if selectedPlan == .annual, annualTrialLabel != nil {
-            return "7-day trial for eligible new subscribers."
+            return "\(annualTrialLabel ?? "Free trial") for eligible new subscribers."
         }
         return " "
     }
@@ -1480,10 +2001,13 @@ struct PaywallView: View {
 
     private var hardPaywallTermsText: String {
         if selectedPlanHasTrial {
-            return "7 days for $0.00. Memo reminds you before billing starts."
+            let reminder = (storeService.annualFreeTrialDays ?? 0) > 2
+                ? " If notifications are on, Memo can remind you 2 days before."
+                : ""
+            return "Free for \(trialLabel ?? "the trial period"), then \(regularAnnualPriceText)/year.\(reminder)"
         }
         if showsAnnualTrialOffer {
-            return "7-day free trial for eligible new subscribers; otherwise \(regularAnnualPriceText)/year."
+            return "\(annualTrialLabel ?? "Free trial") for eligible new subscribers; otherwise \(regularAnnualPriceText)/year."
         }
         return selectedPlan == .annual
             ? "\(regularAnnualPriceText)/year. Cancel anytime in the App Store."
@@ -1494,7 +2018,7 @@ struct PaywallView: View {
 
     private var footer: some View {
         Text(selectedPlanHasTrial
-             ? "Paid by members. Not by surveillance. 7 days for $0.00, then \(regularAnnualPriceText)/year."
+             ? "Paid by members. Not by surveillance. Free for \(trialLabel ?? "the trial period"), then \(regularAnnualPriceText)/year."
              : "Paid by members. Not by surveillance. Cancel anytime in the App Store.")
             .font(.system(size: 11, weight: .semibold, design: .rounded))
             .foregroundStyle(PW.fg3)
@@ -1502,49 +2026,6 @@ struct PaywallView: View {
             .lineLimit(2)
             .minimumScaleFactor(0.82)
             .frame(maxWidth: .infinity)
-    }
-
-    private func presentFounderOffer(trigger: String) {
-        // The offer is shown only after an explicit X tap.
-        guard canShowExitOffer else {
-            Task { @MainActor in
-                await storeService.loadProducts()
-                if canShowExitOffer {
-                    showFounderOffer(trigger: trigger)
-                } else {
-                    storeService.purchaseError = "Limited-time offer is still loading."
-                    UINotificationFeedbackGenerator().notificationOccurred(.warning)
-                }
-            }
-            return
-        }
-        showFounderOffer(trigger: trigger)
-    }
-
-    private func showFounderOffer(trigger: String) {
-        Analytics.paywallExitOfferShown(
-            trigger: trigger,
-            selectedPlan: selectedPlan.analyticsName,
-            offerProductID: StoreService.annualUltraExitOfferProductID,
-            displayedPrice: productPrice(
-                for: StoreService.annualUltraExitOfferProductID,
-                fallback: exitOfferDisplayedPriceFallback
-            ),
-            regularPrice: productPrice(
-                for: StoreService.annualUltraProductID,
-                fallback: exitOfferRegularPriceFallback
-            ),
-            discountLabel: exitOfferDiscountLabel,
-            displayedPriceText: productDisplayPrice(
-                for: StoreService.annualUltraExitOfferProductID,
-                fallback: exitOfferDisplayedPriceTextFallback
-            ),
-            regularPriceText: productDisplayPrice(
-                for: StoreService.annualUltraProductID,
-                fallback: exitOfferRegularPriceTextFallback
-            )
-        )
-        showExitOffer = true
     }
 
     #if DEBUG
@@ -1578,9 +2059,8 @@ struct PaywallView: View {
         let cappedTapRegionHeight = min(max(74, safeTop + 62), 124)
 
         return Button {
-            presentFounderOffer(
-                trigger: isHardPaywall ? "onboarding_hard_paywall_x" : triggerSource
-            )
+            Analytics.paywallDismissed(trigger: triggerSource, selectedPlan: selectedPlan.analyticsName, isHighIntent: isHighIntent)
+            dismiss()
         } label: {
             ZStack {
                 Circle()
@@ -1596,24 +2076,24 @@ struct PaywallView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("View limited-time offer")
+        .accessibilityLabel("Close paywall")
         .padding(.top, cappedTopPadding)
         .padding(.trailing, 22)
         .frame(width: width, height: cappedTapRegionHeight, alignment: .topTrailing)
+    }
+
+    private func completeOfferCodeRedemption() {
+        guard awaitingOfferCode else { return }
+        awaitingOfferCode = false
+        Analytics.paywallPromoCodeRedeemed(trigger: triggerSource, isHighIntent: isHighIntent)
+        onConversionComplete?()
+        dismiss()
     }
 
     // MARK: - Purchase
 
     private func purchaseSelectedPlan() async {
         await purchase(productID: selectedPlan.productID, plan: selectedPlan.analyticsName, isExitOffer: false)
-    }
-
-    private func purchaseExitOffer() async {
-        await purchase(
-            productID: StoreService.annualUltraExitOfferProductID,
-            plan: "annual_founder",
-            isExitOffer: true
-        )
     }
 
     private func productPrice(for productID: String, fallback: Double) -> Double {
@@ -1713,10 +2193,12 @@ struct PaywallView: View {
                 hasTrial: hasTrial,
                 price: price
             )
-            // Only schedule the pre-billing reminder when a trial actually
-            // started, and for its real length rather than a hardcoded 7.
-            if productID == StoreService.annualUltraProductID, let trialDaysAtPurchase {
-                NotificationService.shared.recordTrialStarted(days: trialDaysAtPurchase)
+            // Only schedule after a verified trial purchase, using StoreKit's
+            // subscription expiration instead of an approximate calendar date.
+            if productID == StoreService.annualUltraProductID, trialDaysAtPurchase != nil {
+                if let endDate = await storeService.currentEntitlementExpirationDate(for: productID) {
+                    NotificationService.shared.recordTrialStarted(endDate: endDate)
+                }
             }
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             SoundService.shared.playComplete()
@@ -1765,173 +2247,11 @@ struct PaywallView: View {
     }
 }
 
-// MARK: - Exit Offer Sheet
-
-struct ExitOfferSheet: View {
-    let regularPriceText: String
-    let founderPriceText: String
-    let founderWeeklyText: String
-    let secondaryActionTitle: String
-    let onSubscribe: () -> Void
-    let onDismiss: () -> Void
-
-    @State private var appeared = false
-
-    var body: some View {
-        // This fires when someone tries to leave, so it should read like Memo
-        // catching your sleeve — not a generic sale modal. Mascot first, one
-        // clear price line, no giant strikethrough lockup.
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .bottom, spacing: 14) {
-                // mascot-presenting and mascot-thinking-working still have
-                // un-keyed green screens in the asset catalog — avoid both.
-                Image("mascot-crown")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 84, height: 84)
-                    .shadow(color: PW.amber.opacity(0.30), radius: 18, y: 8)
-                    .accessibilityHidden(true)
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("ONE TIME · RIGHT NOW")
-                        .font(.system(size: 10, weight: .black, design: .monospaced))
-                        .tracking(1.6)
-                        .foregroundStyle(PW.amber)
-
-                    Text("Wait — a year for \(founderPriceText).")
-                        .font(.brand(size: 27, weight: .heavy))
-                        .foregroundStyle(PW.fg)
-                        .lineSpacing(1)
-                        .minimumScaleFactor(0.8)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(.bottom, 4)
-            }
-            .padding(.bottom, 20)
-
-            priceComparison
-                .padding(.bottom, 20)
-
-            Button(action: onSubscribe) {
-                Text("Take the deal")
-                    .font(.system(size: 17, weight: .heavy, design: .rounded))
-                    .foregroundStyle(PW.accent)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 17)
-                    .background(Color.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    .shadow(color: PW.bg.opacity(0.28), radius: 16, y: 9)
-            }
-            .buttonStyle(.plain)
-            .padding(.bottom, 4)
-
-            Button(action: onDismiss) {
-                Text(secondaryActionTitle)
-                    .font(.system(size: 14, weight: .semibold, design: .rounded))
-                    .foregroundStyle(PW.fg3)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.horizontal, 24)
-        .padding(.top, 22)
-        .padding(.bottom, 8)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(PW.bg)
-        .background(
-            GeometryReader { geo in
-                Color.clear.preference(key: ExitSheetHeightKey.self, value: geo.size.height)
-            }
-        )
-        .opacity(appeared ? 1 : 0)
-        .offset(y: appeared ? 0 : 12)
-        .onAppear {
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.86)) { appeared = true }
-        }
-        .preferredColorScheme(.dark)
-    }
-
-    /// Two ruled lines instead of a strikethrough-plus-huge-number lockup. The
-    /// saving reads from the comparison itself rather than being announced.
-    private var priceComparison: some View {
-        VStack(spacing: 0) {
-            comparisonRow(
-                label: "Regular",
-                value: "\(regularPriceText)/yr",
-                struck: true,
-                tint: PW.fg3
-            )
-
-            Rectangle()
-                .fill(PW.hairline)
-                .frame(height: 1)
-                .padding(.vertical, 11)
-
-            comparisonRow(
-                label: "Today",
-                value: "\(founderPriceText)/yr",
-                struck: false,
-                tint: PW.mint
-            )
-
-            Text("\(founderWeeklyText) · full access, no trial")
-                .font(.system(size: 12, weight: .bold, design: .rounded))
-                .foregroundStyle(PW.fgMuted)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.top, 12)
-        }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 16)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color.white.opacity(0.05))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(PW.hairline, lineWidth: 1)
-        )
-    }
-
-    private func comparisonRow(label: String, value: String, struck: Bool, tint: Color) -> some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text(label)
-                .font(.system(size: 12, weight: .black, design: .monospaced))
-                .tracking(1.1)
-                .textCase(.uppercase)
-                .foregroundStyle(PW.fg3)
-
-            Spacer(minLength: 10)
-
-            Text(value)
-                .font(.brand(size: struck ? 19 : 27, weight: .heavy))
-                .strikethrough(struck, color: PW.fg3)
-                .foregroundStyle(tint)
-                .monospacedDigit()
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-        }
-    }
-}
-
 // MARK: - Preview
 
 #Preview("Paywall") {
     PaywallView(isHighIntent: true, triggerSource: "preview")
         .environment(StoreService(loadProductsOnInit: false))
-}
-
-#Preview("Limited-Time Exit Offer") {
-    ExitOfferSheet(
-        regularPriceText: "$59.99",
-        founderPriceText: "$29.99",
-        founderWeeklyText: "$0.58/week",
-        secondaryActionTitle: "Not today",
-        onSubscribe: {},
-        onDismiss: {}
-    )
-    .frame(height: 560)
 }
 
 #Preview("Onboarding Hard Paywall") {

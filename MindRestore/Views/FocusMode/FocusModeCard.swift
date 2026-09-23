@@ -39,6 +39,8 @@ private enum FM {
 // MARK: - FocusModeCard
 
 struct FocusModeCard: View {
+    var previewUnlockMinutes: Int? = nil
+
     @Environment(FocusModeService.self) private var focusModeService
     @Environment(DeepLinkRouter.self) private var deepLinkRouter
     @Environment(StoreService.self) private var storeService
@@ -48,6 +50,8 @@ struct FocusModeCard: View {
     @State private var showingProPaywall = false
     @State private var showingDeblockConfirm = false
     @State private var pendingLoweredSelection: FamilyActivitySelection?
+    @State private var shouldArmAfterPicker = false
+    @State private var previewStartedAt = Date.now
 
     private enum CardState { case notSetUp, idle, active, cooldown, unlocked, scheduled }
     private enum TargetListMode { case empty, locked, unlocked }
@@ -63,6 +67,7 @@ struct FocusModeCard: View {
     }
 
     private var cardState: CardState {
+        if previewUnlockMinutes != nil { return .unlocked }
         if focusModeService.isTemporarilyUnlocked { return .unlocked }
         if focusModeService.isInCooldown { return .cooldown }
         if focusModeService.blockedAppCount == 0 { return .notSetUp }
@@ -92,13 +97,29 @@ struct FocusModeCard: View {
         // deliberate "focus mode island" no matter the global appearance.
         .environment(\.colorScheme, .dark)
         .task {
-            await focusModeService.checkAuthorizationStatus()
+            if previewUnlockMinutes == nil {
+                await focusModeService.checkAuthorizationStatus()
+            }
         }
         .sheet(isPresented: $showingSettings) { FocusModeSettingsView() }
         .familyActivityPicker(isPresented: $showingAppPicker, selection: Binding(
             get: { focusModeService.activitySelection },
             set: handlePickerSelection
         ))
+        .onChange(of: showingAppPicker) { wasShowing, isShowing in
+            guard wasShowing && !isShowing && shouldArmAfterPicker else { return }
+            shouldArmAfterPicker = false
+            guard focusModeService.blockedAppCount > 0 else { return }
+            Task { @MainActor in
+                if focusModeService.authorizationStatus != .approved {
+                    await focusModeService.requestAuthorization()
+                }
+                if focusModeService.authorizationStatus == .approved {
+                    focusModeService.enable()
+                    Analytics.focusSetupCompleted()
+                }
+            }
+        }
         .sheet(isPresented: $showingProPaywall) {
             PaywallView(triggerSource: "focus_mode_add_apps")
         }
@@ -157,7 +178,14 @@ struct FocusModeCard: View {
                 if !storeService.isProUser && currentSelectionExceedsFreeLimit {
                     showingProPaywall = true
                 } else {
-                    focusModeService.enable()
+                    Task { @MainActor in
+                        if focusModeService.authorizationStatus != .approved {
+                            await focusModeService.requestAuthorization()
+                        }
+                        if focusModeService.authorizationStatus == .approved {
+                            focusModeService.enable()
+                        }
+                    }
                 }
             }
         )
@@ -232,7 +260,10 @@ struct FocusModeCard: View {
 
     private var unlockedCard: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
-            let remaining = max(0, Int(focusModeService.unlockUntil?.timeIntervalSince(context.date) ?? 0))
+            let previewEnd = previewUnlockMinutes.map {
+                previewStartedAt.addingTimeInterval(TimeInterval($0 * 60))
+            }
+            let remaining = max(0, Int((previewEnd ?? focusModeService.unlockUntil)?.timeIntervalSince(context.date) ?? 0))
             flatFocusSection(
                 accent: FM.speed,
                 status: "Pass active",
@@ -243,10 +274,11 @@ struct FocusModeCard: View {
                 rightTitle: "Locks in",
                 rightValue: fmtMMSS(remaining),
                 targetMode: .unlocked,
-                ctaTitle: "Train for more time",
+                ctaTitle: previewUnlockMinutes == nil ? "Train for more time" : "Pass active",
                 ctaAction: { deepLinkRouter.pendingDestination = .focusUnlock },
-                secondaryActionTitle: "Lock early",
-                secondaryAction: { focusModeService.cancelTemporaryUnlock() }
+                showsCTA: previewUnlockMinutes == nil,
+                secondaryActionTitle: previewUnlockMinutes == nil ? "Lock early" : nil,
+                secondaryAction: previewUnlockMinutes == nil ? { focusModeService.cancelTemporaryUnlock() } : nil
             )
         }
     }
@@ -382,6 +414,7 @@ struct FocusModeCard: View {
         targetMode: TargetListMode,
         ctaTitle: String,
         ctaAction: @escaping () -> Void,
+        showsCTA: Bool = true,
         secondaryActionTitle: String? = nil,
         secondaryAction: (() -> Void)? = nil
     ) -> some View {
@@ -421,7 +454,9 @@ struct FocusModeCard: View {
 
             targetList(mode: targetMode)
 
-            ctaButton(title: ctaTitle, showArrow: true, action: ctaAction)
+            if showsCTA {
+                ctaButton(title: ctaTitle, showArrow: true, action: ctaAction)
+            }
         }
         .padding(.vertical, 2)
     }
@@ -433,6 +468,14 @@ struct FocusModeCard: View {
         fallbackRightTitle: String,
         fallbackRightValue: String
     ) -> some View {
+        if previewUnlockMinutes != nil {
+            fallbackFocusStats(
+                leftTitle: fallbackLeftTitle,
+                leftValue: fallbackLeftValue,
+                rightTitle: fallbackRightTitle,
+                rightValue: fallbackRightValue
+            )
+        } else {
         switch focusModeService.authorizationStatus {
         case .approved:
             DeviceActivityReport(.focusHomeDashboard, filter: todayFilter)
@@ -453,6 +496,7 @@ struct FocusModeCard: View {
                 rightTitle: fallbackRightTitle,
                 rightValue: fallbackRightValue
             )
+        }
         }
     }
 
@@ -564,7 +608,7 @@ struct FocusModeCard: View {
                     .font(.system(size: 16, weight: .black, design: .rounded))
                     .foregroundStyle(FM.fg)
                 Spacer()
-                if focusModeService.blockedAppCount > 0 {
+                if previewUnlockMinutes == nil && focusModeService.blockedAppCount > 0 {
                     Button {
                         if storeService.isProUser {
                             showingAppPicker = true
@@ -580,7 +624,22 @@ struct FocusModeCard: View {
                 }
             }
 
-            if focusModeService.blockedAppCount == 0 {
+            if previewUnlockMinutes != nil {
+                HStack(spacing: 12) {
+                    Image("logo-tiktok")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 30, height: 30)
+                        .clipShape(.rect(cornerRadius: 7))
+                    Text("TikTok")
+                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        .foregroundStyle(FM.fg)
+                    Spacer()
+                    Text("pass")
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .foregroundStyle(FM.success)
+                }
+            } else if focusModeService.blockedAppCount == 0 {
                 Button { showingAppPicker = true } label: {
                     HStack(spacing: 12) {
                         HStack(spacing: 7) {
@@ -720,7 +779,11 @@ struct FocusModeCard: View {
             pendingLoweredSelection = newSelection
             showingDeblockConfirm = true
         } else {
+            let isFirstSelection = focusModeService.blockedAppCount == 0
             focusModeService.updateActivitySelection(newSelection)
+            if isFirstSelection && focusModeService.blockedAppCount > 0 && !focusModeService.isEnabled {
+                shouldArmAfterPicker = true
+            }
         }
     }
 

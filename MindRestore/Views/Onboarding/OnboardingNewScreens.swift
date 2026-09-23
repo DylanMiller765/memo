@@ -2119,6 +2119,1960 @@ struct OBContinueButton: View {
 
 // MARK: - Short Conversion Onboarding Screens
 
+/// A single question that turns a rough self-report into a one-year estimate.
+/// No Screen Time permission or invented baseline is required.
+struct OnboardingAttentionTimePage: View {
+    @Binding var selectedHours: Double?
+    let onContinue: () -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var showingResult = false
+    @State private var highlightedDays = 0.0
+
+    private let choices: [Double] = [0.5, 1, 2, 3, 4, 5, 6]
+
+    private func annualDays(for hours: Double) -> Int {
+        Int((hours * 365 / 24).rounded())
+    }
+
+    private func choiceLabel(_ hours: Double) -> String {
+        if hours == 0.5 { return "<1" }
+        if hours == 6 { return "6+" }
+        return "\(Int(hours))"
+    }
+
+    private func pick(_ hours: Double) {
+        selectedHours = hours
+        UISelectionFeedbackGenerator().selectionChanged()
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.32)) {
+            showingResult = true
+        }
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 1.0).delay(0.16)) {
+            highlightedDays = Double(annualDays(for: hours))
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("Your time")
+                    .font(.system(size: 15, weight: .semibold, design: .rounded))
+                    .foregroundStyle(OB.accent)
+                Spacer()
+                Button("Skip") { onContinue() }
+                    .font(.system(size: 15, weight: .medium, design: .rounded))
+                    .foregroundStyle(OB.fg2)
+                    .buttonStyle(.plain)
+                    .accessibilityHint("Continue without a time estimate")
+            }
+            .padding(.top, 16)
+
+            if showingResult, let hours = selectedHours {
+                resultContent(hours: hours)
+                    .transition(.opacity.combined(with: .offset(y: 14)))
+            } else {
+                questionContent
+                    .transition(.opacity)
+            }
+        }
+        .padding(.horizontal, 24)
+        .frame(maxWidth: 500, maxHeight: .infinity, alignment: .topLeading)
+        .frame(maxWidth: .infinity)
+        .background(OB.bg.ignoresSafeArea())
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if showingResult {
+                OBContinueButton(title: "See how Memo works", action: onContinue)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 12)
+                    .padding(.bottom, 12)
+                    .background(OB.bg)
+            }
+        }
+        .onAppear {
+            if let selectedHours {
+                showingResult = true
+                highlightedDays = Double(annualDays(for: selectedHours))
+            }
+        }
+        .preferredColorScheme(.dark)
+    }
+
+    private var questionContent: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("How long does the scroll get you?")
+                .font(.system(size: 35, weight: .black, design: .rounded))
+                .tracking(-1)
+                .foregroundStyle(OB.fg)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 22)
+                .accessibilityAddTraits(.isHeader)
+
+            Text("Roughly how many hours a day in apps you'd rather use less?")
+                .font(.system(size: 16, weight: .medium, design: .rounded))
+                .foregroundStyle(OB.fg2)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 10)
+
+            Spacer(minLength: 22)
+
+            OnboardingYearDots(highlightedDays: 0)
+                .frame(height: 185)
+                .accessibilityHidden(true)
+
+            Text("One year, one day at a time.")
+                .font(.system(size: 14, weight: .medium, design: .rounded))
+                .foregroundStyle(OB.fg2)
+                .frame(maxWidth: .infinity)
+                .padding(.top, 14)
+
+            Spacer(minLength: 22)
+
+            VStack(spacing: 10) {
+                HStack(spacing: 10) {
+                    ForEach(choices.prefix(4), id: \.self) { hourChoice($0) }
+                }
+                HStack(spacing: 10) {
+                    ForEach(choices.suffix(3), id: \.self) { hourChoice($0) }
+                }
+            }
+            .padding(.bottom, 26)
+        }
+    }
+
+    private func hourChoice(_ hours: Double) -> some View {
+        Button { pick(hours) } label: {
+            VStack(spacing: 1) {
+                Text(choiceLabel(hours))
+                    .font(.system(size: 27, weight: .bold, design: .rounded))
+                Text(hours == 0.5 || hours == 1 ? "hour" : "hours")
+                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                    .foregroundStyle(OB.fg2)
+            }
+            .foregroundStyle(OB.fg)
+            .frame(maxWidth: .infinity, minHeight: 68)
+            .background(OB.surface, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 17, style: .continuous).stroke(OB.border, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(hours == 0.5 ? "Less than one hour" : hours == 1 ? "One hour" : hours == 6 ? "Six or more hours" : "\(Int(hours)) hours")
+    }
+
+    private func resultContent(hours: Double) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(hours == 6 ? "At that pace, that's at least" : "At that pace, that's about")
+                .font(.system(size: 20, weight: .semibold, design: .rounded))
+                .foregroundStyle(OB.fg2)
+                .padding(.top, 30)
+
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text("\(annualDays(for: hours))")
+                    .font(.system(size: 100, weight: .black, design: .rounded))
+                    .tracking(-5)
+                    .foregroundStyle(OB.accent)
+                    .monospacedDigit()
+                    .minimumScaleFactor(0.7)
+                Text("full days")
+                    .font(.system(size: 25, weight: .bold, design: .rounded))
+                    .foregroundStyle(OB.fg)
+            }
+            .lineLimit(1)
+            .accessibilityElement(children: .combine)
+
+            Text("in a year of scrolling.")
+                .font(.system(size: 23, weight: .bold, design: .rounded))
+                .foregroundStyle(OB.fg)
+
+            Spacer(minLength: 26)
+
+            OnboardingYearDots(highlightedDays: highlightedDays)
+                .frame(height: 185)
+                .accessibilityHidden(true)
+
+            Spacer(minLength: 24)
+
+            Text(hours == 6 ? "At least 6 hours a day" : hours == 0.5 ? "At under 1 hour a day" : "At roughly \(Int(hours)) hours a day")
+                .font(.system(size: 17, weight: .bold, design: .rounded))
+                .foregroundStyle(OB.fg)
+            Text("An estimate from your answer about apps you'd rather use less. Memo helps you interrupt the next automatic tap.")
+                .font(.system(size: 14, weight: .medium, design: .rounded))
+                .foregroundStyle(OB.fg2)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 8)
+
+            Button("Change my answer") {
+                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
+                    showingResult = false
+                    highlightedDays = 0
+                }
+            }
+            .font(.system(size: 14, weight: .semibold, design: .rounded))
+            .foregroundStyle(OB.accent)
+            .buttonStyle(.plain)
+            .padding(.top, 16)
+
+            Spacer(minLength: 12)
+        }
+    }
+}
+
+private struct OnboardingYearDots: View, Animatable {
+    var highlightedDays: Double
+
+    var animatableData: Double {
+        get { highlightedDays }
+        set { highlightedDays = newValue }
+    }
+
+    var body: some View {
+        Canvas { context, size in
+            let columns = 24
+            let rows = 16
+            let gap: CGFloat = 3
+            let side = min(
+                (size.width - CGFloat(columns - 1) * gap) / CGFloat(columns),
+                (size.height - CGFloat(rows - 1) * gap) / CGFloat(rows)
+            )
+            let gridWidth = CGFloat(columns) * side + CGFloat(columns - 1) * gap
+            let gridHeight = CGFloat(rows) * side + CGFloat(rows - 1) * gap
+            let origin = CGPoint(x: (size.width - gridWidth) / 2, y: (size.height - gridHeight) / 2)
+
+            for day in 0..<365 {
+                let column = day % columns
+                let row = day / columns
+                let rect = CGRect(
+                    x: origin.x + CGFloat(column) * (side + gap),
+                    y: origin.y + CGFloat(row) * (side + gap),
+                    width: side,
+                    height: side
+                )
+                let color = Double(day) < highlightedDays ? OB.coral : OB.fg.opacity(0.12)
+                context.fill(Path(roundedRect: rect, cornerRadius: 2), with: .color(color))
+            }
+        }
+    }
+}
+
+// MARK: - Short onboarding kit
+//
+// Shared layout pieces for the five-page onboarding (intro → why → try it →
+// trial → reminder) so every page uses the same gutter, headline scale and
+// pinned CTA. The CTA sitting at the same height on every page is what keeps
+// the deck from feeling like it jumps between screens.
+
+enum OBLayout {
+    static let gutter: CGFloat = 24
+    static let contentMaxWidth: CGFloat = 440
+    /// Below this content height (iPhone SE and friends) pages switch to
+    /// their compact type scale and spacing.
+    static let compactHeight: CGFloat = 600
+
+    /// Phones without a home indicator report no bottom safe area, so the
+    /// pinned CTA needs its own breathing room there.
+    static var bottomPadding: CGFloat {
+        let window = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .first { $0.isKeyWindow }
+        return (window?.safeAreaInsets.bottom ?? 0) > 0 ? 6 : 16
+    }
+}
+
+struct OBHeadline: View {
+    let text: String
+    var size: CGFloat = 34
+    var alignment: TextAlignment = .leading
+
+    var body: some View {
+        Text(text)
+            .font(.brand(size: size, weight: .heavy))
+            .tracking(-0.5)
+            .foregroundStyle(OB.fg)
+            .multilineTextAlignment(alignment)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityAddTraits(.isHeader)
+    }
+}
+
+struct OBBodyText: View {
+    let text: String
+    var size: CGFloat = 16
+    var alignment: TextAlignment = .leading
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: size, weight: .medium, design: .rounded))
+            .foregroundStyle(OB.fg2)
+            .lineSpacing(2)
+            .multilineTextAlignment(alignment)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// "✓ No payment due now" style line.
+struct OBReassurance: View {
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "checkmark")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(OB.success)
+            Text(text)
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .foregroundStyle(OB.fg)
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+extension View {
+    /// Pins `bar` below the page content, above the home indicator.
+    func obBottomBar<Bar: View>(@ViewBuilder _ bar: () -> Bar) -> some View {
+        VStack(spacing: 0) {
+            self
+            bar()
+        }
+    }
+}
+
+/// Pinned bottom action area used by every short-onboarding page.
+struct OBActionBar: View {
+    let title: String
+    var isEnabled: Bool = true
+    var reassurance: String? = nil
+    var footnote: String? = nil
+    var backdrop: Color = OB.bg
+    let action: () -> Void
+
+    var body: some View {
+        VStack(spacing: 10) {
+            if let reassurance {
+                OBReassurance(text: reassurance)
+            }
+            OBContinueButton(title: title, action: action)
+                .disabled(!isEnabled)
+                .opacity(isEnabled ? 1 : 0.45)
+            if let footnote {
+                Text(footnote)
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(OB.fg3)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.horizontal, OBLayout.gutter)
+        .padding(.top, 10)
+        .padding(.bottom, OBLayout.bottomPadding)
+        .frame(maxWidth: OBLayout.contentMaxWidth + OBLayout.gutter * 2)
+        .frame(maxWidth: .infinity)
+        .background(backdrop)
+    }
+}
+
+// MARK: 1 · Intro
+
+/// Opens on the real product: the phone demo of Memo blocking an app and
+/// the game that unlocks it. Centered so the headline, phone and CTA share
+/// one axis on every phone size.
+struct OnboardingIntroPage: View {
+    let isActive: Bool
+    let onContinue: () -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var appeared = false
+
+    var body: some View {
+        GeometryReader { proxy in
+            let compact = proxy.size.height < OBLayout.compactHeight
+            VStack(spacing: 0) {
+                VStack(spacing: compact ? 8 : 12) {
+                    OBEyebrow(text: "MEMO")
+                    OBHeadline(
+                        text: "The app blocker\nyou play to unlock.",
+                        size: compact ? 30 : 36,
+                        alignment: .center
+                    )
+                }
+                .padding(.top, compact ? 2 : 10)
+
+                ZStack {
+                    // A blurred disc fades out well inside the column, so
+                    // narrow phones don't show the glow's clipped edges.
+                    Circle()
+                        .fill(OB.accent.opacity(0.30))
+                        .frame(width: 220, height: 220)
+                        .blur(radius: 70)
+                        .accessibilityHidden(true)
+
+                    WelcomeDemoBezel(
+                        isActive: isActive,
+                        widthFraction: 0.8,
+                        maxWidth: 272,
+                        verticalOffset: 0,
+                        rotationDegrees: 0
+                    )
+                    .accessibilityLabel("Memo demo: a blocked app opens a brain game")
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.vertical, compact ? 12 : 22)
+                .scaleEffect(appeared ? 1 : 0.95)
+                .opacity(appeared ? 1 : 0)
+
+                OBBodyText(
+                    text: "Memo locks the apps you pick. Finish a quick brain game to open one for a few minutes.",
+                    size: compact ? 15 : 16,
+                    alignment: .center
+                )
+                .padding(.bottom, compact ? 2 : 8)
+            }
+            .padding(.horizontal, OBLayout.gutter)
+            .frame(maxWidth: OBLayout.contentMaxWidth + OBLayout.gutter * 2)
+            .frame(maxWidth: .infinity)
+        }
+        .background(OB.bg.ignoresSafeArea())
+        .obBottomBar {
+            OBActionBar(title: "Get started", action: onContinue)
+        }
+        .preferredColorScheme(.dark)
+        .onAppear {
+            withAnimation(reduceMotion ? nil : .spring(response: 0.7, dampingFraction: 0.85).delay(0.1)) {
+                appeared = true
+            }
+        }
+    }
+}
+
+// MARK: 2 · Why Memo
+
+/// Names why they're here without blaming them, then hands off to the demo.
+struct OnboardingMotivationBridgePage: View {
+    let onContinue: () -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var appeared = false
+
+    var body: some View {
+        GeometryReader { proxy in
+            let compact = proxy.size.height < OBLayout.compactHeight
+            VStack(spacing: 0) {
+                Spacer(minLength: 0)
+
+                OnboardingLockedAppFan(compact: compact, appeared: appeared)
+                    .accessibilityHidden(true)
+
+                VStack(spacing: compact ? 12 : 16) {
+                    OBHeadline(
+                        text: "You're here because your phone takes more than you want to give.",
+                        size: compact ? 27 : 32,
+                        alignment: .center
+                    )
+                    OBBodyText(
+                        text: "That's not a willpower problem. These apps are built to keep you scrolling. Memo puts one quick game in the way.",
+                        size: compact ? 15 : 17,
+                        alignment: .center
+                    )
+                }
+                .padding(.top, compact ? 28 : 44)
+                .opacity(appeared ? 1 : 0)
+                .offset(y: appeared ? 0 : 10)
+
+                Spacer(minLength: 0)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, OBLayout.gutter)
+            .frame(maxWidth: OBLayout.contentMaxWidth + OBLayout.gutter * 2)
+            .frame(maxWidth: .infinity)
+        }
+        .background(OB.bg.ignoresSafeArea())
+        .obBottomBar {
+            OBActionBar(title: "See how Memo works", action: onContinue)
+        }
+        .preferredColorScheme(.dark)
+        .onAppear {
+            withAnimation(reduceMotion ? nil : .spring(response: 0.65, dampingFraction: 0.82).delay(0.1)) {
+                appeared = true
+            }
+        }
+    }
+}
+
+/// Three familiar feeds, fanned out and padlocked — what Memo actually does.
+struct OnboardingLockedAppFan: View {
+    let compact: Bool
+    let appeared: Bool
+
+    private let apps: [(asset: String, angle: Double, x: CGFloat, y: CGFloat)] = [
+        ("logo-instagram", -11, -78, 14),
+        ("logo-tiktok", 0, 0, 0),
+        ("logo-youtube", 11, 78, 14)
+    ]
+
+    var body: some View {
+        let tile: CGFloat = compact ? 70 : 84
+        ZStack {
+            ForEach(Array(apps.enumerated()), id: \.offset) { index, app in
+                ZStack(alignment: .bottomTrailing) {
+                    RoundedRectangle(cornerRadius: tile * 0.26, style: .continuous)
+                        .fill(OB.surface)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: tile * 0.26, style: .continuous)
+                                .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                        )
+                        .overlay(
+                            Image(app.asset)
+                                .renderingMode(.original)
+                                .resizable()
+                                .scaledToFit()
+                                .padding(tile * 0.2)
+                                .saturation(0.35)
+                                .opacity(0.72)
+                        )
+                        .frame(width: tile, height: tile)
+
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: tile * 0.17, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: tile * 0.36, height: tile * 0.36)
+                        .background(Circle().fill(OB.accent))
+                        .overlay(Circle().stroke(OB.bg, lineWidth: 3))
+                        .offset(x: tile * 0.1, y: tile * 0.1)
+                }
+                .rotationEffect(.degrees(appeared ? app.angle : 0))
+                .offset(x: appeared ? app.x * (tile / 84) : 0, y: app.y)
+                .zIndex(index == 1 ? 1 : 0)
+                .shadow(color: .black.opacity(0.45), radius: 16, y: 10)
+            }
+        }
+        .frame(height: tile + 30)
+    }
+}
+
+// MARK: 3 · Try it
+
+/// One interactive page in four beats: the production slot, the production
+/// Visual Memory game (played until the first miss), the unlock that game
+/// earns, then where the score lands on this week's real leaderboard.
+/// Nothing here is submitted or unlocked for real.
+struct OnboardingPlayableLoopPage: View {
+    let onContinue: (Int) -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(GameCenterService.self) private var gameCenterService
+    @State private var stage: Stage
+    @State private var landedMinutes: Int?
+    @State private var levelsCleared: Int
+    @State private var gameRun = 0
+    @State private var board: OnboardingBoardState = .loading
+    @State private var unlockRevealed = false
+
+    private enum Stage: Int { case slot, game, unlock, rank }
+
+    init(previewCompleted: Bool = false, previewStage: Int? = nil, onContinue: @escaping (Int) -> Void) {
+        self.onContinue = onContinue
+        let initial: Stage = previewStage.flatMap(Stage.init(rawValue:)) ?? (previewCompleted ? .unlock : .slot)
+        _stage = State(initialValue: initial)
+        _levelsCleared = State(initialValue: initial.rawValue >= Stage.unlock.rawValue ? 6 : 0)
+    }
+
+    /// The demo reel always lands on Visual Memory, so the payout is that
+    /// game's real tier — never a hardcoded number.
+    private var payoutMinutes: Int {
+        landedMinutes ?? FocusUnlockPayout.minutes(for: .visualMemory)
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let compact = proxy.size.height < OBLayout.compactHeight
+            VStack(spacing: 0) {
+                OnboardingTryItStepper(current: stage.rawValue, compact: compact)
+                    .padding(.horizontal, OBLayout.gutter)
+                    .padding(.top, compact ? 0 : 6)
+                    .padding(.bottom, compact ? 14 : 20)
+
+                switch stage {
+                case .slot:
+                    slotStage(compact: compact)
+                        .transition(.opacity)
+                case .game:
+                    gameStage(compact: compact)
+                        .transition(.opacity)
+                case .unlock:
+                    OnboardingUnlockMoment(
+                        minutes: payoutMinutes,
+                        compact: compact,
+                        onRevealed: { unlockRevealed = true }
+                    )
+                    .padding(.horizontal, OBLayout.gutter)
+                    .transition(.opacity)
+                case .rank:
+                    OnboardingLeaderboardClimb(
+                        board: board,
+                        level: levelsCleared,
+                        compact: compact,
+                        onPlayAgain: playAgain
+                    )
+                    .padding(.horizontal, OBLayout.gutter)
+                    .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .opacity))
+                }
+            }
+            .frame(maxWidth: OBLayout.contentMaxWidth + OBLayout.gutter * 2, maxHeight: .infinity, alignment: .top)
+            .frame(maxWidth: .infinity)
+        }
+        .obBottomBar { bottomBar }
+        .background {
+            // Behind the pinned bar too, so the slot's glow doesn't stop at
+            // a visible seam above the CTA.
+            if stage == .slot {
+                FocusSlotAtmosphere()
+            } else {
+                OB.bg.ignoresSafeArea()
+            }
+        }
+        .preferredColorScheme(.dark)
+        // Load the board while the unlock plays so the climb starts instantly.
+        .task(id: stage.rawValue >= Stage.unlock.rawValue) {
+            guard stage.rawValue >= Stage.unlock.rawValue else { return }
+            await loadBoard()
+        }
+    }
+
+    // MARK: Stages
+
+    private func slotStage(compact: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            OBHeadline(text: "Say you open TikTok.", size: compact ? 27 : 32)
+            OBBodyText(
+                text: "Memo steps in first. Spin to see which game stands between you and the feed.",
+                size: compact ? 14 : 16
+            )
+            .padding(.top, 6)
+
+            GeometryReader { area in
+                // scaleEffect doesn't shrink layout, so size the frame to the
+                // scaled machine explicitly — otherwise the 360pt machine
+                // overflows narrow phones and drifts right of center.
+                let scale = min(1, area.size.width / 360, area.size.height / 560)
+                FocusUnlockSlotMachine(
+                    games: TrainingGameCatalog.focusUnlockGames,
+                    mode: .demo,
+                    onLanded: { _, minutes in
+                        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) {
+                            landedMinutes = minutes
+                        }
+                    }
+                )
+                .frame(width: 360, height: 560)
+                .scaleEffect(scale)
+                .frame(width: area.size.width, height: area.size.height)
+            }
+            .padding(.top, compact ? 4 : 12)
+        }
+        .padding(.horizontal, OBLayout.gutter)
+    }
+
+    private func gameStage(compact: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text("Visual Memory")
+                        .font(.brand(size: compact ? 24 : 28, weight: .heavy))
+                        .foregroundStyle(OB.fg)
+                        .accessibilityAddTraits(.isHeader)
+                    Spacer(minLength: 8)
+                    Text("\(payoutMinutes) MIN")
+                        .font(.system(size: 12, weight: .bold, design: .monospaced))
+                        .foregroundStyle(OB.accent)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(Capsule().fill(OB.accent.opacity(0.14)))
+                        .accessibilityLabel("Worth \(payoutMinutes) minutes")
+                }
+                OBBodyText(
+                    text: "Memorize the lit squares, then tap them. The grid keeps growing until you miss.",
+                    size: compact ? 13 : 15
+                )
+            }
+            .padding(.horizontal, OBLayout.gutter)
+
+            VisualMemoryView(
+                autoStart: true,
+                isOnboardingPreview: true,
+                onPreviewComplete: { finishGame() },
+                onPreviewProgress: { levelsCleared = $0 }
+            )
+            .id(gameRun)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    @ViewBuilder
+    private var bottomBar: some View {
+        switch stage {
+        case .slot:
+            if landedMinutes != nil {
+                OBActionBar(title: "Play Visual Memory", backdrop: .clear) {
+                    advance(to: .game)
+                }
+                .transition(.opacity)
+            } else {
+                // Hold the CTA's space so the machine doesn't resize when the
+                // button appears after the reel lands.
+                OBActionBar(title: "Play Visual Memory", action: {})
+                    .hidden()
+                    .accessibilityHidden(true)
+            }
+        case .game:
+            EmptyView()
+        case .unlock:
+            OBActionBar(title: "See where you'd place", isEnabled: unlockRevealed) {
+                advance(to: .rank)
+            }
+            .id(unlockRevealed)
+        case .rank:
+            OBActionBar(title: "Continue") { onContinue(levelsCleared) }
+        }
+    }
+
+    // MARK: Flow
+
+    private func advance(to next: Stage) {
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        withAnimation(reduceMotion ? nil : .spring(response: 0.5, dampingFraction: 0.86)) {
+            stage = next
+        }
+    }
+
+    private func finishGame() {
+        unlockRevealed = false
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.35)) {
+            stage = .unlock
+        }
+    }
+
+    private func playAgain() {
+        levelsCleared = 0
+        gameRun += 1
+        advance(to: .game)
+    }
+
+    private func loadBoard() async {
+        #if DEBUG
+        // QA only: exercise the climb on a simulator without Game Center.
+        if ProcessInfo.processInfo.arguments.contains("--sample-leaderboard") {
+            let names = ["sample_ava", "sample_kai", "sample_noor", "sample_leo", "sample_mia", "sample_sol",
+                         "sample_jun", "sample_ivy", "sample_rex", "sample_uma", "sample_ben", "sample_zed"]
+            let scores = [14, 12, 11, 9, 8, 7, 5, 5, 4, 3, 3, 2]
+            let emoji = Array(repeating: "", count: names.count)
+            board = .loaded(
+                entries: names.indices.map {
+                    LeaderboardEntryData(rank: $0 + 1, username: names[$0], score: scores[$0], avatarEmoji: emoji[$0], level: scores[$0], isCurrentUser: false)
+                },
+                totalPlayers: names.count
+            )
+            return
+        }
+        #endif
+        guard gameCenterService.isAuthenticated else {
+            board = .unavailable
+            return
+        }
+        if case .loaded = board { return }
+        board = .loading
+        let result = await gameCenterService.loadLeaderboardEntries(
+            category: .visualMemory,
+            timeFilter: .thisWeek,
+            range: NSRange(location: 1, length: 50)
+        )
+        if result.error != nil {
+            board = .unavailable
+        } else {
+            let others = result.entries.filter { !$0.isCurrentUser }.sorted { $0.rank < $1.rank }
+            board = .loaded(entries: others, totalPlayers: result.totalPlayerCount)
+        }
+    }
+}
+
+enum OnboardingBoardState {
+    case loading
+    case loaded(entries: [LeaderboardEntryData], totalPlayers: Int)
+    case unavailable
+}
+
+/// Spin → Play → Unlock → Rank, so the user always knows where they are.
+struct OnboardingTryItStepper: View {
+    let current: Int
+    var compact: Bool = false
+    private let labels = ["Spin", "Play", "Unlock", "Rank"]
+
+    var body: some View {
+        HStack(spacing: compact ? 5 : 7) {
+            ForEach(labels.indices, id: \.self) { index in
+                HStack(spacing: 5) {
+                    ZStack {
+                        Circle()
+                            .fill(index < current ? OB.success : (index == current ? OB.accent : OB.surface))
+                            .overlay(Circle().stroke(index > current ? OB.border : .clear, lineWidth: 1))
+                        if index < current {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 9, weight: .heavy))
+                                .foregroundStyle(OB.bg)
+                        } else {
+                            Text("\(index + 1)")
+                                .font(.system(size: 10, weight: .bold, design: .rounded))
+                                .foregroundStyle(index == current ? .white : OB.fg3)
+                        }
+                    }
+                    .frame(width: 20, height: 20)
+
+                    Text(labels[index])
+                        .font(.system(size: compact ? 13 : 14, weight: .semibold, design: .rounded))
+                        .foregroundStyle(index <= current ? OB.fg : OB.fg3)
+                        .lineLimit(1)
+                        .fixedSize()
+                }
+                if index < labels.count - 1 {
+                    Capsule()
+                        .fill(index < current ? OB.success.opacity(0.7) : Color.white.opacity(0.14))
+                        .frame(minWidth: 6, maxWidth: .infinity)
+                        .frame(height: 2)
+                }
+            }
+        }
+        .animation(.easeInOut(duration: 0.25), value: current)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Step \(current + 1) of 4: \(labels[min(current, labels.count - 1)])")
+    }
+}
+
+// MARK: Unlock moment
+
+/// The payoff for finishing, told as the slot's ticket being cashed in:
+/// the "IF YOU FINISH" ticket from the spin returns, Memo slams an EARNED
+/// stamp on it, the minutes roll up like the reel, then the ticket tears
+/// and its TikTok stub becomes the live pass with a real countdown.
+/// Labelled as a preview — nothing is unlocked during onboarding.
+struct OnboardingUnlockMoment: View {
+    let minutes: Int
+    let compact: Bool
+    let onRevealed: () -> Void
+
+    private enum Phase: Int, Comparable {
+        case hidden, shown, stamped, rolled, torn
+        static func < (lhs: Phase, rhs: Phase) -> Bool { lhs.rawValue < rhs.rawValue }
+    }
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var phase: Phase = .hidden
+    @State private var rolledMinutes = 0
+    @State private var slam: CGFloat = 0
+    @State private var mascotHop = false
+    @State private var ticketFaded = false
+    @State private var startedAt: Date?
+    @State private var sequence: Task<Void, Never>?
+
+    private var heroHeight: CGFloat { compact ? 268 : 330 }
+    private var ticketHeight: CGFloat { compact ? 108 : 126 }
+    private var stubWidth: CGFloat { compact ? 96 : 112 }
+    private var ringSize: CGFloat { compact ? 176 : 214 }
+    private var mascotSize: CGFloat { compact ? 92 : 112 }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            VStack(spacing: 8) {
+                OBHeadline(text: phase >= .torn ? "Unlocked." : "Cash it in.", size: compact ? 32 : 38, alignment: .center)
+                    .contentTransition(.opacity)
+                OBBodyText(
+                    text: phase >= .torn
+                        ? "TikTok opens for \(minutes) minutes. Then Memo locks it again."
+                        : "You finished the game, so your ticket pays out.",
+                    size: compact ? 14 : 16,
+                    alignment: .center
+                )
+                .contentTransition(.opacity)
+            }
+            .animation(.easeInOut(duration: 0.3), value: phase)
+
+            Spacer(minLength: compact ? 6 : 14)
+
+            GeometryReader { area in
+                hero(width: min(area.size.width, 360))
+                    .frame(width: area.size.width, height: area.size.height)
+            }
+            .frame(height: heroHeight)
+
+            countdown
+                .opacity(phase >= .torn ? 1 : 0)
+                .offset(y: phase >= .torn ? 0 : 10)
+                .animation(.spring(response: 0.5, dampingFraction: 0.8).delay(0.15), value: phase)
+
+            Spacer(minLength: compact ? 4 : 14)
+        }
+        .onAppear(perform: run)
+        .onDisappear { sequence?.cancel() }
+    }
+
+    // MARK: Hero
+
+    private func hero(width: CGFloat) -> some View {
+        let bodyWidth = width - stubWidth
+        let ticketY: CGFloat = compact ? 34 : 44
+        let stubCenterX = -width / 2 + stubWidth / 2
+        let bodyCenterX = width / 2 - bodyWidth / 2
+        let iconY: CGFloat = compact ? 30 : 38
+        let torn = phase >= .torn
+
+        return ZStack {
+            // Payoff glow + burst, centered on where the icon lands.
+            Circle()
+                .fill(OB.success.opacity(0.3))
+                .frame(width: ringSize * 0.9, height: ringSize * 0.9)
+                .blur(radius: 50)
+                .offset(y: iconY)
+                .opacity(torn ? 1 : 0)
+                .scaleEffect(torn ? 1 : 0.4)
+
+            OnboardingSparkBurst(active: torn, radius: ringSize * 0.62)
+                .offset(y: iconY)
+
+            countdownRing
+                .frame(width: ringSize, height: ringSize)
+                .offset(y: iconY)
+                .opacity(torn ? 1 : 0)
+
+            // Memo leans over the top edge, like the dealer on the slot.
+            RiveMascotView(mood: .happy, size: mascotSize, playbackPolicy: .continuous)
+                .offset(y: torn
+                        ? iconY - ringSize / 2 - mascotSize * 0.28
+                        : ticketY - ticketHeight / 2 - mascotSize * 0.3)
+                .offset(y: mascotHop ? -18 : 0)
+                .opacity(phase >= .shown ? 1 : 0)
+                .scaleEffect(phase >= .shown ? 1 : 0.5)
+                .accessibilityHidden(true)
+
+            // Ticket body: promise → EARNED → rolled minutes. Falls away on tear.
+            ticketBody(width: bodyWidth)
+                .offset(x: bodyCenterX + (torn ? 30 : 0), y: ticketY + (torn ? 150 : 0))
+                .rotationEffect(.degrees(torn ? 16 : 0))
+                .opacity(ticketFaded ? 0 : 1)
+
+            // Ticket stub. Its background falls with the body; the icon flies on.
+            OnboardingTicketPieceShape(notch: .trailing)
+                .fill(OB.surface)
+                .overlay(
+                    OnboardingTicketPieceShape(notch: .trailing)
+                        .stroke(ticketTint.opacity(0.75), style: StrokeStyle(lineWidth: 1.4, dash: [6, 4]))
+                )
+                .frame(width: stubWidth, height: ticketHeight)
+                .offset(x: stubCenterX - (torn ? 30 : 0), y: ticketY + (torn ? 150 : 0))
+                .rotationEffect(.degrees(torn ? -14 : 0))
+                .opacity(ticketFaded ? 0 : 1)
+
+            OnboardingAppIcon(asset: "logo-tiktok", size: compact ? 58 : 66)
+                .saturation(torn ? 1 : 0)
+                .opacity(torn ? 1 : 0.6)
+                .scaleEffect(torn ? (compact ? 1.9 : 1.95) : 1)
+                .shadow(color: .black.opacity(torn ? 0.5 : 0), radius: 18, y: 10)
+                .offset(x: torn ? 0 : stubCenterX, y: torn ? iconY : ticketY)
+        }
+        .modifier(OnboardingShakeEffect(travel: slam))
+        .opacity(phase >= .shown ? 1 : 0)
+        .offset(y: phase >= .shown ? 0 : 40)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(torn ? "Ticket cashed in. TikTok unlocked for \(minutes) minutes." : "Ticket for \(minutes) minutes if you finish")
+    }
+
+    private var ticketTint: Color { phase >= .stamped ? OB.success : OB.accent }
+
+    private func ticketBody(width: CGFloat) -> some View {
+        ZStack {
+            OnboardingTicketPieceShape(notch: .leading)
+                .fill(phase >= .stamped ? OB.success.opacity(0.10) : OB.surface)
+            OnboardingTicketPieceShape(notch: .leading)
+                .stroke(ticketTint.opacity(0.75), style: StrokeStyle(lineWidth: 1.4, dash: [6, 4]))
+            // Perforation the ticket tears along.
+            Path { path in
+                path.move(to: CGPoint(x: 0, y: 14))
+                path.addLine(to: CGPoint(x: 0, y: ticketHeight - 14))
+            }
+            .stroke(Color.white.opacity(0.28), style: StrokeStyle(lineWidth: 2, lineCap: .round, dash: [1, 6]))
+            .frame(width: width, height: ticketHeight, alignment: .leading)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(phase >= .stamped ? "YOU EARNED" : "IF YOU FINISH")
+                    .font(.system(size: 11, weight: .heavy, design: .monospaced))
+                    .tracking(1.3)
+                    .foregroundStyle(phase >= .stamped ? OB.success : OB.fg2)
+                    .contentTransition(.opacity)
+                Text(phase >= .stamped ? OnboardingUnlockMoment.clock(rolledMinutes * 60) : "\(minutes) MIN")
+                    .font(.system(size: compact ? 38 : 46, weight: .heavy, design: .monospaced))
+                    .foregroundStyle(OB.fg)
+                    .contentTransition(.numericText(value: Double(rolledMinutes)))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.leading, 22)
+
+            stamp
+                .offset(x: width * 0.2, y: -ticketHeight * 0.18)
+        }
+        .frame(width: width, height: ticketHeight)
+        .animation(.easeInOut(duration: 0.2), value: phase)
+    }
+
+    private var stamp: some View {
+        Text("EARNED")
+            .font(.system(size: compact ? 16 : 18, weight: .black, design: .rounded))
+            .tracking(1.5)
+            .foregroundStyle(OB.success)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(OB.success, lineWidth: 3))
+            .rotationEffect(.degrees(-12))
+            .scaleEffect(phase >= .stamped ? 1 : 2.6)
+            .opacity(phase >= .stamped ? 1 : 0)
+            .animation(.spring(response: 0.22, dampingFraction: 0.55), value: phase)
+    }
+
+    private var countdownRing: some View {
+        TimelineView(.periodic(from: startedAt ?? .now, by: 1)) { context in
+            let total = Double(max(1, minutes * 60))
+            let elapsed = startedAt.map { max(0, context.date.timeIntervalSince($0)) } ?? 0
+            let remaining = max(0, total - elapsed)
+            ZStack {
+                Circle().stroke(Color.white.opacity(0.08), lineWidth: 10)
+                Circle()
+                    .trim(from: 0, to: phase >= .torn ? remaining / total : 0)
+                    .stroke(OB.success, style: StrokeStyle(lineWidth: 10, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                    .shadow(color: OB.success.opacity(0.6), radius: 10)
+                    .animation(.easeOut(duration: 0.9), value: phase)
+            }
+        }
+    }
+
+    private var countdown: some View {
+        TimelineView(.periodic(from: startedAt ?? .now, by: 1)) { context in
+            let total = max(1, minutes * 60)
+            let elapsed = startedAt.map { max(0, Int(context.date.timeIntervalSince($0))) } ?? 0
+            let remaining = max(0, total - elapsed)
+            VStack(spacing: 2) {
+                Text(OnboardingUnlockMoment.clock(remaining))
+                    .font(.system(size: compact ? 38 : 46, weight: .bold, design: .monospaced))
+                    .foregroundStyle(OB.fg)
+                    .contentTransition(.numericText(countsDown: true))
+                Text("LEFT ON TIKTOK · PREVIEW")
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .tracking(0.9)
+                    .foregroundStyle(OB.fg3)
+            }
+        }
+    }
+
+    // MARK: Sequence
+
+    private func run() {
+        guard sequence == nil else { return }
+        if reduceMotion {
+            phase = .torn
+            ticketFaded = true
+            rolledMinutes = minutes
+            startedAt = .now
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            onRevealed()
+            return
+        }
+        sequence = Task { @MainActor in
+            let heavy = UIImpactFeedbackGenerator(style: .heavy)
+            let tick = UIImpactFeedbackGenerator(style: .rigid)
+            let soft = UIImpactFeedbackGenerator(style: .soft)
+            heavy.prepare()
+            tick.prepare()
+
+            // 1 · The ticket from the spin comes back.
+            try? await Task.sleep(for: .milliseconds(150))
+            withAnimation(.spring(response: 0.55, dampingFraction: 0.78)) { phase = .shown }
+
+            // 2 · Memo hops and slams the stamp.
+            try? await Task.sleep(for: .milliseconds(750))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeOut(duration: 0.14)) { mascotHop = true }
+            try? await Task.sleep(for: .milliseconds(140))
+            guard !Task.isCancelled else { return }
+            phase = .stamped
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) { mascotHop = false }
+            withAnimation(.linear(duration: 0.18)) { slam += 1 }
+            heavy.impactOccurred()
+            SoundService.shared.playReelLock()
+
+            // 3 · The minutes roll up like the reel.
+            try? await Task.sleep(for: .milliseconds(380))
+            for value in 1...max(1, minutes) {
+                guard !Task.isCancelled else { return }
+                withAnimation(.snappy(duration: 0.12)) { rolledMinutes = value }
+                tick.impactOccurred(intensity: min(1, 0.45 + Double(value) / Double(max(1, minutes)) * 0.55))
+                SoundService.shared.playReelTick()
+                let progress = Double(value) / Double(max(1, minutes))
+                try? await Task.sleep(for: .milliseconds(Int(55 + progress * progress * 110)))
+            }
+            guard !Task.isCancelled else { return }
+            phase = .rolled
+            heavy.impactOccurred(intensity: 0.8)
+
+            // 4 · Tear along the perforation; the stub becomes the live pass.
+            try? await Task.sleep(for: .milliseconds(520))
+            guard !Task.isCancelled else { return }
+            soft.impactOccurred()
+            startedAt = .now
+            // Fade the paper fast so its digits don't trail the tear.
+            withAnimation(.easeOut(duration: 0.16)) { ticketFaded = true }
+            withAnimation(.spring(response: 0.62, dampingFraction: 0.74)) { phase = .torn }
+            try? await Task.sleep(for: .milliseconds(90))
+            soft.impactOccurred(intensity: 0.7)
+
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            SoundService.shared.playComplete()
+
+            try? await Task.sleep(for: .milliseconds(350))
+            guard !Task.isCancelled else { return }
+            onRevealed()
+        }
+    }
+
+    static func clock(_ seconds: Int) -> String {
+        String(format: "%d:%02d", seconds / 60, seconds % 60)
+    }
+}
+
+/// One half of a ticket: rounded card with semicircle notches cut where the
+/// two halves meet, so the perforation reads as tearable.
+struct OnboardingTicketPieceShape: Shape {
+    enum Notch { case leading, trailing }
+    let notch: Notch
+    var cornerRadius: CGFloat = 18
+    var notchRadius: CGFloat = 11
+
+    func path(in rect: CGRect) -> Path {
+        let card = Path(roundedRect: rect, cornerRadius: cornerRadius, style: .continuous)
+        let x = notch == .leading ? rect.minX : rect.maxX
+        var notches = Path()
+        notches.addEllipse(in: CGRect(x: x - notchRadius, y: rect.minY - notchRadius, width: notchRadius * 2, height: notchRadius * 2))
+        notches.addEllipse(in: CGRect(x: x - notchRadius, y: rect.maxY - notchRadius, width: notchRadius * 2, height: notchRadius * 2))
+        return card.subtracting(notches)
+    }
+}
+
+/// A home-screen-style icon from the bundled logo art. The logos ship with
+/// white corners, so they're filled and clipped rather than padded.
+struct OnboardingAppIcon: View {
+    let asset: String
+    let size: CGFloat
+
+    var body: some View {
+        Image(asset)
+            .renderingMode(.original)
+            .resizable()
+            .scaledToFill()
+            .scaleEffect(1.08)
+            .frame(width: size, height: size)
+            .clipShape(RoundedRectangle(cornerRadius: size * 0.23, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: size * 0.23, style: .continuous).stroke(Color.white.opacity(0.14), lineWidth: 1))
+    }
+}
+
+/// A padlock drawn in two parts so the shackle can spring open.
+struct OnboardingPadlock: View {
+    let isOpen: Bool
+    var size: CGFloat = 60
+
+    var body: some View {
+        ZStack {
+            OnboardingShackleShape()
+                .stroke(
+                    LinearGradient(colors: [Color(white: 0.95), Color(white: 0.62)], startPoint: .top, endPoint: .bottom),
+                    style: StrokeStyle(lineWidth: size * 0.13, lineCap: .round)
+                )
+                .frame(width: size * 0.54, height: size * 0.5)
+                .offset(y: -size * 0.3 - (isOpen ? size * 0.16 : 0))
+                .rotationEffect(.degrees(isOpen ? -22 : 0), anchor: UnitPoint(x: 0.3, y: 0.5))
+
+            RoundedRectangle(cornerRadius: size * 0.16, style: .continuous)
+                .fill(LinearGradient(colors: [OB.amber, Color(red: 0.93, green: 0.56, blue: 0.13)], startPoint: .top, endPoint: .bottom))
+                .overlay(
+                    RoundedRectangle(cornerRadius: size * 0.16, style: .continuous)
+                        .stroke(Color.white.opacity(0.35), lineWidth: 1)
+                )
+                .overlay(
+                    VStack(spacing: -size * 0.02) {
+                        Circle().frame(width: size * 0.16, height: size * 0.16)
+                        RoundedRectangle(cornerRadius: 2).frame(width: size * 0.07, height: size * 0.14)
+                    }
+                    .foregroundStyle(Color.black.opacity(0.45))
+                )
+                .frame(width: size * 0.82, height: size * 0.62)
+                .offset(y: size * 0.12)
+        }
+        .frame(width: size, height: size * 1.1)
+        .shadow(color: .black.opacity(0.45), radius: 10, y: 6)
+    }
+}
+
+struct OnboardingShackleShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let radius = rect.width / 2
+        path.move(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + radius))
+        path.addArc(
+            center: CGPoint(x: rect.midX, y: rect.minY + radius),
+            radius: radius,
+            startAngle: .degrees(180),
+            endAngle: .degrees(0),
+            clockwise: false
+        )
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        return path
+    }
+}
+
+struct OnboardingShakeEffect: GeometryEffect {
+    var travel: CGFloat
+    var animatableData: CGFloat {
+        get { travel }
+        set { travel = newValue }
+    }
+
+    func effectValue(size: CGSize) -> ProjectionTransform {
+        let angle = sin(travel * .pi * 4) * 0.22
+        let transform = CGAffineTransform(translationX: size.width / 2, y: size.height)
+            .rotated(by: angle)
+            .translatedBy(x: -size.width / 2, y: -size.height)
+        return ProjectionTransform(transform)
+    }
+}
+
+/// A short radial burst of sparks for payoff moments.
+struct OnboardingSparkBurst: View {
+    let active: Bool
+    let radius: CGFloat
+    private let count = 12
+
+    var body: some View {
+        ZStack {
+            ForEach(0..<count, id: \.self) { index in
+                let angle = Double(index) / Double(count) * 2 * .pi
+                let color: Color = [OB.success, OB.accent, OB.amber][index % 3]
+                Capsule()
+                    .fill(color)
+                    .frame(width: 4, height: index.isMultiple(of: 2) ? 14 : 9)
+                    .rotationEffect(.radians(angle + .pi / 2))
+                    .offset(
+                        x: cos(angle) * (active ? radius : radius * 0.25),
+                        y: sin(angle) * (active ? radius : radius * 0.25)
+                    )
+                    .opacity(active ? 0 : 1)
+                    .animation(.easeOut(duration: 0.8), value: active)
+            }
+        }
+        .opacity(active ? 1 : 0)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+// MARK: Leaderboard climb
+
+/// The user's card enters below real players from this week's Visual Memory
+/// board and climbs past each one it beats — a tick of haptics and a rank
+/// counter per pass — until it lands where the score would place. Every
+/// name, level and rank comes from Game Center; without it the board stays
+/// locked instead of being invented.
+struct OnboardingLeaderboardClimb: View {
+    let board: OnboardingBoardState
+    let level: Int
+    let compact: Bool
+    let onPlayAgain: () -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var userSlot: Int?
+    @State private var landed = false
+    @State private var climb: Task<Void, Never>?
+
+    private var rowHeight: CGFloat { compact ? 48 : 56 }
+
+    /// Rows shown around the landing spot, plus where the user lands.
+    private struct Window {
+        let rows: [LeaderboardEntryData]
+        let firstRank: Int
+        let landingSlot: Int
+        let placement: Int?
+        let above: LeaderboardEntryData?
+        let cutoff: Int?
+    }
+
+    private var window: Window? {
+        guard case .loaded(let entries, let totalPlayers) = board, level > 0 else { return nil }
+        let beatenIndex = entries.firstIndex { $0.score < level } ?? entries.count
+        // Only claim a rank that the loaded slice of the board can prove.
+        let placementKnown = beatenIndex < entries.count || totalPlayers <= entries.count
+        if placementKnown {
+            // One player above the landing spot and up to four below, so the
+            // climb passes several real players before it settles.
+            let start = max(0, beatenIndex - 1)
+            let end = min(entries.count, beatenIndex + (compact ? 3 : 4))
+            let rows = Array(entries[start..<end])
+            return Window(
+                rows: rows,
+                firstRank: start + 1,
+                landingSlot: beatenIndex - start,
+                placement: beatenIndex + 1,
+                above: beatenIndex > 0 ? entries[beatenIndex - 1] : nil,
+                cutoff: nil
+            )
+        }
+        let rows = Array(entries.suffix(3))
+        return Window(
+            rows: rows,
+            firstRank: entries.count - rows.count + 1,
+            landingSlot: rows.count,
+            placement: nil,
+            above: entries.last,
+            cutoff: entries.last?.score
+        )
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+                .padding(.bottom, compact ? 16 : 24)
+
+            boardCard
+
+            Spacer(minLength: 8)
+
+            if level == 0 {
+                Button(action: onPlayAgain) {
+                    Label("Play again", systemImage: "arrow.counterclockwise")
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .foregroundStyle(OB.accent)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .onAppear(perform: startClimbIfReady)
+        .onChange(of: boardKey) { startClimbIfReady() }
+        .onDisappear { climb?.cancel() }
+    }
+
+    private var boardKey: String {
+        switch board {
+        case .loading: return "loading"
+        case .unavailable: return "unavailable"
+        case .loaded(let entries, _): return "loaded-\(entries.count)"
+        }
+    }
+
+    // MARK: Header
+
+    private var header: some View {
+        let mascotSize: CGFloat = compact ? 84 : 120
+        return VStack(spacing: compact ? 4 : 8) {
+            ZStack {
+                if landed, let placement = window?.placement, placement <= 3 {
+                    Image("mascot-crown")
+                        .resizable()
+                        .scaledToFit()
+                        .transition(.scale.combined(with: .opacity))
+                } else if landed || level == 0 || !isLoaded {
+                    RiveMascotView(mood: level == 0 ? .neutral : .happy, size: mascotSize, playbackPolicy: .continuous)
+                } else {
+                    Image("mascot-lookout")
+                        .resizable()
+                        .scaledToFit()
+                }
+            }
+            .frame(width: mascotSize, height: mascotSize)
+            .scaleEffect(landed ? 1 : 0.92)
+            .accessibilityHidden(true)
+
+            Text(headline)
+                .font(.brand(size: compact ? 28 : 36, weight: .heavy))
+                .foregroundStyle(OB.fg)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .contentTransition(.numericText())
+                .accessibilityAddTraits(.isHeader)
+            Text(subline)
+                .font(.system(size: compact ? 14 : 16, weight: .semibold, design: .rounded))
+                .foregroundStyle(landed && percentileText != nil ? OB.success : OB.fg2)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity)
+        .animation(.spring(response: 0.4, dampingFraction: 0.7), value: landed)
+        .animation(.easeOut(duration: 0.2), value: userSlot)
+    }
+
+    private var isLoaded: Bool {
+        if case .loaded = board { return true }
+        return false
+    }
+
+    private var liveRank: Int? {
+        guard let window, let userSlot else { return nil }
+        return window.firstRank + userSlot
+    }
+
+    private var headline: String {
+        if level == 0 { return "One level gets you on the board." }
+        switch board {
+        case .loading: return "Checking this week's board…"
+        case .unavailable: return "See where you'd place."
+        case .loaded(let entries, _):
+            if entries.isEmpty { return "You'd be #1 this week." }
+            guard let window else { return "Checking this week's board…" }
+            if window.placement == nil { return landed ? "On the climb." : "Climbing…" }
+            let rank = liveRank ?? (window.firstRank + window.rows.count)
+            return "You'd place #\(rank)\(landed ? "." : "…")"
+        }
+    }
+
+    private var percentileText: String? {
+        guard case .loaded(_, let totalPlayers) = board,
+              let placement = window?.placement,
+              totalPlayers >= placement, totalPlayers > 1 else { return nil }
+        let percent = max(1, Int((Double(placement) / Double(totalPlayers) * 100).rounded(.up)))
+        guard percent <= 50 else { return nil }
+        return "Top \(percent)% of Visual Memory players this week"
+    }
+
+    private var subline: String {
+        if level == 0 { return "Clear level 1 and your score counts." }
+        switch board {
+        case .loading: return "Visual Memory · this week"
+        case .unavailable: return "Sign in to Game Center to compare with this week's players."
+        case .loaded(let entries, _):
+            if entries.isEmpty { return "Nobody has posted a Visual Memory score yet." }
+            guard landed else { return "Level \(level) · Visual Memory · this week" }
+            if let cutoff = window?.cutoff { return "The top 50 starts at level \(cutoff) this week." }
+            return percentileText ?? "Level \(level) on this week's Visual Memory board"
+        }
+    }
+
+    // MARK: Board
+
+    @ViewBuilder
+    private var boardCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if level == 0 {
+                // Nothing to place yet, so don't tease a spot.
+                userRow(rank: nil)
+            } else {
+            switch board {
+            case .loading:
+                ForEach(0..<4, id: \.self) { _ in skeletonRow }
+                    .redacted(reason: .placeholder)
+            case .unavailable:
+                lockedBoard
+            case .loaded(let entries, _):
+                if entries.isEmpty || level == 0 {
+                    userRow(rank: level == 0 ? nil : 1)
+                } else if let window {
+                    climbingRows(window)
+                    if landed { hookLine(window) }
+                }
+            }
+            }
+        }
+        .padding(compact ? 12 : 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(OB.surface, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(OB.border, lineWidth: 1))
+    }
+
+    private func climbingRows(_ window: Window) -> some View {
+        let slot = userSlot ?? window.rows.count
+        let count = window.rows.count + 1
+        return ZStack(alignment: .top) {
+            ForEach(Array(window.rows.enumerated()), id: \.element.id) { index, entry in
+                playerRow(entry, passed: index >= slot)
+                    .frame(height: rowHeight)
+                    .offset(y: CGFloat(index >= slot ? index + 1 : index) * rowHeight)
+            }
+            userRow(rank: window.placement == nil ? nil : (liveRank ?? (window.firstRank + slot)))
+                .frame(height: rowHeight)
+                .offset(y: CGFloat(slot) * rowHeight)
+                .zIndex(10)
+        }
+        .frame(height: CGFloat(count) * rowHeight, alignment: .top)
+        .animation(reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.78), value: userSlot)
+    }
+
+    private func playerRow(_ entry: LeaderboardEntryData, passed: Bool) -> some View {
+        let hues: [Color] = [OB.memoPurple, OB.coral, OB.amber, OB.success, Color(red: 0.35, green: 0.75, blue: 0.95)]
+        let hue = hues[entry.username.unicodeScalars.reduce(0) { $0 + Int($1.value) } % hues.count]
+        return HStack(spacing: 12) {
+            // Once the user passes a player, that player drops one spot.
+            rankBadge(passed ? entry.rank + 1 : entry.rank, highlighted: false)
+                .contentTransition(.numericText())
+            Text(String(entry.username.prefix(1)).uppercased())
+                .font(.system(size: 14, weight: .heavy, design: .rounded))
+                .foregroundStyle(hue)
+                .frame(width: 32, height: 32)
+                .background(Circle().fill(hue.opacity(0.18)))
+            Text(entry.username)
+                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                .foregroundStyle(OB.fg)
+                .lineLimit(1)
+            Spacer(minLength: 8)
+            Text("Lv \(entry.score)")
+                .font(.system(size: 13, weight: .bold, design: .monospaced))
+                .foregroundStyle(OB.fg2)
+        }
+        .padding(.horizontal, 10)
+        .opacity(passed ? 0.55 : 1)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func userRow(rank: Int?) -> some View {
+        HStack(spacing: 12) {
+            if let rank {
+                rankBadge(rank, highlighted: true)
+                    .contentTransition(.numericText())
+            } else {
+                Image(systemName: "person.fill")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 40, height: 28)
+            }
+            Image("app-icon")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 32, height: 32)
+                .clipShape(Circle())
+            Text("You")
+                .font(.system(size: 16, weight: .heavy, design: .rounded))
+                .foregroundStyle(.white)
+            Spacer(minLength: 8)
+            Text("Lv \(level)")
+                .font(.system(size: 14, weight: .heavy, design: .monospaced))
+                .foregroundStyle(.white)
+        }
+        .padding(.horizontal, 10)
+        .frame(height: rowHeight - 6)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(OB.accent)
+                .shadow(color: OB.accent.opacity(landed ? 0.7 : 0.35), radius: landed ? 18 : 10)
+        )
+        .scaleEffect(landed ? 1.03 : 1)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func rankBadge(_ rank: Int, highlighted: Bool) -> some View {
+        let medal: Color? = rank == 1 ? OB.amber : rank == 2 ? Color(white: 0.78) : rank == 3 ? Color(red: 0.80, green: 0.52, blue: 0.32) : nil
+        return Text("#\(rank)")
+            .font(.system(size: 13, weight: .heavy, design: .monospaced))
+            .foregroundStyle(highlighted ? .white : (medal.map { _ in OB.bg } ?? OB.fg2))
+            .frame(width: 40, height: 26)
+            .background(
+                Capsule().fill(highlighted ? Color.white.opacity(0.2) : (medal ?? Color.white.opacity(0.06)))
+            )
+    }
+
+    private func hookLine(_ window: Window) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "flame.fill")
+                .foregroundStyle(OB.coral)
+            Group {
+                if let cutoff = window.cutoff {
+                    Text("Reach level \(cutoff + 1) to crack the top 50.")
+                } else if let above = window.above {
+                    Text("Reach level \(above.score + 1) to pass \(above.username).")
+                } else {
+                    Text("Nobody's above you. Now defend it.")
+                }
+            }
+            .font(.system(size: 14, weight: .semibold, design: .rounded))
+            .foregroundStyle(OB.fg)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.top, 4)
+        .padding(.horizontal, 6)
+        .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+
+    private var skeletonRow: some View {
+        HStack(spacing: 12) {
+            Capsule().fill(Color.white.opacity(0.08)).frame(width: 40, height: 24)
+            Circle().fill(Color.white.opacity(0.08)).frame(width: 32, height: 32)
+            Capsule().fill(Color.white.opacity(0.08)).frame(width: 110, height: 12)
+            Spacer()
+            Capsule().fill(Color.white.opacity(0.08)).frame(width: 42, height: 12)
+        }
+        .frame(height: rowHeight)
+        .padding(.horizontal, 10)
+    }
+
+    private var lockedBoard: some View {
+        ZStack {
+            VStack(spacing: 0) {
+                ForEach(0..<4, id: \.self) { _ in skeletonRow }
+            }
+            .blur(radius: 5)
+            .accessibilityHidden(true)
+
+            VStack(spacing: 10) {
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 44, height: 44)
+                    .background(Circle().fill(OB.accent))
+                    .shadow(color: OB.accent.opacity(0.5), radius: 14)
+                Text("Your spot is waiting")
+                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                    .foregroundStyle(OB.fg)
+                Text("Level \(level) · sign in to Game Center to reveal it")
+                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .foregroundStyle(OB.fg2)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.horizontal, 12)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    // MARK: Climb
+
+    private func startClimbIfReady() {
+        guard climb == nil else { return }
+        guard case .loaded(let entries, _) = board else {
+            if case .unavailable = board { landed = true }
+            return
+        }
+        guard let window, !entries.isEmpty else {
+            withAnimation { landed = true }
+            if level > 0 { UINotificationFeedbackGenerator().notificationOccurred(.success) }
+            return
+        }
+        if reduceMotion {
+            userSlot = window.landingSlot
+            landed = true
+            return
+        }
+        userSlot = window.rows.count
+        climb = Task { @MainActor in
+            let tick = UIImpactFeedbackGenerator(style: .rigid)
+            tick.prepare()
+            try? await Task.sleep(for: .milliseconds(500))
+            var slot = window.rows.count
+            var step = 0
+            while slot > window.landingSlot {
+                guard !Task.isCancelled else { return }
+                slot -= 1
+                step += 1
+                userSlot = slot
+                tick.impactOccurred(intensity: min(1, 0.55 + Double(step) * 0.15))
+                SoundService.shared.playReelTick()
+                try? await Task.sleep(for: .milliseconds(max(170, 330 - step * 40)))
+            }
+            guard !Task.isCancelled else { return }
+            try? await Task.sleep(for: .milliseconds(120))
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.6)) { landed = true }
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            if (window.placement ?? 99) <= 3 {
+                SoundService.shared.playJackpotSting()
+            } else {
+                SoundService.shared.playComplete()
+            }
+        }
+    }
+}
+
+/// The same reel and landing state used by the blocked-app unlock flow.
+struct OnboardingRealSlotPage: View {
+    let onContinue: () -> Void
+    @State private var hasLanded = false
+
+    var body: some View {
+        GeometryReader { proxy in
+            let machineHeight = min(492, proxy.size.height * 0.74)
+            let machineScale = machineHeight / 560
+
+            VStack(alignment: .leading, spacing: 0) {
+                OBEyebrow(text: "MEMO'S BOOTH · PREVIEW")
+                    .padding(.top, 12)
+
+                Text("Spin for your pass.")
+                    .font(.system(size: 34, weight: .black, design: .rounded))
+                    .tracking(-1)
+                    .foregroundStyle(OB.fg)
+                    .padding(.top, 8)
+                    .accessibilityAddTraits(.isHeader)
+
+                Text("When a blocked app calls, Memo picks the game.")
+                    .font(.system(size: 15, weight: .medium, design: .rounded))
+                    .foregroundStyle(OB.fg2)
+                    .padding(.top, 5)
+
+                Spacer(minLength: 0)
+
+                FocusUnlockSlotMachine(
+                    games: TrainingGameCatalog.focusUnlockGames,
+                    mode: .demo,
+                    onLanded: { _, _ in
+                        withAnimation(.easeOut(duration: 0.25)) { hasLanded = true }
+                    }
+                )
+                .frame(width: 360, height: 560)
+                .scaleEffect(machineScale)
+                .frame(maxWidth: .infinity)
+                .frame(height: machineHeight)
+
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 24)
+            .frame(maxWidth: 500, maxHeight: .infinity, alignment: .topLeading)
+            .frame(maxWidth: .infinity)
+        }
+        .background(FocusSlotAtmosphere())
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            Group {
+                if hasLanded {
+                    OBContinueButton(title: "Play Visual Memory", action: onContinue)
+                } else {
+                    Color.clear.frame(height: 54)
+                }
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 8)
+            .padding(.bottom, 12)
+            .background(OB.bg)
+        }
+        .preferredColorScheme(.dark)
+    }
+}
+
+/// One optional round inside the production Visual Memory game view.
+struct OnboardingVisualMemoryPage: View {
+    let onContinue: (Bool) -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var completedRound = false
+
+    init(previewCompleted: Bool = false, onContinue: @escaping (Bool) -> Void) {
+        self.onContinue = onContinue
+        _completedRound = State(initialValue: previewCompleted)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if completedRound {
+                rewardContent
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+            } else {
+                gameContent
+                    .transition(.opacity)
+            }
+        }
+        .animation(reduceMotion ? nil : .spring(response: 0.5, dampingFraction: 0.82), value: completedRound)
+        .background(OB.bg.ignoresSafeArea())
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if completedRound {
+                OBContinueButton(title: "Continue") { onContinue(true) }
+                    .padding(.horizontal, 24)
+                    .padding(.top, 10)
+                    .padding(.bottom, 12)
+                    .background(OB.bg)
+            }
+        }
+        .preferredColorScheme(.dark)
+    }
+
+    private var gameContent: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                OBEyebrow(text: "VISUAL MEMORY")
+                Spacer()
+                Button("Skip demo") { onContinue(false) }
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .foregroundStyle(OB.fg2)
+                    .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 12)
+
+            Text("Finish a game. Earn 10 minutes.")
+                .font(.system(size: 29, weight: .black, design: .rounded))
+                .tracking(-0.7)
+                .foregroundStyle(OB.fg)
+                .padding(.horizontal, 24)
+                .padding(.top, 7)
+
+            Text("Try one preview round below.")
+                .font(.system(size: 14, weight: .medium, design: .rounded))
+                .foregroundStyle(OB.fg3)
+                .padding(.horizontal, 24)
+                .padding(.top, 6)
+
+            VisualMemoryView(
+                autoStart: true,
+                isOnboardingPreview: true,
+                onPreviewComplete: {
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                    completedRound = true
+                }
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private var rewardContent: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("You finished the preview.")
+                .font(.system(size: 34, weight: .black, design: .rounded))
+                .foregroundStyle(OB.fg)
+                .padding(.top, 24)
+                .accessibilityAddTraits(.isHeader)
+
+            Text("A full game in Memo earns a 10-minute pass for a blocked app.")
+                .font(.system(size: 16, weight: .medium, design: .rounded))
+                .foregroundStyle(OB.fg2)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 10)
+
+            Spacer(minLength: 24)
+
+            VStack(alignment: .leading, spacing: 0) {
+                Text("MEMO PASS · PREVIEW")
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.8))
+
+                HStack(alignment: .center) {
+                    Text("10:00")
+                        .font(.system(size: 80, weight: .black, design: .rounded))
+                        .monospacedDigit()
+                        .tracking(-3)
+                        .foregroundStyle(.white)
+                        .minimumScaleFactor(0.75)
+                    Spacer(minLength: 8)
+                    Image("logo-tiktok")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 42, height: 42)
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .accessibilityHidden(true)
+                }
+                .padding(.top, 12)
+
+                Text("Finish a full game to unlock for real.")
+                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.76))
+            }
+            .padding(24)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                LinearGradient(colors: [OB.accent, OB.memoPurple.opacity(0.9)], startPoint: .topLeading, endPoint: .bottomTrailing),
+                in: RoundedRectangle(cornerRadius: 28, style: .continuous)
+            )
+            .rotationEffect(.degrees(-2))
+            .shadow(color: OB.accent.opacity(0.3), radius: 28, y: 16)
+            .accessibilityElement(children: .combine)
+
+            Spacer(minLength: 24)
+
+            VStack(alignment: .leading, spacing: 7) {
+                Text("And your score can climb.")
+                    .font(.system(size: 24, weight: .bold, design: .rounded))
+                    .foregroundStyle(OB.fg)
+                Text("Full games count toward the weekly Visual Memory leaderboard.")
+                    .font(.system(size: 15, weight: .medium, design: .rounded))
+                    .foregroundStyle(OB.fg2)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 8) {
+                    Text("VISUAL MEMORY")
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                    Spacer()
+                    Text("WEEKLY BOARD")
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                }
+                .foregroundStyle(OB.accent)
+                .padding(.top, 12)
+
+                HStack(spacing: 8) {
+                    RoundedRectangle(cornerRadius: 3).fill(OB.accent).frame(width: 85, height: 8)
+                    RoundedRectangle(cornerRadius: 3).fill(OB.memoPurple.opacity(0.8)).frame(width: 55, height: 8)
+                    RoundedRectangle(cornerRadius: 3).fill(OB.fg.opacity(0.16)).frame(width: 31, height: 8)
+                    Spacer()
+                    Text("Your next score →")
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(OB.fg2)
+                }
+            }
+            .padding(18)
+            .background(OB.surface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(OB.border, lineWidth: 1))
+
+            Spacer(minLength: 18)
+        }
+        .padding(.horizontal, 24)
+        .frame(maxWidth: 500, maxHeight: .infinity, alignment: .topLeading)
+        .frame(maxWidth: .infinity)
+    }
+}
+
+/// Previews the production Focus Mode card's unlocked state without touching Screen Time.
+struct OnboardingUnlockedFocusPage: View {
+    let onContinue: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            OBEyebrow(text: "AFTER THE GAME")
+                .padding(.top, 26)
+
+            Text("The pass you play for.")
+                .font(.system(size: 34, weight: .black, design: .rounded))
+                .tracking(-1)
+                .foregroundStyle(OB.fg)
+                .padding(.top, 12)
+                .accessibilityAddTraits(.isHeader)
+
+            Text("Finish a game. TikTok opens for 10 minutes, then Memo blocks it again.")
+                .font(.system(size: 16, weight: .medium, design: .rounded))
+                .foregroundStyle(OB.fg2)
+                .lineSpacing(3)
+                .padding(.top, 12)
+
+            Spacer(minLength: 28)
+
+            FocusModeCard(previewUnlockMinutes: 10)
+
+            Text("PREVIEW OF YOUR FOCUS MODE")
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .tracking(1)
+                .foregroundStyle(OB.fg3)
+                .padding(.top, 12)
+
+            Spacer(minLength: 28)
+        }
+        .padding(.horizontal, 24)
+        .frame(maxWidth: 500, maxHeight: .infinity, alignment: .topLeading)
+        .frame(maxWidth: .infinity)
+        .background(OB.bg.ignoresSafeArea())
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            OBContinueButton(title: "Continue", action: onContinue)
+                .padding(.horizontal, 24)
+                .padding(.top, 12)
+                .padding(.bottom, 12)
+                .background(OB.bg)
+        }
+        .preferredColorScheme(.dark)
+    }
+}
+
 enum OnboardingTrapApp: String, CaseIterable, Identifiable, Hashable {
     case tiktok
     case youtube
@@ -2187,14 +4141,14 @@ struct OnboardingTrapSelectionView: View {
                 Spacer().frame(height: 18)
 
                 VStack(alignment: .leading, spacing: 11) {
-                    OBEyebrow(text: "PREVIEW TARGETS")
-                    Text("Choose your\nfirst targets.")
+                    OBEyebrow(text: "YOUR FIRST GUARDRAIL")
+                    Text("Which apps\nneed a pause?")
                         .font(.system(size: 38, weight: .heavy, design: .rounded))
                         .foregroundStyle(OB.fg)
                         .lineSpacing(1)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    Text("These build the preview. After your trial starts, Apple's Screen Time sheet handles the real app pick.")
+                    Text("Choose up to three apps for your preview.")
                         .font(.system(size: 15, weight: .semibold, design: .rounded))
                         .foregroundStyle(OB.fg2)
                         .lineSpacing(3)
@@ -2218,7 +4172,7 @@ struct OnboardingTrapSelectionView: View {
         .background(OB.bg.ignoresSafeArea())
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: 8) {
-                OBContinueButton(title: "Build the preview", action: onContinue)
+                OBContinueButton(title: "Continue", action: onContinue)
                     .disabled(selectedApps.isEmpty)
                     .opacity(selectedApps.isEmpty ? 0.42 : 1)
 
@@ -2247,7 +4201,7 @@ struct OnboardingTrapSelectionView: View {
                 .foregroundStyle(OB.fg2)
                 .frame(width: 20, height: 20)
 
-            Text("Preview only. Real app selection happens in Apple's Screen Time sheet after the trial starts.")
+            Text("Preview only · confirm real app access with Apple after purchase.")
                 .font(.system(size: 12, weight: .bold, design: .rounded))
                 .foregroundStyle(OB.fg3)
                 .lineSpacing(2)
@@ -2257,35 +4211,14 @@ struct OnboardingTrapSelectionView: View {
     }
 
     private var targetList: some View {
-        VStack(spacing: 0) {
-            ForEach(Array(apps.enumerated()), id: \.element.id) { index, app in
-                trapRow(app)
-                if index < apps.count - 1 {
-                    Rectangle()
-                        .fill(OB.border)
-                        .frame(height: 1)
-                        .padding(.leading, 76)
-                }
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+            ForEach(apps) { app in
+                trapTile(app)
             }
         }
-        .padding(.vertical, 6)
-        .background(
-            RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [Color.white.opacity(0.052), OB.surface.opacity(0.92)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .stroke(Color.white.opacity(0.09), lineWidth: 1)
-        )
     }
 
-    private func trapRow(_ app: OnboardingTrapApp) -> some View {
+    private func trapTile(_ app: OnboardingTrapApp) -> some View {
         let isSelected = selectedApps.contains(app)
         return Button {
             UISelectionFeedbackGenerator().selectionChanged()
@@ -2297,73 +4230,458 @@ struct OnboardingTrapSelectionView: View {
                 }
             }
         } label: {
-            HStack(spacing: 14) {
-                ZStack(alignment: .leading) {
+            VStack(alignment: .leading, spacing: 9) {
+                HStack(spacing: 8) {
                     Image(app.assetName)
                         .renderingMode(.original)
                         .resizable()
                         .scaledToFit()
-                        .frame(width: 42, height: 42)
-                        .padding(8)
+                        .frame(width: 32, height: 32)
+                        .padding(6)
                         .background(
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
                                 .fill(app == .x ? Color.white.opacity(0.92) : Color.white.opacity(0.08))
                         )
-                }
-                .frame(width: 58, height: 58)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(app.displayName)
-                        .font(.system(size: 19, weight: .heavy, design: .rounded))
-                        .foregroundStyle(OB.fg)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.86)
+                    Spacer(minLength: 0)
 
-                    Text(isSelected ? "In your preview defense" : "Tap to add to the preview")
-                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                    Image(systemName: isSelected ? "checkmark.circle.fill" : "plus.circle")
+                        .font(.system(size: 21, weight: .semibold))
                         .foregroundStyle(isSelected ? OB.accent : OB.fg3)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.86)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
 
-                ZStack {
-                    Circle()
-                        .fill(isSelected ? OB.accent : Color.white.opacity(0.045))
-                        .frame(width: 38, height: 38)
-                        .overlay(
-                            Circle()
-                                .stroke(isSelected ? OB.accent.opacity(0.0) : OB.fg3.opacity(0.65), lineWidth: 2)
-                        )
-
-                    Image(systemName: isSelected ? "lock.fill" : "plus")
-                        .font(.system(size: 15, weight: .black))
-                        .foregroundStyle(isSelected ? OB.bg : OB.fg3)
-                }
+                Text(app.displayName)
+                    .font(.system(size: 15, weight: .heavy, design: .rounded))
+                    .foregroundStyle(OB.fg)
+                    .lineLimit(1)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .background(alignment: .leading) {
-                if isSelected {
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .fill(OB.accent.opacity(0.11))
-                        .padding(.horizontal, 6)
-                        .transition(.opacity)
-                }
-            }
-            .overlay(alignment: .leading) {
-                if isSelected {
-                    Capsule()
-                        .fill(OB.accent)
-                        .frame(width: 4, height: 52)
-                        .padding(.leading, 4)
-                        .transition(.opacity.combined(with: .move(edge: .leading)))
-                }
-            }
-            .contentShape(Rectangle())
+            .frame(maxWidth: .infinity, minHeight: 78, alignment: .leading)
+            .padding(12)
+            .background(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(isSelected ? OB.accent.opacity(0.12) : OB.surface.opacity(0.84))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(isSelected ? OB.accent.opacity(0.72) : Color.white.opacity(0.09), lineWidth: 1)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(app.displayName)\(isSelected ? ", selected" : "")")
+        .accessibilityHint(isSelected ? "Remove from preview" : "Add to preview, up to three apps")
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+    }
+}
+
+struct OnboardingConciseGoalsView: View {
+    let selectedGoal: UserFocusGoal?
+    let onSelect: (UserFocusGoal) -> Void
+    let onContinue: () -> Void
+
+    private let goals: [UserFocusGoal] = [.doomscrolling, .attentionShot, .screenTimeFrying]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Spacer().frame(height: 26)
+
+            OBEyebrow(text: "YOUR FOCUS PLAN")
+                .padding(.bottom, 12)
+
+            Text("What would you\nlike back?")
+                .font(.system(size: 36, weight: .heavy, design: .rounded))
+                .foregroundStyle(OB.fg)
+                .lineSpacing(0)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.bottom, 10)
+
+            Text("Pick the one thing Memo should help with first.")
+                .font(.system(size: 16, weight: .medium, design: .rounded))
+                .foregroundStyle(OB.fg2)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.bottom, 26)
+
+            VStack(spacing: 10) {
+                ForEach(goals) { goal in
+                    goalRow(goal)
+                }
+            }
+
+            Spacer(minLength: 16)
+        }
+        .padding(.horizontal, 24)
+        .frame(maxWidth: 500, maxHeight: .infinity, alignment: .topLeading)
+        .frame(maxWidth: .infinity)
+        .background(OB.bg.ignoresSafeArea())
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(spacing: 8) {
+                OBContinueButton(title: "Continue", action: onContinue)
+                    .disabled(selectedGoal == nil)
+                    .opacity(selectedGoal == nil ? 0.45 : 1)
+                Text("One quick choice. You can change this later.")
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(OB.fg3)
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 14)
+            .padding(.bottom, 12)
+            .background(OB.bg)
+        }
+        .preferredColorScheme(.dark)
+    }
+
+    private func goalRow(_ goal: UserFocusGoal) -> some View {
+        let selected = selectedGoal == goal
+        return Button {
+            UISelectionFeedbackGenerator().selectionChanged()
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.8)) {
+                onSelect(goal)
+            }
+        } label: {
+            HStack(spacing: 14) {
+                Image(systemName: goal.icon)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(selected ? OB.accent : OB.fg2)
+                    .frame(width: 42, height: 42)
+                    .background(Color.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+
+                Text(goalLabel(goal))
+                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                    .foregroundStyle(OB.fg)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Spacer(minLength: 4)
+
+                Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 22, weight: .medium))
+                    .foregroundStyle(selected ? OB.accent : OB.fg3)
+            }
+            .padding(.horizontal, 15)
+            .padding(.vertical, 14)
+            .frame(maxWidth: .infinity, minHeight: 72)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(selected ? OB.accent.opacity(0.11) : OB.surface)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(selected ? OB.accent.opacity(0.74) : OB.border, lineWidth: 1)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? [.isSelected] : [])
+    }
+
+    private func goalLabel(_ goal: UserFocusGoal) -> String {
+        switch goal {
+        case .doomscrolling: return "Scroll less"
+        case .attentionShot: return "Stay focused"
+        case .screenTimeFrying: return "Get my time back"
+        case .loseFocus: return "Stay focused"
+        case .forgetInstantly: return "Remember more"
+        case .getSharper: return "Stay mentally sharp"
+        }
+    }
+}
+
+// MARK: 5 · Trial reminder
+
+/// Lets the user pick when they hear from us before the trial bills. The
+/// dates on the calendar tiles come from the real StoreKit trial length, and
+/// the banner is the exact notification that gets scheduled.
+struct OnboardingTrialReminderView: View {
+    let trialLabel: String?
+    let trialDays: Int?
+    @Binding var selectedDaysBefore: Int
+    let onContinue: () -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Namespace private var switchSpace
+    @State private var bannerShown = false
+    @State private var bannerDrop = 0
+    @State private var appeared = false
+
+    private var trialEndDate: Date? {
+        guard let trialDays else { return nil }
+        return Calendar.current.date(byAdding: .day, value: trialDays, to: .now)
+    }
+
+    private func reminderDate(daysBefore: Int) -> Date? {
+        guard let trialEndDate,
+              let date = Calendar.current.date(byAdding: .day, value: -daysBefore, to: trialEndDate),
+              date > .now else { return nil }
+        return date
+    }
+
+    private func select(_ days: Int) {
+        guard selectedDaysBefore != days else { return }
+        UISelectionFeedbackGenerator().selectionChanged()
+        withAnimation(reduceMotion ? nil : .spring(response: 0.34, dampingFraction: 0.72)) {
+            selectedDaysBefore = days
+        }
+        dropBanner()
+    }
+
+    /// The banner slides away and drops back in with the new copy, the way a
+    /// real notification lands.
+    private func dropBanner() {
+        guard !reduceMotion else { return }
+        withAnimation(.easeIn(duration: 0.14)) { bannerShown = false }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(170))
+            bannerDrop += 1
+            withAnimation(.spring(response: 0.46, dampingFraction: 0.68)) { bannerShown = true }
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        }
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let compact = proxy.size.height < OBLayout.compactHeight
+            VStack(spacing: 0) {
+                notificationBanner(compact: compact)
+                    .id(bannerDrop)
+                    .offset(y: bannerShown ? 0 : -36)
+                    .opacity(bannerShown ? 1 : 0)
+                    .scaleEffect(bannerShown ? 1 : 0.94, anchor: .top)
+                    .padding(.top, compact ? 0 : 8)
+
+                Spacer(minLength: compact ? 10 : 20)
+
+                RiveMascotView(mood: .happy, size: compact ? 104 : 150, playbackPolicy: .continuous)
+                    .scaleEffect(appeared ? 1 : 0.6)
+                    .opacity(appeared ? 1 : 0)
+                    .accessibilityHidden(true)
+
+                VStack(spacing: compact ? 6 : 10) {
+                    OBHeadline(
+                        text: "We'll remind you before your trial ends.",
+                        size: compact ? 26 : 32,
+                        alignment: .center
+                    )
+                    OBBodyText(text: "Pick when you want the heads-up.", size: compact ? 15 : 16, alignment: .center)
+                }
+                .padding(.top, compact ? 4 : 10)
+
+                reminderSwitch(compact: compact)
+                    .padding(.top, compact ? 18 : 28)
+
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, OBLayout.gutter)
+            .frame(maxWidth: OBLayout.contentMaxWidth + OBLayout.gutter * 2)
+            .frame(maxWidth: .infinity)
+        }
+        .obBottomBar {
+            OBActionBar(
+                title: "Continue",
+                reassurance: "No payment due now",
+                footnote: "We'll ask to send notifications after your trial starts.",
+                backdrop: .clear,
+                action: onContinue
+            )
+        }
+        // Glow sits behind the pinned bar too, so it never ends in a seam.
+        .background(alignment: .top) {
+            Circle()
+                .fill(OB.accent.opacity(0.22))
+                .frame(width: 320, height: 320)
+                .blur(radius: 90)
+                .offset(y: 120)
+                .allowsHitTesting(false)
+        }
+        .background(OB.bg.ignoresSafeArea())
+        .preferredColorScheme(.dark)
+        .onAppear {
+            guard !appeared else { return }
+            if reduceMotion {
+                appeared = true
+                bannerShown = true
+                return
+            }
+            withAnimation(.spring(response: 0.6, dampingFraction: 0.7).delay(0.1)) { appeared = true }
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(650))
+                withAnimation(.spring(response: 0.5, dampingFraction: 0.68)) { bannerShown = true }
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            }
+        }
+    }
+
+    /// One capsule, two choices, a thumb that slides between them. The date
+    /// lives in the banner above, so the choice itself stays simple.
+    private func reminderSwitch(compact: Bool) -> some View {
+        HStack(spacing: 0) {
+            ForEach([1, 2], id: \.self) { days in
+                let isSelected = selectedDaysBefore == days
+                Button { select(days) } label: {
+                    Text("\(days) \(days == 1 ? "day" : "days") before")
+                        .font(.system(size: compact ? 16 : 17, weight: .bold, design: .rounded))
+                        .foregroundStyle(isSelected ? Color.white : OB.fg2)
+                        .frame(maxWidth: .infinity, minHeight: compact ? 50 : 56)
+                        .background {
+                            if isSelected {
+                                Capsule()
+                                    .fill(OB.accent)
+                                    .shadow(color: OB.accent.opacity(0.5), radius: 14, y: 6)
+                                    .matchedGeometryEffect(id: "reminder-thumb", in: switchSpace)
+                            }
+                        }
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Remind me \(days) \(days == 1 ? "day" : "days") before my trial ends")
+                .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+            }
+        }
+        .padding(5)
+        .background(Capsule().fill(OB.surface))
+        .overlay(Capsule().stroke(Color.white.opacity(0.1), lineWidth: 1))
+    }
+
+    private func notificationBanner(compact: Bool) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            Image("app-icon")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 40, height: 40)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 1) {
+                HStack {
+                    Text(NotificationService.trialReminderTitle(daysBefore: selectedDaysBefore))
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                    Spacer(minLength: 6)
+                    Text(reminderDate(daysBefore: selectedDaysBefore).map {
+                        $0.formatted(.dateTime.month(.abbreviated).day())
+                    } ?? "")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.white.opacity(0.55))
+                }
+                Text(NotificationService.trialReminderBody)
+                    .font(.system(size: 14))
+                    .foregroundStyle(.white.opacity(0.78))
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, compact ? 11 : 13)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(Color.white.opacity(0.12), lineWidth: 1))
+        .shadow(color: .black.opacity(0.4), radius: 20, y: 10)
+        .environment(\.colorScheme, .dark)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Notification preview")
+    }
+}
+
+// MARK: 4 · Free trial
+
+/// "We want you to try Memo for free." One line, the mascot, lots of room.
+/// No prices here — the paywall carries the full offer. Accounts without a
+/// usable trial never see trial language.
+struct OnboardingTrialOfferView: View {
+    let hasTrial: Bool
+    let isLoadingOffer: Bool
+    let loadFailed: Bool
+    let onRetry: () -> Void
+    let onContinue: () -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var appeared = false
+    @State private var glow = false
+
+    private var title: String {
+        if isLoadingOffer || loadFailed || hasTrial { return "We want you to try Memo for free." }
+        return "Keep the feed locked."
+    }
+
+    private var detail: String {
+        if loadFailed { return "Couldn't reach the App Store." }
+        if isLoadingOffer || hasTrial { return "Full access. Every game, every block, every leaderboard." }
+        return "Pick a plan on the next screen."
+    }
+
+    // Keyed so the pinned bar re-renders when the offer finishes loading.
+    private var offerStateID: String { "\(isLoadingOffer)-\(loadFailed)-\(hasTrial)" }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let compact = proxy.size.height < OBLayout.compactHeight
+            VStack(spacing: 0) {
+                Spacer(minLength: 0)
+
+                ZStack {
+                    Circle()
+                        .fill(OB.accent.opacity(0.34))
+                        .frame(width: compact ? 200 : 260, height: compact ? 200 : 260)
+                        .blur(radius: 70)
+                        .scaleEffect(glow ? 1.08 : 0.92)
+                    Circle()
+                        .fill(OB.memoPurple.opacity(0.22))
+                        .frame(width: compact ? 140 : 180, height: compact ? 140 : 180)
+                        .blur(radius: 50)
+                        .offset(x: 50, y: 30)
+                        .scaleEffect(glow ? 0.94 : 1.06)
+
+                    RiveMascotView(mood: .happy, size: compact ? 170 : 230, playbackPolicy: .continuous)
+                        .accessibilityHidden(true)
+                }
+                .scaleEffect(appeared ? 1 : 0.7)
+                .opacity(appeared ? 1 : 0)
+
+                VStack(spacing: compact ? 10 : 14) {
+                    OBHeadline(text: title, size: compact ? 32 : 40, alignment: .center)
+                    OBBodyText(text: detail, size: compact ? 15 : 17, alignment: .center)
+                    if loadFailed {
+                        Button("Try again", action: onRetry)
+                            .font(.system(size: 16, weight: .bold, design: .rounded))
+                            .foregroundStyle(OB.accent)
+                            .buttonStyle(.plain)
+                            .frame(minHeight: 44)
+                    } else if isLoadingOffer {
+                        ProgressView().tint(OB.fg2).frame(height: 44)
+                    }
+                }
+                .padding(.top, compact ? 12 : 24)
+                .opacity(appeared ? 1 : 0)
+                .offset(y: appeared ? 0 : 14)
+
+                Spacer(minLength: 0)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, OBLayout.gutter)
+            .frame(maxWidth: OBLayout.contentMaxWidth + OBLayout.gutter * 2)
+            .frame(maxWidth: .infinity)
+        }
+        .background(OB.bg.ignoresSafeArea())
+        .obBottomBar {
+            OBActionBar(
+                title: isLoadingOffer ? "Checking offer…" : "Continue",
+                isEnabled: !isLoadingOffer && !loadFailed,
+                action: onContinue
+            )
+            .id(offerStateID)
+        }
+        .preferredColorScheme(.dark)
+        .onAppear {
+            guard !appeared else { return }
+            if reduceMotion {
+                appeared = true
+                return
+            }
+            withAnimation(.spring(response: 0.7, dampingFraction: 0.72).delay(0.08)) { appeared = true }
+            withAnimation(.easeInOut(duration: 3.2).repeatForever(autoreverses: true)) { glow = true }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+            }
+        }
     }
 }
 
@@ -2375,6 +4693,9 @@ struct OnboardingUnlockLoopDemoView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var appeared = true
     @State private var didTrackStart = false
+    @State private var firstSelectedTile: Int?
+    @State private var demoAttempts = 0
+    @State private var demoComplete = false
 
     private var sortedApps: [OnboardingTrapApp] {
         blockedApps.sorted { $0.sortOrder < $1.sortOrder }
@@ -2395,53 +4716,210 @@ struct OnboardingUnlockLoopDemoView: View {
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 0) {
-                Spacer().frame(height: 18)
+                Spacer().frame(height: 24)
 
-                VStack(alignment: .leading, spacing: 10) {
-                    OBEyebrow(text: "MISSION BRIEF")
-                    Text("Beat\nthe pull.")
-                        .font(.system(size: 42, weight: .heavy, design: .rounded))
-                        .foregroundStyle(OB.fg)
-                        .lineSpacing(1)
-                        .fixedSize(horizontal: false, vertical: true)
+                OBEyebrow(text: "THE MEMO LOOP")
+                    .padding(.bottom, 12)
 
-                    Text("10 brain games rotate. Win one quick rep to earn a short unlock window.")
-                        .font(.system(size: 16, weight: .semibold, design: .rounded))
-                        .foregroundStyle(OB.fg2)
-                        .lineSpacing(3)
-                        .fixedSize(horizontal: false, vertical: true)
+                Text("Finish a game.\nEarn your unlock.")
+                    .font(.system(size: 34, weight: .heavy, design: .rounded))
+                    .foregroundStyle(OB.fg)
+                    .lineSpacing(0)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.bottom, 10)
+
+                Text("In a focus session, Memo blocks your chosen apps, serves a brain game, then gives you a temporary unlock.")
+                    .font(.system(size: 15, weight: .medium, design: .rounded))
+                    .foregroundStyle(OB.fg2)
+                    .lineSpacing(3)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.bottom, 20)
+
+                selectedTargetsCard
+
+                Image(systemName: "arrow.down")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(OB.fg3)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 11)
+                    .accessibilityHidden(true)
+
+                memorySampleCard
+
+                if demoComplete {
+                    sampleReceipt
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .padding(.top, 14)
                 }
-                .padding(.horizontal, 28)
-                .padding(.bottom, 18)
 
-                interceptionScene
-                    .padding(.horizontal, 24)
-                    .padding(.top, 4)
-
-                Spacer(minLength: 112)
+                Spacer(minLength: 24)
             }
             .responsiveContent(maxWidth: 500)
-            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 24)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .scrollBounceBehavior(.basedOnSize)
         .background(OB.bg.ignoresSafeArea())
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            OBContinueButton(title: "Personalize my plan") {
-                onComplete(0)
+            VStack(spacing: 8) {
+                OBContinueButton(title: demoComplete ? "Continue" : "Finish the sample game") {
+                    guard demoComplete else { return }
+                    onComplete(demoAttempts)
+                }
+                .disabled(!demoComplete)
+                .opacity(demoComplete ? 1 : 0.46)
+
+                if !demoComplete {
+                    Text("Tap the two matching tiles above")
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundStyle(OB.fg3)
+                }
             }
             .padding(.horizontal, 24)
-            .padding(.bottom, 18)
-            .padding(.top, 18)
-            .background(
-                LinearGradient(
-                    colors: [OB.bg.opacity(0), OB.bg.opacity(0.96), OB.bg],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
+            .padding(.bottom, 12)
+            .padding(.top, 12)
+            .background(OB.bg)
         }
         .preferredColorScheme(.dark)
-        .onAppear(perform: start)
+    }
+
+    private var selectedTargetsCard: some View {
+        HStack(spacing: 12) {
+            HStack(spacing: -7) {
+                ForEach(Array(displayedApps.enumerated()), id: \.element.id) { _, app in
+                    Image(app.assetName)
+                        .renderingMode(.original)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 30, height: 30)
+                        .padding(6)
+                        .background(OB.surface, in: Circle())
+                        .overlay(Circle().stroke(OB.bg, lineWidth: 2))
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 3) {
+                OBEyebrow(text: "YOUR PREVIEW TARGETS", color: OB.fg3)
+                    .font(.system(size: 9, weight: .bold, design: .rounded))
+                Text(appSummary)
+                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                    .foregroundStyle(OB.fg)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+            }
+            Spacer(minLength: 0)
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(OB.accent)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 14)
+        .background(OB.surface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(OB.border, lineWidth: 1))
+        .accessibilityElement(children: .combine)
+    }
+
+    private var memorySampleCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                OBEyebrow(text: "SAMPLE MEMORY GAME")
+                Spacer()
+                Text(demoComplete ? "COMPLETE" : "1 ROUND")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundStyle(demoComplete ? OB.success : OB.fg3)
+            }
+
+            Text(demoComplete ? "Nice. Your sample unlock is ready." : "Find the matching pair.")
+                .font(.system(size: 16, weight: .bold, design: .rounded))
+                .foregroundStyle(OB.fg)
+
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                ForEach(0..<4, id: \.self) { index in
+                    memoryTile(index)
+                }
+            }
+        }
+        .padding(15)
+        .background(OB.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(OB.border, lineWidth: 1))
+    }
+
+    private func memoryTile(_ index: Int) -> some View {
+        let isSelected = firstSelectedTile == index || (demoComplete && (index == 1 || index == 3))
+        let symbols = ["square.grid.2x2.fill", "circle.fill", "triangle.fill", "circle.fill"]
+        return Button {
+            selectMemoryTile(index)
+        } label: {
+            Image(systemName: symbols[index])
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(isSelected ? OB.accent : OB.fg2)
+                .frame(maxWidth: .infinity, minHeight: 52)
+                .background(isSelected ? OB.accent.opacity(0.12) : Color.white.opacity(0.035), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(isSelected ? OB.accent.opacity(0.7) : OB.border, lineWidth: 1))
+                .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .disabled(demoComplete)
+        .accessibilityLabel("Memory tile \(index + 1)")
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+    }
+
+    private var sampleReceipt: some View {
+        HStack(spacing: 13) {
+            Image(systemName: "lock.open.fill")
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(OB.success)
+                .frame(width: 42, height: 42)
+                .background(OB.success.opacity(0.12), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("SAMPLE UNLOCK RECEIPT")
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .tracking(0.7)
+                    .foregroundStyle(Color(red: 0.30, green: 0.31, blue: 0.36))
+                Text("10-minute sample unlock")
+                    .font(.system(size: 15, weight: .heavy, design: .rounded))
+                    .foregroundStyle(Color(red: 0.10, green: 0.11, blue: 0.16))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+            }
+            Spacer(minLength: 0)
+            Text("EXAMPLE")
+                .font(.system(size: 9, weight: .black, design: .monospaced))
+                .foregroundStyle(Color(red: 0.04, green: 0.38, blue: 0.30))
+        }
+        .padding(14)
+        .background(Color(red: 0.91, green: 0.88, blue: 0.79), in: RoundedRectangle(cornerRadius: 17, style: .continuous))
+        .accessibilityElement(children: .combine)
+    }
+
+    private func selectMemoryTile(_ index: Int) {
+        guard !demoComplete else { return }
+        if !didTrackStart {
+            didTrackStart = true
+            onStarted()
+        }
+
+        guard let firstSelectedTile else {
+            self.firstSelectedTile = index
+            UISelectionFeedbackGenerator().selectionChanged()
+            return
+        }
+        guard firstSelectedTile != index else { return }
+
+        demoAttempts += 1
+        if Set([firstSelectedTile, index]) == Set([1, 3]) {
+            withAnimation(.spring(response: 0.34, dampingFraction: 0.8)) {
+                demoComplete = true
+                self.firstSelectedTile = nil
+            }
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+        } else {
+            UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+            withAnimation(.easeOut(duration: 0.16)) {
+                self.firstSelectedTile = index
+            }
+        }
     }
 
     private var interceptionScene: some View {
@@ -2452,7 +4930,7 @@ struct OnboardingUnlockLoopDemoView: View {
             randomGameDraw
 
             VStack(spacing: 2) {
-                Text("Win one rep. Get a short window.")
+                Text("Complete the round. Get a short unlock.")
                     .foregroundStyle(OB.fg.opacity(0.92))
                 Text("Then Memo guards it again.")
                     .foregroundStyle(OB.fg2)

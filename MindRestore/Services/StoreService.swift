@@ -266,6 +266,18 @@ final class StoreService {
         )
     }
 
+    /// The verified expiration of the current subscription period. During an
+    /// introductory free trial this is the trial end, not a guessed start + N days.
+    func currentEntitlementExpirationDate(for productID: String) async -> Date? {
+        for await result in Transaction.currentEntitlements {
+            if let transaction = try? checkVerified(result),
+               transaction.productID == productID {
+                return transaction.expirationDate
+            }
+        }
+        return nil
+    }
+
     private func listenForTransactions() -> Task<Void, Error> {
         Task.detached { [weak self] in
             for await result in Transaction.updates {

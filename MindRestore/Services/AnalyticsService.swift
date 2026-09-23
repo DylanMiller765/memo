@@ -20,7 +20,9 @@ enum Analytics {
         "trialReminderBridge",
         "planPersonalizing",
         "focusMode",
-        "notificationPriming"
+        "notificationPriming",
+        "targetSelection",
+        "unlockLoopDemo"
     ]
 
     static func configure() {
@@ -165,7 +167,8 @@ enum Analytics {
         brainAge: Int? = nil,
         brainScore: Int? = nil,
         receiptCount: Int? = nil,
-        extraProperties: [String: Any] = [:]
+        extraProperties: [String: Any] = [:],
+        variant: String? = nil
     ) -> [String: Any] {
         var properties: [String: Any] = [
             "step": step,
@@ -208,15 +211,24 @@ enum Analytics {
         if let receiptCount {
             properties["receipt_count"] = receiptCount
         }
+        if let variant {
+            properties["onboarding_variant"] = variant
+        }
         extraProperties.forEach { properties[$0.key] = $0.value }
         return properties
     }
 
-    static func onboardingStarted(source: String = "first_launch", totalSteps: Int = onboardingStepNames.count) {
-        PostHogSDK.shared.capture("onboarding.started", properties: [
+    static func onboardingStarted(
+        source: String = "first_launch",
+        totalSteps: Int = onboardingStepNames.count,
+        variant: String? = nil
+    ) {
+        var properties: [String: Any] = [
             "source": source,
             "total_steps": totalSteps
-        ])
+        ]
+        if let variant { properties["onboarding_variant"] = variant }
+        PostHogSDK.shared.capture("onboarding.started", properties: properties)
     }
 
     static func onboardingStepViewed(
@@ -225,13 +237,15 @@ enum Analytics {
         totalSteps: Int = onboardingStepNames.count,
         secondsSinceStart: TimeInterval? = nil,
         previousStep: String? = nil,
-        secondsOnPreviousStep: TimeInterval? = nil
+        secondsOnPreviousStep: TimeInterval? = nil,
+        variant: String? = nil
     ) {
         var properties = onboardingStepProperties(
             step: step,
             stepIndex: stepIndex,
             totalSteps: totalSteps,
-            secondsSinceStart: secondsSinceStart
+            secondsSinceStart: secondsSinceStart,
+            variant: variant
         )
         if let previousStep {
             properties["previous_step"] = previousStep
@@ -254,12 +268,13 @@ enum Analytics {
         screenTimeIsEstimate: Bool? = nil,
         brainAge: Int? = nil,
         brainScore: Int? = nil,
-        receiptCount: Int? = nil
+        receiptCount: Int? = nil,
+        variant: String? = nil
     ) {
         var properties = onboardingStepProperties(
             step: lastStep,
             stepIndex: stepIndex,
-            totalSteps: onboardingStepNames.count,
+            totalSteps: totalSteps,
             secondsSinceStart: secondsSinceStart,
             secondsOnStep: secondsOnStep,
             goals: goals,
@@ -268,10 +283,11 @@ enum Analytics {
             screenTimeIsEstimate: screenTimeIsEstimate,
             brainAge: brainAge,
             brainScore: brainScore,
-            receiptCount: receiptCount
+            receiptCount: receiptCount,
+            variant: variant
         )
         properties["last_step"] = lastStep
-        properties["steps_completed"] = totalSteps
+        properties["steps_completed"] = (stepIndex ?? -1) + 1
         PostHogSDK.shared.capture("onboarding.dropped_off", properties: properties)
     }
 
@@ -285,12 +301,14 @@ enum Analytics {
         receiptCount: Int? = nil,
         focusModeWasSetUp: Bool? = nil,
         notificationsEnabled: Bool? = nil,
-        secondsSinceStart: TimeInterval? = nil
+        secondsSinceStart: TimeInterval? = nil,
+        totalSteps: Int = onboardingStepNames.count,
+        variant: String? = nil
     ) {
         var properties = onboardingStepProperties(
             step: "completed",
-            stepIndex: onboardingStepNames.count - 1,
-            totalSteps: onboardingStepNames.count,
+            stepIndex: totalSteps - 1,
+            totalSteps: totalSteps,
             secondsSinceStart: secondsSinceStart,
             goals: goals,
             selectedAge: selectedAge,
@@ -298,7 +316,8 @@ enum Analytics {
             screenTimeIsEstimate: screenTimeIsEstimate,
             brainAge: brainAge,
             brainScore: brainScore,
-            receiptCount: receiptCount
+            receiptCount: receiptCount,
+            variant: variant
         )
         properties["goalCount"] = goals.count
         if let focusModeWasSetUp { properties["focus_mode_was_set_up"] = focusModeWasSetUp }
@@ -309,6 +328,7 @@ enum Analytics {
             "onboarding_completed": true,
             "onboarding_goal_count": goals.count
         ]
+        if let variant { userProperties["onboarding_variant"] = variant }
         if let selectedAge { userProperties["selected_age"] = selectedAge }
         if let screenTimeHours { userProperties["onboarding_screen_time_hours"] = screenTimeHours }
         if let screenTimeIsEstimate { userProperties["onboarding_screen_time_is_estimate"] = screenTimeIsEstimate }
@@ -332,7 +352,8 @@ enum Analytics {
         brainAge: Int? = nil,
         brainScore: Int? = nil,
         receiptCount: Int? = nil,
-        extraProperties: [String: Any] = [:]
+        extraProperties: [String: Any] = [:],
+        variant: String? = nil
     ) {
         let properties = onboardingStepProperties(
             step: step,
@@ -347,7 +368,8 @@ enum Analytics {
             brainAge: brainAge,
             brainScore: brainScore,
             receiptCount: receiptCount,
-            extraProperties: extraProperties
+            extraProperties: extraProperties,
+            variant: variant
         )
         PostHogSDK.shared.capture("onboarding.step", properties: properties)
         PostHogSDK.shared.capture("onboarding.step_completed", properties: properties)
@@ -513,6 +535,23 @@ enum Analytics {
 
     static func paywallRestoreTapped(trigger: String, isHighIntent: Bool) {
         PostHogSDK.shared.capture("paywall.restore_tapped", properties: [
+            "trigger": trigger,
+            "is_high_intent": isHighIntent
+        ])
+    }
+
+    /// Offer/promo code sheet opened from the paywall (e.g. codes shared in
+    /// social posts).
+    static func paywallPromoCodeTapped(trigger: String, isHighIntent: Bool) {
+        PostHogSDK.shared.capture("paywall.promo_code_tapped", properties: [
+            "trigger": trigger,
+            "is_high_intent": isHighIntent
+        ])
+    }
+
+    /// A code redeemed through Apple's offer-code sheet granted Memo Pro.
+    static func paywallPromoCodeRedeemed(trigger: String, isHighIntent: Bool) {
+        PostHogSDK.shared.capture("paywall.promo_code_redeemed", properties: [
             "trigger": trigger,
             "is_high_intent": isHighIntent
         ])
