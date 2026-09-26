@@ -85,6 +85,7 @@ struct OutlinedText: View {
         .font(.brand(size: size, weight: .heavy))
         .monospacedDigit()
         .lineLimit(1)
+        .minimumScaleFactor(0.7)
         .shadow(color: .black.opacity(0.25), radius: 0, y: d * 2)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(text)

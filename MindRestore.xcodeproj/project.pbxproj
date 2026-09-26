@@ -159,6 +159,8 @@
 		2BF34BA8A2FCE23B06851D0A /* InsightsWeekSummaryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B5A458148C1F5A2A0F7D387 /* InsightsWeekSummaryTests.swift */; };
 		53FCCDB842BA08B9EE1728AB /* InsightsModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECD224333F2C0A0F118FB7CA /* InsightsModels.swift */; };
 		D0B900A5EF06583F9890A400 /* InsightsWeekView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46282479EBB34295EE3F672E /* InsightsWeekView.swift */; };
+		6613BC32B97108EBBDECDFFF /* TrainUpNextTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F7754704398E8954D7B39F3 /* TrainUpNextTests.swift */; };
+		1FB7D88B33803824376CA53A /* TrainUpNext.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59798F2DEF0DEFA761CD6140 /* TrainUpNext.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -388,6 +390,8 @@
 		2B5A458148C1F5A2A0F7D387 /* InsightsWeekSummaryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InsightsWeekSummaryTests.swift; sourceTree = "<group>"; };
 		ECD224333F2C0A0F118FB7CA /* InsightsModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InsightsModels.swift; sourceTree = "<group>"; };
 		46282479EBB34295EE3F672E /* InsightsWeekView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InsightsWeekView.swift; sourceTree = "<group>"; };
+		8F7754704398E8954D7B39F3 /* TrainUpNextTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainUpNextTests.swift; sourceTree = "<group>"; };
+		59798F2DEF0DEFA761CD6140 /* TrainUpNext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainUpNext.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -651,6 +655,7 @@
 		3FB21F1A039F009995EF6AC7 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				59798F2DEF0DEFA761CD6140 /* TrainUpNext.swift */,
 				586F7FD19AF1E548EDA0BC55 /* LeagueRivals.swift */,
 				C1205D3B2DBA3FC584AAFA48 /* LeagueChase.swift */,
 				9920CCAC74FDDC0026771A7E /* HomeCharge.swift */,
@@ -860,6 +865,7 @@
 		TEST0003000000000000TS01 /* MindRestoreTests */ = {
 			isa = PBXGroup;
 			children = (
+				8F7754704398E8954D7B39F3 /* TrainUpNextTests.swift */,
 				2B5A458148C1F5A2A0F7D387 /* InsightsWeekSummaryTests.swift */,
 				463B9BC2B1ED4305ACC63AE2 /* LeagueRivalsTests.swift */,
 				F7870A7C23035C28FCAC55DE /* LeagueChaseTests.swift */,
@@ -1208,6 +1214,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1FB7D88B33803824376CA53A /* TrainUpNext.swift in Sources */,
 				D0B900A5EF06583F9890A400 /* InsightsWeekView.swift in Sources */,
 				53FCCDB842BA08B9EE1728AB /* InsightsModels.swift in Sources */,
 				99AF6C0138F729B59EA7A77F /* LeagueRivals.swift in Sources */,
@@ -1353,6 +1360,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				6613BC32B97108EBBDECDFFF /* TrainUpNextTests.swift in Sources */,
 				2BF34BA8A2FCE23B06851D0A /* InsightsWeekSummaryTests.swift in Sources */,
 				1DF7970D40803B0B546EF24E /* LeagueRivalsTests.swift in Sources */,
 				314422FE7A92E8A7AE84DD7C /* LeagueChaseTests.swift in Sources */,

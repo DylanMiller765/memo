@@ -171,29 +171,80 @@ struct TrainingView: View {
         return "\(days / 7)w ago"
     }
 
+    private static let ink = Color(red: 0.043, green: 0.106, blue: 0.133)          // #0B1B22
+    private static let mint = Color(red: 0.482, green: 0.89, blue: 0.776)          // #7BE3C6
+    private static let cardFill = Color(red: 0, green: 0.086, blue: 0.11)
+    private static let cardShape = RoundedRectangle(cornerRadius: 20, style: .continuous)
+    /// Hill crest below the safe area, so the "Up next" card sits on the grass.
+    private static let hillCrest: CGFloat = 150
+
+    private var todaysExercises: [Exercise] {
+        let start = Calendar.current.startOfDay(for: .now)
+        return exercises.filter { $0.completedAt >= start }
+    }
+
+    private var playedToday: Set<ExerciseType> { Set(todaysExercises.map(\.type)) }
+
+    private var charge: HomeCharge {
+        HomeCharge.make(gamesToday: todaysExercises.count, lastSessionDate: user?.lastSessionDate, now: .now)
+    }
+
+    private var upNext: ExerciseType? {
+        var lastPlayed: [ExerciseType: Date] = [:]
+        for exercise in exercises where lastPlayed[exercise.type] == nil {
+            lastPlayed[exercise.type] = exercise.completedAt
+        }
+        return TrainUpNext.pick(games: TrainingGameCatalog.focusUnlockGames.map(\.type), playedToday: playedToday, lastPlayed: lastPlayed)
+    }
+
     var body: some View {
+        // The tab bar tints labels mint; this tab's own controls keep the app accent.
+        tabContent
+            .tint(AppColors.accent)
+    }
+
+    private var tabContent: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 20) {
-                    MainScreenTitle(text: "Train")
-                        .padding(.horizontal, 16)
+                VStack(alignment: .leading, spacing: 0) {
+                    header
+                        .padding(.horizontal, 20)
+                        .padding(.top, 10)
                         .staggeredEntrance(index: 0)
 
+                    if let upNext, let game = UnlockGame(exerciseType: upNext) {
+                        upNextCard(game, type: upNext)
+                            .padding(.horizontal, 20)
+                            .padding(.top, 64)
+                            .staggeredEntrance(index: 1)
+                    }
+
+                    Text("All games")
+                        .font(.brand(size: 19, weight: .heavy))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 20)
+                        .padding(.top, 26)
+
                     // Six games, same glyphs as the slot reel
-                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
                         ForEach(TrainingGameCatalog.focusUnlockGames) { game in
                             if let unlockGame = UnlockGame(exerciseType: game.type) {
                                 Button {
                                     selectedExercise = game.type
                                 } label: {
-                                    TrainGameCard(game: unlockGame, lastPlayedText: lastPlayedText(for: game.type))
+                                    TrainStickerTile(
+                                        game: unlockGame,
+                                        lastPlayedText: lastPlayedText(for: game.type),
+                                        playedToday: playedToday.contains(game.type)
+                                    )
                                 }
                                 .buttonStyle(GameCardButtonStyle())
                             }
                         }
                     }
-                    .padding(.horizontal, 16)
-                    .staggeredEntrance(index: 1)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 10)
+                    .staggeredEntrance(index: 2)
                 }
                 .navigationDestination(item: $selectedExercise) { type in
                     exerciseDestination(for: type)
@@ -203,12 +254,14 @@ struct TrainingView: View {
                         // navigations to any game start with a clean flag.
                         .onAppear { pendingAutoStart = false }
                 }
-                .padding(.top, 8)
-                .padding(.bottom, 32)
+                .padding(.bottom, 120)
                 .responsiveContent()
                 .frame(maxWidth: .infinity)
             }
-            .pageBackground()
+            .scrollIndicators(.hidden)
+            .background(alignment: .top) {
+                HomeHillScene(tier: .calm, crestFromSafeTop: Self.hillCrest)
+            }
             .toolbar(.hidden, for: .navigationBar)
             .onChange(of: externalExercise) { _, newValue in
                 if let game = newValue {
@@ -240,6 +293,62 @@ struct TrainingView: View {
                 }
             }
         }
+    }
+
+    // MARK: - Header
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Train")
+                .font(.brand(size: 30, weight: .heavy))
+                .foregroundStyle(.white)
+                .accessibilityAddTraits(.isHeader)
+            HStack(spacing: 8) {
+                Capsule()
+                    .fill(Color.white.opacity(0.2))
+                    .frame(width: 56, height: 8)
+                    .overlay(alignment: .leading) {
+                        Capsule()
+                            .fill(charge.percent <= 33 ? Color(red: 0.949, green: 0.663, blue: 0.231) : Self.mint)
+                            .frame(width: max(8, 56 * CGFloat(charge.percent) / 100))
+                    }
+                Text("\(charge.percent)% · \(charge.line)")
+                    .font(.brand(size: 13, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.8))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Memo is \(charge.percent) percent charged. \(charge.line)")
+        }
+        .shadow(color: .black.opacity(0.35), radius: 6, y: 2)
+    }
+
+    // MARK: - Up next
+
+    private func upNextCard(_ game: UnlockGame, type: ExerciseType) -> some View {
+        let best = game.personalBest.map { "Best \(game.scoreText($0))" } ?? "New game"
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 14) {
+                GameGlyph(game: game, size: 72)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(playedToday.contains(type) ? "PLAY AGAIN" : "UP NEXT")
+                        .font(.brand(size: 12, weight: .heavy))
+                        .foregroundStyle(Self.mint)
+                    OutlinedText(text: game.title, size: 24, outline: 2)
+                    Text(best)
+                        .font(.brand(size: 13, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.75))
+                }
+                Spacer(minLength: 0)
+            }
+            ChunkyButton(title: "Play \(game.title)") {
+                selectedExercise = type
+            }
+        }
+        .padding(16)
+        .background(Self.cardFill.opacity(0.6), in: Self.cardShape)
+        .overlay(Self.cardShape.strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
     }
 
     /// Games already carry their own intro screens — they just showed them on
@@ -319,6 +428,55 @@ struct TrainGameCard: View {
 
 private extension String {
     var nonEmpty: String? { isEmpty ? nil : self }
+}
+
+/// Train-tab tile in the hill/sticker style: glyph, name, best, and a mint tag once played today.
+struct TrainStickerTile: View {
+    let game: UnlockGame
+    let lastPlayedText: String?
+    var playedToday = false
+
+    private static let ink = Color(red: 0.043, green: 0.106, blue: 0.133)
+    private static let mint = Color(red: 0.482, green: 0.89, blue: 0.776)
+    private static let shape = RoundedRectangle(cornerRadius: 20, style: .continuous)
+
+    private var bestText: String? { game.personalBest.map { "Best \(game.scoreText($0))" } }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top) {
+                GameGlyph(game: game, size: 50)
+                Spacer(minLength: 0)
+                if playedToday {
+                    Text("✓ Today")
+                        .font(.brand(size: 10, weight: .heavy))
+                        .foregroundStyle(Self.ink)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(Self.mint, in: Capsule())
+                        .overlay(Capsule().strokeBorder(Self.ink, lineWidth: 1.2))
+                }
+            }
+            VStack(alignment: .leading, spacing: 3) {
+                Text(game.title)
+                    .font(.brand(size: 16, weight: .heavy))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                Text([bestText, lastPlayedText].compactMap { $0 }.joined(separator: " · ").nonEmpty ?? "New")
+                    .font(.brand(size: 12, weight: .bold))
+                    .foregroundStyle(bestText == nil && lastPlayedText == nil ? Self.mint : .white.opacity(0.65))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(red: 0, green: 0.086, blue: 0.11).opacity(0.5), in: Self.shape)
+        .overlay(Self.shape.strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+        .accessibilityElement(children: .combine)
+        .accessibilityValue(playedToday ? "Played today" : "")
+    }
 }
 
 struct TrainingTileMiniPreview: View {

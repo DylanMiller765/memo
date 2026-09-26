@@ -38,6 +38,12 @@ struct ProfileView: View {
     }
 
     var body: some View {
+        // The tab bar tints labels mint; this tab's own controls keep the app accent.
+        tabContent
+            .tint(AppColors.accent)
+    }
+
+    private var tabContent: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 0) {

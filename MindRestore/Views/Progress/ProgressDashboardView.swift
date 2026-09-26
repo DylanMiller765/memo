@@ -137,6 +137,12 @@ struct ProgressDashboardView: View {
     private static let hillCrest: CGFloat = 64 + 14 + InsightsWeekView.heroHeight + 48
 
     var body: some View {
+        // The tab bar tints labels mint; this tab's own controls keep the app accent.
+        tabContent
+            .tint(AppColors.accent)
+    }
+
+    private var tabContent: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {

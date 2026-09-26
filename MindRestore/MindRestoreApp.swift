@@ -26,7 +26,8 @@ struct MindRestoreApp: App {
         appearance.compactInlineLayoutAppearance.normal.iconColor = gray
         appearance.compactInlineLayoutAppearance.normal.titleTextAttributes = [.foregroundColor: gray]
 
-        let accent = UIColor(AppColors.accent)
+        // Selected tab label: mint, matching the sticker world (tab content keeps AppColors.accent).
+        let accent = UIColor(red: 0.482, green: 0.89, blue: 0.776, alpha: 1)
         appearance.stackedLayoutAppearance.selected.iconColor = accent
         appearance.stackedLayoutAppearance.selected.titleTextAttributes = [.foregroundColor: accent]
         appearance.inlineLayoutAppearance.selected.iconColor = accent

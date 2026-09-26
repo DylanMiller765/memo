@@ -239,7 +239,8 @@ struct ContentView: View {
                     .tag(MainTab.profile)
                     .accessibilityLabel("Profile tab")
             }
-            .tint(AppColors.accent)
+            // Selected tab label in mint (matches the sticker world); each tab's own content keeps the app accent below.
+            .tint(Color(red: 0.482, green: 0.89, blue: 0.776))
             .symbolRenderingMode(.hierarchical)
             .onChange(of: selectedTab) { _, newTab in
                 Analytics.tabViewed(tab: newTab.analyticsName)
