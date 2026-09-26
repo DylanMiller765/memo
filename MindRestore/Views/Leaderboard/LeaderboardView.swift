@@ -24,6 +24,7 @@ struct LeaderboardView: View {
     @Query(sort: \Exercise.completedAt, order: .reverse) private var exercises: [Exercise]
     @Environment(GameCenterService.self) private var gameCenterService
     @Environment(FocusModeService.self) private var focusModeService
+    @Environment(DeepLinkRouter.self) private var deepLinkRouter
 
     @State private var selectedCategory: LeaderboardCategory = Self.initialCategory
     @State private var selectedFilter: LeaderboardTimeFilter = .thisWeek
@@ -38,13 +39,15 @@ struct LeaderboardView: View {
     @State private var hasRenderedLeaderboardContent = false
     @State private var renderedCategory: LeaderboardCategory = Self.initialCategory
     @State private var renderedFilter: LeaderboardTimeFilter = .thisWeek
-    @Namespace private var categorySelectionNamespace
     @Namespace private var filterSelectionNamespace
 
     private static var initialCategory: LeaderboardCategory {
         #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("--screenshot-mode") {
-            return .focusBlocking
+        // `--league chimp` (a category's short title) opens that board for screenshots.
+        let args = ProcessInfo.processInfo.arguments
+        if let i = args.firstIndex(of: "--league"), args.indices.contains(i + 1),
+           let category = LeaderboardCategory.allCases.first(where: { $0.shortTitle.lowercased() == args[i + 1].lowercased() }) {
+            return category
         }
         #endif
         return .focusBlocking
@@ -73,56 +76,59 @@ struct LeaderboardView: View {
     private var displayedCategories: [LeaderboardCategory] {
         LeaderboardCategory.allCases
     }
-    private var categoryRows: [GridItem] {
-        [
-            GridItem(.fixed(40), spacing: 8),
-            GridItem(.fixed(40), spacing: 8)
-        ]
-    }
+
+    private static let ink = Color(red: 0.043, green: 0.106, blue: 0.133)          // #0B1B22
+    private static let mint = Color(red: 0.482, green: 0.89, blue: 0.776)          // #7BE3C6
+    private static let cardFill = Color(red: 0, green: 0.086, blue: 0.11)
+    private static let cardShape = RoundedRectangle(cornerRadius: 20, style: .continuous)
+    /// Where the hill crest sits below the safe area: just under the category chips, so the podium stands on the grass.
+    private static let hillCrest: CGFloat = 150
 
     var body: some View {
         NavigationStack {
-            ZStack {
+            ScrollView {
                 VStack(spacing: 0) {
                     headerView
-                        .padding(.horizontal)
+                        .padding(.horizontal, 20)
                         .padding(.top, 10)
-                        .padding(.bottom, 10)
 
-                    categoryRail
-
-                    periodPicker
-                        .padding(.horizontal)
-                        .padding(.top, 12)
-                        .padding(.bottom, 14)
+                    categoryChips
+                        .padding(.top, 14)
 
                     leaderboardContentHost
                 }
-                .pageBackground()
-                .onAppear {
-                    if !hasLoaded {
-                        Analytics.leaderboardViewed(category: selectedCategory.rawValue)
-                    }
+                .padding(.bottom, 128)
+                .responsiveContent()
+                .frame(maxWidth: .infinity)
+            }
+            .scrollIndicators(.hidden)
+            .background(alignment: .top) {
+                HomeHillScene(tier: .calm, crestFromSafeTop: Self.hillCrest)
+            }
+            .toolbar(.hidden, for: .navigationBar)
+            .onAppear {
+                if !hasLoaded {
+                    Analytics.leaderboardViewed(category: selectedCategory.rawValue)
+                }
+                refreshVisibleLeaderboard()
+            }
+            .onDisappear {
+                activeLoadTask?.cancel()
+            }
+            .onChange(of: scenePhase) { _, phase in
+                guard phase == .active else { return }
+                Task { @MainActor in
+                    await focusModeService.refreshForAppForeground()
                     refreshVisibleLeaderboard()
                 }
-                .onDisappear {
-                    activeLoadTask?.cancel()
-                }
-                .onChange(of: scenePhase) { _, phase in
-                    guard phase == .active else { return }
-                    Task { @MainActor in
-                        await focusModeService.refreshForAppForeground()
-                        refreshVisibleLeaderboard()
-                    }
-                }
-                .onChange(of: gameCenterService.isAuthenticated) { _, isAuthenticated in
-                    guard isAuthenticated else { return }
-                    refreshVisibleLeaderboard()
-                }
-                .onChange(of: focusModeService.authorizationStatus) { _, status in
-                    guard status == .approved else { return }
-                    refreshVisibleLeaderboard()
-                }
+            }
+            .onChange(of: gameCenterService.isAuthenticated) { _, isAuthenticated in
+                guard isAuthenticated else { return }
+                refreshVisibleLeaderboard()
+            }
+            .onChange(of: focusModeService.authorizationStatus) { _, status in
+                guard status == .approved else { return }
+                refreshVisibleLeaderboard()
             }
         }
     }
@@ -130,127 +136,109 @@ struct LeaderboardView: View {
     // MARK: - Header
 
     private var headerView: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .center, spacing: 12) {
+        HStack(alignment: .bottom, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(selectedCategory.displayTitle)
-                    .mainScreenTitleStyle()
+                    .font(.brand(size: 30, weight: .heavy))
+                    .foregroundStyle(.white)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.72)
+                    .minimumScaleFactor(0.7)
                     .contentTransition(.opacity)
-
-                Spacer()
-
-                if gameCenterService.isAuthenticated {
-                    Button {
-                        gameCenterService.showLeaderboard(category: selectedCategory, timeFilter: selectedFilter)
-                    } label: {
-                        Image(systemName: "gamecontroller.fill")
-                            .font(.system(size: 18, weight: .bold))
-                            .foregroundStyle(AppColors.accent)
-                            .frame(width: 44, height: 44)
-                            .leaderboardGlassCircle(tint: AppColors.accent, isInteractive: true)
-                    }
-                    .accessibilityLabel("Open \(selectedCategory.displayTitle) in Game Center")
-                }
+                    .accessibilityAddTraits(.isHeader)
+                Text(headerSubtitle)
+                    .font(.brand(size: 13, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.75))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .contentTransition(.opacity)
             }
+            .shadow(color: .black.opacity(0.35), radius: 6, y: 2)
 
-            Text(selectedCategory.heroSubtitle)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
-                .contentTransition(.opacity)
+            Spacer(minLength: 8)
+
+            periodSegment
         }
         .animation(boardSwapAnimation, value: selectedCategory)
     }
 
+    private var headerSubtitle: String {
+        guard totalPlayerCount > 0 else { return selectedCategory.heroSubtitle }
+        return "\(totalPlayerCount.formatted()) player\(totalPlayerCount == 1 ? "" : "s") · \(periodPhrase)"
+    }
+
+    private var periodPhrase: String {
+        switch renderedFilter {
+        case .today: return "today"
+        case .thisWeek: return "this week"
+        case .allTime: return "all time"
+        }
+    }
+
     // MARK: - Board Controls
 
-    private var categoryRail: some View {
-        Group {
-            if #available(iOS 26.0, *) {
-                GlassEffectContainer(spacing: 8) {
-                    categoryRailContent
-                }
-            } else {
-                categoryRailContent
-            }
-        }
-        .frame(height: 88)
-    }
-
-    private var categoryRailContent: some View {
-        ScrollViewReader { proxy in
-            ScrollView(.horizontal) {
-                LazyHGrid(rows: categoryRows, spacing: 8) {
-                    ForEach(displayedCategories) { category in
-                        CategoryRailChip(
-                            category: category,
-                            title: category.shortTitle,
-                            isSelected: selectedCategory == category,
-                            selectionNamespace: categorySelectionNamespace
-                        ) {
-                            selectCategory(category)
-                        }
-                        .id(category.id)
-                    }
-                }
-                .padding(.horizontal)
-                .padding(.vertical, 2)
-            }
-            .scrollIndicators(.hidden)
-            .onChange(of: selectedCategory) { _, category in
-                withAnimation(boardSwapAnimation) {
-                    proxy.scrollTo(category.id, anchor: .center)
-                }
-            }
-        }
-    }
-
-    private var periodPicker: some View {
-        periodPickerButtons
-            .frame(height: 42)
-    }
-
-    private var periodPickerButtons: some View {
-        HStack(spacing: 6) {
+    private var periodSegment: some View {
+        HStack(spacing: 4) {
             ForEach(displayedFilters) { filter in
                 let isSelected = selectedFilter == filter
-
+                let shape = RoundedRectangle(cornerRadius: 11, style: .continuous)
                 Button {
                     selectFilter(filter)
                 } label: {
-                    ZStack(alignment: .bottom) {
-                        Text(filter.compactTitle)
-                            .font(.system(size: 14, weight: .black, design: .rounded))
-                            .foregroundStyle(isSelected ? .primary : AppColors.textSecondary)
-                            .padding(.horizontal, 18)
-                            .frame(height: 34)
-                            .background {
-                                if isSelected {
-                                    Capsule()
-                                        .fill(AppColors.cardElevated.opacity(0.52))
-                                        .matchedGeometryEffect(id: "filter-selection", in: filterSelectionNamespace)
-                                        .shadow(color: AppColors.accent.opacity(0.16), radius: 14, y: 5)
-                                }
+                    Text(filter.compactTitle)
+                        .font(.brand(size: 13, weight: .heavy))
+                        .lineLimit(1)
+                        .fixedSize()
+                        .foregroundStyle(isSelected ? Self.ink : .white.opacity(0.7))
+                        .padding(.horizontal, 14)
+                        .frame(height: 32)
+                        .background {
+                            if isSelected {
+                                shape.fill(.white)
+                                    .overlay(shape.strokeBorder(Self.ink, lineWidth: 2))
+                                    .background(shape.fill(Self.ink).offset(y: 3))
+                                    .matchedGeometryEffect(id: "filter-selection", in: filterSelectionNamespace)
                             }
-
-                        if isSelected {
-                            Capsule()
-                                .fill(AppColors.accent.opacity(0.92))
-                                .frame(width: 22, height: 2)
-                                .shadow(color: AppColors.accent.opacity(0.42), radius: 8, y: 2)
-                                .offset(y: 3)
                         }
-                    }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 40)
+                        .contentShape(shape)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("\(filter.rawValue)\(isSelected ? ", selected" : "")")
                 .accessibilityAddTraits(isSelected ? .isSelected : [])
             }
         }
+        .padding(4)
+        .padding(.bottom, 3)
+        .background(Self.cardFill.opacity(0.55), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 15, style: .continuous).strokeBorder(.white.opacity(0.1), lineWidth: 1))
         .animation(boardSwapAnimation, value: selectedFilter)
+    }
+
+    private var categoryChips: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal) {
+                HStack(spacing: 8) {
+                    ForEach(displayedCategories) { category in
+                        LeagueCategoryChip(category: category, isSelected: selectedCategory == category) {
+                            selectCategory(category)
+                        }
+                        .id(category.id)
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 2)
+                .padding(.bottom, 6)
+            }
+            .scrollIndicators(.hidden)
+            .onAppear {
+                // Focus sits at the end of the rail; start with the selected chip in view.
+                proxy.scrollTo(selectedCategory.id, anchor: .center)
+            }
+            .onChange(of: selectedCategory) { _, category in
+                withAnimation(boardSwapAnimation) {
+                    proxy.scrollTo(category.id, anchor: .center)
+                }
+            }
+        }
     }
 
     private var leaderboardContentHost: some View {
@@ -263,7 +251,7 @@ struct LeaderboardView: View {
                 leaderboardLoadingVeil
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, alignment: .top)
         .animation(boardSwapAnimation, value: leaderboardContentID)
         .animation(.smooth(duration: 0.30, extraBounce: 0), value: isLoading)
     }
@@ -311,14 +299,17 @@ struct LeaderboardView: View {
         Group {
             if !gameCenterService.isAuthenticated && !screenshotMode {
                 gameCenterRequiredView
+                    .frame(minHeight: 420)
             } else if isLoading && entries.isEmpty && !hasRenderedLeaderboardContent {
                 skeletonLoadingView
-                    .padding(.horizontal)
-                    .padding(.top, 8)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 24)
             } else if entries.isEmpty && loadError != nil {
                 errorLeaderboardView
+                    .frame(minHeight: 420)
             } else if entries.isEmpty {
                 emptyLeaderboardView
+                    .frame(minHeight: 420)
             } else {
                 leaderboardList
                     .opacity(isLoading ? 0.72 : 1)
@@ -328,45 +319,43 @@ struct LeaderboardView: View {
         }
     }
 
-    // MARK: - Leaderboard List
+    // MARK: - Arena
 
     private var leaderboardList: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                // Player count
-                if totalPlayerCount > 0 {
-                    Text("\(totalPlayerCount) player\(totalPlayerCount == 1 ? "" : "s") ranked")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .padding(.bottom, 8)
-                }
+        VStack(spacing: 0) {
+            podiumView
 
-                // Top 3 podium
-                if !entries.isEmpty {
-                    podiumView
-                        .padding(.bottom, 16)
-                }
-
-                // Current user position
-                if let userEntry = entries.first(where: { $0.isCurrentUser }) {
-                    yourRankCard(userEntry)
-                        .padding(.horizontal)
-                        .padding(.bottom, 12)
-                }
-
-                // Full list
-                LazyVStack(spacing: 0) {
-                    ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
-                        leaderboardRow(entry, index: index)
-                    }
-                }
-                .appCard(padding: 0)
-                .padding(.horizontal)
-                .padding(.bottom, 32)
+            if let userEntry = entries.first(where: { $0.isCurrentUser }) {
+                yourRankCard(userEntry)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 10)
             }
-            .responsiveContent()
-            .frame(maxWidth: .infinity)
+
+            climbButton
+                .padding(.horizontal, 20)
+                .padding(.top, 16)
+
+            if entries.count > 3 {
+                restOfBoard
+                    .padding(.horizontal, 20)
+                    .padding(.top, 20)
+            }
+
+            if gameCenterService.isAuthenticated {
+                Button {
+                    gameCenterService.showLeaderboard(category: selectedCategory, timeFilter: selectedFilter)
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "gamecontroller.fill")
+                        Text("Open in Game Center")
+                    }
+                    .font(.brand(size: 13, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.6))
+                    .padding(.vertical, 8)
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 12)
+            }
         }
     }
 
@@ -465,59 +454,14 @@ struct LeaderboardView: View {
     // MARK: - Podium
 
     private var podiumView: some View {
-        let count = min(entries.count, 3)
-        return VStack(spacing: 0) {
-            // Players floating above pedestals
-            HStack(alignment: .bottom, spacing: 6) {
-                if count >= 2 {
-                    podiumPlayer(entries[1], rank: 2)
-                        .padding(.bottom, 64)
-                        .opacity(podiumAppeared ? 1 : 0)
-                        .offset(y: podiumAppeared ? 0 : 20)
-                        .animation(.spring(response: 0.5, dampingFraction: 0.7).delay(0.3), value: podiumAppeared)
-                } else {
-                    Color.clear.frame(maxWidth: .infinity)
-                }
-                if count >= 1 {
-                    podiumPlayer(entries[0], rank: 1)
-                        .padding(.bottom, 88)
-                        .opacity(podiumAppeared ? 1 : 0)
-                        .offset(y: podiumAppeared ? 0 : 20)
-                        .animation(.spring(response: 0.5, dampingFraction: 0.7).delay(0.5), value: podiumAppeared)
-                }
-                if count >= 3 {
-                    podiumPlayer(entries[2], rank: 3)
-                        .padding(.bottom, 48)
-                        .opacity(podiumAppeared ? 1 : 0)
-                        .offset(y: podiumAppeared ? 0 : 20)
-                        .animation(.spring(response: 0.5, dampingFraction: 0.7).delay(0.15), value: podiumAppeared)
-                } else {
-                    Color.clear.frame(maxWidth: .infinity)
-                }
-            }
-
-            // Pedestals
-            HStack(alignment: .bottom, spacing: 4) {
-                if count >= 2 {
-                    podiumPedestal(rank: 2, height: podiumAppeared ? 64 : 0)
-                        .animation(.spring(response: 0.5, dampingFraction: 0.7).delay(0.2), value: podiumAppeared)
-                } else {
-                    Color.clear.frame(maxWidth: .infinity, maxHeight: 1)
-                }
-                if count >= 1 {
-                    podiumPedestal(rank: 1, height: podiumAppeared ? 88 : 0)
-                        .animation(.spring(response: 0.5, dampingFraction: 0.7).delay(0.35), value: podiumAppeared)
-                }
-                if count >= 3 {
-                    podiumPedestal(rank: 3, height: podiumAppeared ? 48 : 0)
-                        .animation(.spring(response: 0.5, dampingFraction: 0.7).delay(0.1), value: podiumAppeared)
-                } else {
-                    Color.clear.frame(maxWidth: .infinity, maxHeight: 1)
-                }
-            }
+        let top = Array(entries.prefix(3))
+        return HStack(alignment: .bottom, spacing: 0) {
+            podiumSlot(top, index: 1, lift: 14, delay: 0.3)
+            podiumSlot(top, index: 0, lift: 44, delay: 0.5)
+            podiumSlot(top, index: 2, lift: 0, delay: 0.15)
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 16)
+        .padding(.horizontal, 12)
+        .padding(.top, 44)
         .onAppear {
             podiumAppeared = false
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
@@ -526,199 +470,106 @@ struct LeaderboardView: View {
         }
     }
 
-    private func podiumPlayer(_ entry: LeaderboardEntryData, rank: Int) -> some View {
-        let color = podiumColor(rank)
-        let isFirst = rank == 1
+    @ViewBuilder
+    private func podiumSlot(_ top: [LeaderboardEntryData], index: Int, lift: CGFloat, delay: Double) -> some View {
+        if top.indices.contains(index) {
+            podiumPlayer(top[index], rank: index + 1, paletteIndex: StickerAvatar.distinctIndices(for: top.map(\.username))[index])
+                .padding(.bottom, lift)
+                .opacity(podiumAppeared ? 1 : 0)
+                .offset(y: podiumAppeared ? 0 : 20)
+                .animation(.spring(response: 0.5, dampingFraction: 0.7).delay(delay), value: podiumAppeared)
+        } else {
+            Color.clear.frame(maxWidth: .infinity, maxHeight: 1)
+        }
+    }
 
-        return VStack(spacing: 6) {
-            // Crown for 1st
-            if isFirst {
-                Image(systemName: "crown.fill")
-                    .font(.system(size: 22))
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [Color(red: 1.0, green: 0.84, blue: 0.0), Color(red: 1.0, green: 0.65, blue: 0.0)],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-                    .shadow(color: Color(red: 1.0, green: 0.84, blue: 0.0).opacity(0.6), radius: 6)
+    private func podiumPlayer(_ entry: LeaderboardEntryData, rank: Int, paletteIndex: Int) -> some View {
+        let size: CGFloat = rank == 1 ? 78 : (rank == 2 ? 62 : 58)
+        let name = entry.isCurrentUser ? "You" : entry.username
+        return VStack(spacing: 4) {
+            ZStack(alignment: .bottomTrailing) {
+                StickerAvatar(name: entry.username, size: size, floor: 5, paletteIndex: paletteIndex)
+                MedalSticker(rank: rank, size: rank == 1 ? 38 : 34)
+                    .offset(x: 12, y: 12)
+            }
+            .overlay(alignment: .top) {
+                if rank == 1 {
+                    StickerIcon(kind: .crown, size: 38)
+                        .offset(y: -32)
+                }
             }
 
-            // Avatar circle
-            ZStack {
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: podiumGradientColors(rank),
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: isFirst ? 56 : 46, height: isFirst ? 56 : 46)
-                    .shadow(color: color.opacity(0.4), radius: isFirst ? 8 : 4)
+            OutlinedText(text: formatPodiumScore(entry.score), size: rank == 1 ? 22 : 18)
+                .padding(.top, 12)
 
-                // Initials
-                Text(String((entry.isCurrentUser ? "You" : entry.username).prefix(1)).uppercased())
-                    .font(.system(size: isFirst ? 22 : 17, weight: .black, design: .rounded))
-                    .foregroundStyle(.white)
-
-                // Medal badge
-                Circle()
-                    .fill(Color(.systemBackground))
-                    .frame(width: 22, height: 22)
-                    .overlay(
-                        Text("\(rank)")
-                            .font(.system(size: 12, weight: .black, design: .rounded))
-                            .foregroundStyle(color)
-                    )
-                    .offset(x: isFirst ? 20 : 16, y: isFirst ? 20 : 16)
-            }
-
-            // Score (compact for podium — no wrapping)
-            Text(formatScoreCompact(entry.score))
-                .font(.system(size: isFirst ? 20 : 15, weight: .black, design: .rounded).monospacedDigit())
-                .foregroundStyle(color)
-
-            // Username
-            Text(entry.isCurrentUser ? "You" : entry.username)
-                .font(.system(size: isFirst ? 12 : 10, weight: .semibold))
-                .foregroundStyle(.secondary)
+            Text(name)
+                .font(.brand(size: 13, weight: .bold))
+                .foregroundStyle(.white.opacity(0.88))
+                .shadow(color: .black.opacity(0.4), radius: 4)
                 .lineLimit(1)
+                .minimumScaleFactor(0.8)
         }
         .frame(maxWidth: .infinity)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(rank == 1 ? "First" : rank == 2 ? "Second" : "Third") place, \(entry.isCurrentUser ? "You" : entry.username), score \(formatScoreCompact(entry.score))")
-    }
-
-    private func podiumPedestal(rank: Int, height: CGFloat) -> some View {
-        let color = podiumColor(rank)
-        let isFirst = rank == 1
-
-        return ZStack {
-            UnevenRoundedRectangle(topLeadingRadius: 12, bottomLeadingRadius: 0, bottomTrailingRadius: 0, topTrailingRadius: 12)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            color.opacity(0.30),
-                            color.opacity(0.15),
-                            color.opacity(0.08)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-                .overlay(
-                    UnevenRoundedRectangle(topLeadingRadius: 12, bottomLeadingRadius: 0, bottomTrailingRadius: 0, topTrailingRadius: 12)
-                        .stroke(
-                            LinearGradient(
-                                colors: [color.opacity(0.5), color.opacity(0.15)],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            ),
-                            lineWidth: 1.5
-                        )
-                )
-
-            // Shine highlight at top
-            VStack {
-                UnevenRoundedRectangle(topLeadingRadius: 12, bottomLeadingRadius: 0, bottomTrailingRadius: 0, topTrailingRadius: 12)
-                    .fill(
-                        LinearGradient(
-                            colors: [color.opacity(isFirst ? 0.25 : 0.15), .clear],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-                    .frame(height: 16)
-                Spacer()
-            }
-
-            // Rank number watermark
-            Text("\(rank)")
-                .font(.system(size: height * 0.55, weight: .black, design: .rounded))
-                .foregroundStyle(color.opacity(0.12))
-        }
-        .frame(maxWidth: .infinity)
-        .frame(height: height)
-    }
-
-    private func podiumColor(_ rank: Int) -> Color {
-        switch rank {
-        case 1: return Color(red: 1.0, green: 0.76, blue: 0.03) // Gold
-        case 2: return Color(red: 0.65, green: 0.68, blue: 0.72) // Silver
-        case 3: return Color(red: 0.80, green: 0.50, blue: 0.20) // Bronze
-        default: return .secondary
-        }
-    }
-
-    private func podiumGradientColors(_ rank: Int) -> [Color] {
-        switch rank {
-        case 1: return [Color(red: 1.0, green: 0.84, blue: 0.0), Color(red: 0.93, green: 0.65, blue: 0.0)]
-        case 2: return [Color(red: 0.75, green: 0.78, blue: 0.82), Color(red: 0.55, green: 0.58, blue: 0.62)]
-        case 3: return [Color(red: 0.85, green: 0.55, blue: 0.25), Color(red: 0.65, green: 0.38, blue: 0.15)]
-        default: return [.gray, .gray]
-        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(rank == 1 ? "First" : rank == 2 ? "Second" : "Third") place, \(name), \(formatScoreCompact(entry.score))")
     }
 
     // MARK: - Your Rank Card
 
     private func yourRankCard(_ entry: LeaderboardEntryData) -> some View {
-        let scoreText = formatScoreCompact(entry.score)
+        let chase = LeagueChase.make(category: renderedCategory, entries: entries)
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 12) {
+                OutlinedText(text: "#\(entry.rank)", size: 34)
+                StickerAvatar(name: entry.username, size: 40)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("You · \(formatScoreCompact(entry.score))")
+                        .font(.brand(size: 16, weight: .heavy))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                    if let percentile = percentileText(rank: entry.rank) {
+                        Text("\(percentile) \(periodPhrase)")
+                            .font(.brand(size: 12, weight: .bold))
+                            .foregroundStyle(Self.mint)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
 
-        return HStack(spacing: 14) {
-            yourRankBadge(rank: entry.rank)
-            yourRankIdentity(username: entry.username)
-            Spacer()
-            yourRankScore(scoreText: scoreText, rank: entry.rank)
-        }
-        .padding(16)
-        .background {
-            RoundedRectangle(cornerRadius: 14)
-                .fill(AppColors.cardSurface)
-                .shadow(color: AppColors.accent.opacity(0.10), radius: 8, y: 2)
-        }
-        .overlay(
-            RoundedRectangle(cornerRadius: 14)
-                .stroke(AppColors.accent.opacity(0.15), lineWidth: 1.5)
-        )
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Your rank: number \(entry.rank), score \(scoreText)")
-    }
+            if let chase {
+                HStack {
+                    Text(chase.text)
+                    Spacer(minLength: 8)
+                    if let next = chase.nextRank { Text("#\(next)") }
+                }
+                .font(.brand(size: 12, weight: .bold))
+                .foregroundStyle(.white.opacity(0.75))
+                .padding(.top, 12)
 
-    private func yourRankBadge(rank: Int) -> some View {
-        ZStack {
-            Circle()
-                .fill(AppColors.accent.opacity(0.12))
-                .frame(width: 56, height: 56)
-            Text("#\(rank)")
-                .font(.system(size: 24, weight: .black, design: .rounded).monospacedDigit())
-                .foregroundStyle(AppColors.accent)
-        }
-    }
-
-    private func yourRankIdentity(username: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text("YOUR RANK")
-                .font(.caption2.weight(.bold))
-                .foregroundStyle(.secondary)
-                .tracking(1)
-            Text(username)
-                .font(.subheadline.weight(.semibold))
-        }
-    }
-
-    @ViewBuilder
-    private func yourRankScore(scoreText: String, rank: Int) -> some View {
-        VStack(alignment: .trailing, spacing: 2) {
-            Text(scoreText)
-                .font(.headline.weight(.bold).monospacedDigit())
-            if let percentileText = percentileText(rank: rank) {
-                Text(percentileText)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(AppColors.accent)
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Color.white.opacity(0.2))
+                        Capsule()
+                            .fill(LinearGradient(
+                                colors: [Color(red: 0.851, green: 1, blue: 0.945), Self.mint],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            ))
+                            .frame(width: max(14, geo.size.width * chase.progress))
+                    }
+                    .clipShape(Capsule())
+                    .overlay(Capsule().strokeBorder(Self.ink.opacity(0.7), lineWidth: 2))
+                }
+                .frame(height: 14)
+                .padding(.top, 6)
             }
         }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .background(Self.cardFill.opacity(0.6), in: Self.cardShape)
+        .overlay(Self.cardShape.strokeBorder(Color.white.opacity(0.07), lineWidth: 1))
+        .accessibilityElement(children: .combine)
     }
 
     private func percentileText(rank: Int) -> String? {
@@ -728,60 +579,78 @@ struct LeaderboardView: View {
         return "Top \(percentile)%"
     }
 
-    // MARK: - Row
+    // MARK: - Climb CTA
 
-    private func leaderboardRow(_ entry: LeaderboardEntryData, index: Int) -> some View {
-        HStack(spacing: 12) {
-            Text("\(entry.rank)")
-                .font(.subheadline.weight(.bold).monospacedDigit())
-                .foregroundStyle(entry.rank <= 3 ? medalColor("\(entry.rank)") : .secondary)
-                .frame(width: 30, alignment: .center)
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text(entry.isCurrentUser ? "You" : entry.username)
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(entry.isCurrentUser ? AppColors.accent : .primary)
+    @ViewBuilder
+    private var climbButton: some View {
+        switch renderedCategory {
+        case .focusBlocking:
+            if !focusModeService.isEnabled {
+                ChunkyButton(title: "Block now to climb", systemImage: "lock.fill") {
+                    deepLinkRouter.pendingDestination = .home
+                }
             }
-
-            Spacer()
-
-            Text(formatScore(entry.score))
-                .font(.subheadline.weight(.semibold).monospacedDigit())
-                .foregroundStyle(entry.isCurrentUser ? AppColors.accent : .primary)
+        case .streak:
+            ChunkyButton(title: "Train today to climb") {
+                deepLinkRouter.pendingDestination = .train
+            }
+        default:
+            if let game = renderedCategory.exerciseType {
+                ChunkyButton(title: "Play \(renderedCategory.shortTitle) to climb") {
+                    deepLinkRouter.pendingDestination = .game(game)
+                }
+            }
         }
-        .padding(.horizontal, 16)
+    }
+
+    // MARK: - Rest of the board
+
+    private var restOfBoard: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(entries.dropFirst(3).enumerated()), id: \.element.id) { index, entry in
+                if index > 0 {
+                    Rectangle()
+                        .fill(Color.white.opacity(0.06))
+                        .frame(height: 1)
+                        .padding(.leading, 56)
+                }
+                leaderboardRow(entry)
+            }
+        }
+        .background(Self.cardFill.opacity(0.42), in: Self.cardShape)
+        .overlay(Self.cardShape.strokeBorder(Color.white.opacity(0.07), lineWidth: 1))
+    }
+
+    private func leaderboardRow(_ entry: LeaderboardEntryData) -> some View {
+        let rowShape = RoundedRectangle(cornerRadius: 16, style: .continuous)
+        return HStack(spacing: 12) {
+            Text("\(entry.rank)")
+                .font(.brand(size: 16, weight: .heavy))
+                .monospacedDigit()
+                .foregroundStyle(.white.opacity(0.7))
+                .frame(width: 30)
+            StickerAvatar(name: entry.username, size: 38)
+            Text(entry.isCurrentUser ? "\(entry.username) (you)" : entry.username)
+                .font(.brand(size: 15, weight: .heavy))
+                .lineLimit(1)
+            Spacer(minLength: 8)
+            Text(formatScoreCompact(entry.score))
+                .font(.brand(size: 15, weight: .heavy))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 12)
         .padding(.vertical, 10)
         .background {
             if entry.isCurrentUser {
-                // Accent left border for current user
-                HStack(spacing: 0) {
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(AppColors.accent)
-                        .frame(width: 3)
-                    Spacer()
-                }
-                .background(AppColors.accent.opacity(0.06))
-            } else if index % 2 == 0 {
-                // Alternating row background
-                AppColors.pageBg.opacity(0.5)
-            }
-        }
-        .overlay(alignment: .bottom) {
-            if entry.rank < entries.count {
-                Divider().padding(.leading, 56)
+                rowShape.fill(Self.mint.opacity(0.12))
+                    .overlay(rowShape.strokeBorder(Self.mint, lineWidth: 2))
             }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Rank \(entry.rank), \(entry.isCurrentUser ? "You" : entry.username), score \(formatScore(entry.score))\(entry.isCurrentUser ? ", you" : "")")
-    }
-
-    private func medalColor(_ medal: String) -> Color {
-        switch medal {
-        case "1": return AppColors.amber
-        case "2": return Color.gray
-        case "3": return AppColors.coral
-        default: return .secondary
-        }
+        .accessibilityLabel("Rank \(entry.rank), \(entry.isCurrentUser ? "You" : entry.username), \(formatScore(entry.score))")
     }
 
     // MARK: - Helpers
@@ -794,6 +663,17 @@ struct LeaderboardView: View {
             return h > 0 ? "\(h)h \(m)m" : "\(m)m"
         default:
             return formatScore(score)
+        }
+    }
+
+    /// Short score for the podium, where there's no room for a unit word.
+    private func formatPodiumScore(_ score: Int) -> String {
+        switch renderedCategory {
+        case .focusBlocking: return formatScoreCompact(score)
+        case .streak: return "\(score)d"
+        case .reactionTime: return "\(score) ms"
+        case .visualMemory: return "Lvl \(score)"
+        default: return "\(score)"
         }
     }
 
@@ -1136,66 +1016,44 @@ struct LeaderboardView: View {
     }
 }
 
-private struct CategoryRailChip: View {
+/// One category in the league rail: sticker + name; the selected one is a chunky white chip.
+private struct LeagueCategoryChip: View {
     let category: LeaderboardCategory
-    let title: String
     let isSelected: Bool
-    let selectionNamespace: Namespace.ID
     let action: () -> Void
 
+    private static let ink = Color(red: 0.043, green: 0.106, blue: 0.133)
+
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
         Button(action: action) {
-            ZStack {
-                if isSelected {
-                    Capsule()
-                        .fill(category.pickerTint.opacity(0.18))
-                        .matchedGeometryEffect(id: "category-selection", in: selectionNamespace)
-                        .shadow(color: category.pickerTint.opacity(0.26), radius: 18, y: 5)
-                }
-
-                HStack(spacing: 8) {
-                    Image(systemName: category.icon)
-                        .font(.system(size: 13, weight: .black))
-                        .foregroundStyle(isSelected ? .white : category.pickerTint)
-                        .frame(width: 24, height: 24)
-                        .background(iconBackground, in: Circle())
-
-                    Text(title)
-                        .font(.system(size: 13, weight: .black, design: .rounded))
-                        .foregroundStyle(isSelected ? .primary : AppColors.textSecondary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.72)
-                }
-                .padding(.leading, 8)
-                .padding(.trailing, 12)
+            HStack(spacing: 6) {
+                StickerIcon(kind: category.stickerKind, size: 22)
+                Text(category.shortTitle)
+                    .font(.brand(size: 14, weight: isSelected ? .heavy : .bold))
+                    .lineLimit(1)
             }
-            .frame(minWidth: category.chipWidth, maxWidth: category.chipWidth)
-            .frame(height: 40)
-            .leaderboardGlassCapsule(tint: isSelected ? category.pickerTint : category.pickerTint.opacity(0.24), isInteractive: true)
-            .overlay(
-                Capsule()
-                    .stroke(isSelected ? category.pickerTint.opacity(0.76) : AppColors.cardBorder.opacity(0.42), lineWidth: isSelected ? 1.35 : 1)
-            )
+            .foregroundStyle(isSelected ? Self.ink : .white.opacity(0.85))
+            .padding(.leading, 9)
+            .padding(.trailing, 13)
+            .frame(height: 38)
+            .background(shape.fill(isSelected ? Color.white : Color(red: 0, green: 0.086, blue: 0.11).opacity(0.5)))
+            .overlay {
+                if isSelected {
+                    shape.strokeBorder(Self.ink, lineWidth: 2.5)
+                } else {
+                    shape.strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+                }
+            }
+            .background {
+                if isSelected { shape.fill(Self.ink).offset(y: 4) }
+            }
+            .contentShape(shape)
         }
         .buttonStyle(.plain)
-        .scaleEffect(isSelected ? 1.015 : 1)
-        .accessibilityLabel("\(category.displayTitle), \(category.pickerMetric)\(isSelected ? ", selected" : "")")
+        .accessibilityLabel("\(category.displayTitle), \(category.pickerMetric)")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
-        .animation(.smooth(duration: 0.42, extraBounce: 0.015), value: isSelected)
-    }
-
-    private var iconBackground: some ShapeStyle {
-        if isSelected {
-            return AnyShapeStyle(
-                LinearGradient(
-                    colors: [category.pickerTint, AppColors.electricViolet.opacity(0.88)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-        }
-
-        return AnyShapeStyle(AppColors.cardElevated.opacity(0.64))
+        .animation(.smooth(duration: 0.3), value: isSelected)
     }
 }
 
@@ -1229,6 +1087,32 @@ private extension AnyTransition {
 }
 
 private extension LeaderboardCategory {
+    var stickerKind: StickerKind {
+        switch self {
+        case .focusBlocking: return .padlock
+        case .streak: return .flame
+        case .visualMemory: return .grid
+        case .numberMemory: return .hash
+        case .chimpTest: return .paw
+        case .mathSprint: return .math
+        case .colorMatch: return .palette
+        case .reactionTime: return .bolt
+        }
+    }
+
+    /// The game a "Play … to climb" button opens; nil for Focus and Streak.
+    var exerciseType: ExerciseType? {
+        switch self {
+        case .visualMemory: return .visualMemory
+        case .numberMemory: return .sequentialMemory
+        case .chimpTest: return .chimpTest
+        case .mathSprint: return .mathSpeed
+        case .colorMatch: return .colorMatch
+        case .reactionTime: return .reactionTime
+        case .focusBlocking, .streak: return nil
+        }
+    }
+
     var displayTitle: String {
         switch self {
         case .focusBlocking: return "Focus League"
