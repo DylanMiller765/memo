@@ -20,6 +20,15 @@ final class VisualMemoryViewModel {
     private var showTimer: Timer?
     var levelsCompleted = 0
     var isOnboardingPreview = false
+    /// Unlock runs always start at level 1 so the pass line means the same thing for everyone.
+    var startsAtLevelOne = false
+    /// Called with `levelsCompleted` each time a level is cleared.
+    var onLevelCleared: ((Int) -> Void)?
+    /// While true, a cleared level waits before the next one starts (cash-out choice, backgrounding).
+    var holdAdvance = false {
+        didSet { if !holdAdvance { tryAdvance() } }
+    }
+    private var pendingAdvance = false
 
     var score: Double {
         Double(levelsCompleted) / 10.0
@@ -62,7 +71,7 @@ final class VisualMemoryViewModel {
     }
 
     func startGame() {
-        level = isOnboardingPreview ? 1 : max(1, AdaptiveDifficultyEngine.shared.currentLevel(for: .visualMemory))
+        level = (isOnboardingPreview || startsAtLevelOne) ? 1 : max(1, AdaptiveDifficultyEngine.shared.currentLevel(for: .visualMemory))
         levelsCompleted = 0
         startTime = Date.now
         if let seed = challengeSeed {
@@ -102,42 +111,49 @@ final class VisualMemoryViewModel {
     }
 
     func toggleCell(_ index: Int) {
-        guard phase == .input else { return }
-        if selectedCells.contains(index) {
-            selectedCells.remove(index)
-        } else {
-            selectedCells.insert(index)
-        }
+        guard phase == .input, !selectedCells.contains(index) else { return }
+        selectedCells.insert(index)
         HapticService.tap()
+        if !highlightedCells.contains(index) {
+            fail()
+        } else if selectedCells == highlightedCells {
+            clearLevel()
+        }
     }
 
-    func submit() {
-        guard phase == .input else { return }
-
-        if selectedCells == highlightedCells {
-            // Correct — advance straight to the next level. No "Passed Level X"
-            // interstitial — the next level's squares flashing IS the success
-            // signal, and the haptic + sound register the win without burning
-            // a second on a green-checkmark screen.
-            levelsCompleted = level
-            HapticService.correct()
-            HapticService.levelUp()
-            level += 1
-            startLevel()
-        } else {
-            // Wrong — show correct answer, then game over. Haptic only: the
-            // system "horn" buzzer reads as cheap, the wrong-answer haptic
-            // already carries the moment.
-            HapticService.wrong()
-            phase = .wrongReveal
-            showTimer?.invalidate()
-            showTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: false) { [weak self] _ in
-                Task { @MainActor in
-                    self?.phase = .finished
-                }
+    private func clearLevel() {
+        levelsCompleted = level
+        HapticService.correct()
+        phase = .correct
+        onLevelCleared?(levelsCompleted)
+        showTimer?.invalidate()
+        showTimer = Timer.scheduledTimer(withTimeInterval: 0.75, repeats: false) { [weak self] _ in
+            Task { @MainActor in
+                self?.pendingAdvance = true
+                self?.tryAdvance()
             }
         }
     }
+
+    func tryAdvance() {
+        guard pendingAdvance, !holdAdvance, phase == .correct else { return }
+        pendingAdvance = false
+        level += 1
+        startLevel()
+    }
+
+    private func fail() {
+        // Haptic only: the system "horn" buzzer reads as cheap.
+        HapticService.wrong()
+        phase = .wrongReveal
+        showTimer?.invalidate()
+        showTimer = Timer.scheduledTimer(withTimeInterval: 1.6, repeats: false) { [weak self] _ in
+            Task { @MainActor in
+                self?.phase = .finished
+            }
+        }
+    }
+
 
     func reset() {
         showTimer?.invalidate()
@@ -160,7 +176,6 @@ final class VisualMemoryViewModel {
 struct VisualMemoryView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-    @Environment(AchievementService.self) private var achievementService
     @Environment(TrainingSessionManager.self) private var trainingManager
     @Environment(PaywallTriggerService.self) private var paywallTrigger
     @Environment(StoreService.self) private var storeService
@@ -173,6 +188,7 @@ struct VisualMemoryView: View {
     /// where the user already pressed "Train" — landing on a Tap-to-Begin
     /// screen is one step too many.
     var autoStart: Bool = false
+    var mode: GameMode = .train
     var isOnboardingPreview: Bool = false
     var onPreviewComplete: (() -> Void)? = nil
     var onPreviewProgress: ((Int) -> Void)? = nil
@@ -190,6 +206,17 @@ struct VisualMemoryView: View {
     private var isProUser: Bool { storeService.isProUser }
 
     var body: some View {
+        if isOnboardingPreview {
+            phaseContent
+        } else {
+            GameScaffold(mode: mode, trainTitle: "Visual Memory",
+                         trainBest: PersonalBestTracker.shared.best(for: .visualMemory) > 0 ? "LV \(PersonalBestTracker.shared.best(for: .visualMemory))" : nil) {
+                phaseContent
+            }
+        }
+    }
+
+    private var phaseContent: some View {
         VStack(spacing: 0) {
             switch viewModel.phase {
             case .setup:
@@ -202,8 +229,7 @@ struct VisualMemoryView: View {
                 gameView(interactable: true)
                     .transition(.opacity)
             case .correct:
-                correctView
-                    .transition(.opacity)
+                gameView(interactable: false)
             case .wrongReveal:
                 wrongRevealView
                     .transition(.opacity)
@@ -211,6 +237,8 @@ struct VisualMemoryView: View {
                 if isOnboardingPreview {
                     previewResultView
                         .transition(.opacity)
+                } else if mode.run != nil {
+                    Color.clear
                 } else {
                     resultsView
                         .transition(.scale(scale: 0.95).combined(with: .opacity))
@@ -224,6 +252,10 @@ struct VisualMemoryView: View {
         .navigationTitle("Visual Memory")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
+            if let run = mode.run {
+                viewModel.startsAtLevelOne = true
+                viewModel.onLevelCleared = { run.report(score: $0) }
+            }
             if autoStart && viewModel.phase == .setup {
                 viewModel.isOnboardingPreview = isOnboardingPreview
                 if !isOnboardingPreview {
@@ -238,6 +270,9 @@ struct VisualMemoryView: View {
             } else if viewModel.phase != .setup && viewModel.phase != .finished {
                 Analytics.exerciseAbandoned(game: ExerciseType.visualMemory.rawValue, roundReached: viewModel.level)
             }
+        }
+        .onChange(of: mode.run?.isFrozen ?? false) { _, frozen in
+            viewModel.holdAdvance = frozen
         }
         .onChange(of: viewModel.phase) { _, newPhase in
             if newPhase == .correct {
@@ -258,6 +293,7 @@ struct VisualMemoryView: View {
                 AdaptiveDifficultyEngine.shared.recordBlock(domain: .visualMemory, correct: viewModel.maxLevelReached, total: viewModel.level)
                 // Auto-save so GC gets the score even if user doesn't tap Done
                 saveExercise()
+                mode.run?.finish(finalScore: viewModel.maxLevelReached)
                 let card = ExerciseShareCard(
                     exerciseName: "Visual Memory",
                     exerciseIcon: "square.grid.3x3.fill",
@@ -348,90 +384,78 @@ struct VisualMemoryView: View {
 
     private func gameView(interactable: Bool) -> some View {
         let compactPreview = isOnboardingPreview && UIScreen.main.bounds.height < 700
-        return VStack(spacing: compactPreview ? 9 : 20) {
-            // Header
-            Text("Level \(viewModel.level)")
-                .font(.headline)
-                .foregroundStyle(AppColors.accent)
-                .contentTransition(.numericText())
-                .padding(.horizontal)
-
-            // Grid size indicator
-            Text("\(viewModel.gridSize)x\(viewModel.gridSize) Grid")
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
-
-            if !interactable {
-                Text("Memorize!")
-                    .font(.title3.weight(.bold))
-                    .foregroundStyle(AppColors.violet)
-            } else {
-                Text("Tap the squares (\(viewModel.selectedCells.count)/\(viewModel.highlightCount))")
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.secondary)
-                    .contentTransition(.numericText())
-            }
-
-            if !compactPreview { Spacer() }
-
-            // Grid — tighter gutters once the grid passes 5x5 so cells stay tappable.
-            let cellSpacing: CGFloat = viewModel.gridSize >= 6 ? 6 : 8
-            let columns = Array(repeating: GridItem(.flexible(), spacing: cellSpacing), count: viewModel.gridSize)
-            LazyVGrid(columns: columns, spacing: cellSpacing) {
-                ForEach(0..<viewModel.totalCells, id: \.self) { index in
-                    gridCell(index: index, interactable: interactable)
+        let n = viewModel.gridSize
+        let spacing: CGFloat = n >= 6 ? 6 : 8
+        return GeometryReader { geo in
+            let boardWidth = min(geo.size.width - (compactPreview ? 64 : 32), compactPreview ? 300 : 400)
+            let tile = (boardWidth - 18 - spacing * CGFloat(n - 1)) / CGFloat(n)
+            VStack(spacing: 0) {
+                VStack(spacing: 2) {
+                    Text("\(viewModel.level)")
+                        .font(HeroNumber.font(compactPreview ? 52 : 84))
+                        .foregroundStyle(LinearGradient.hero(Color(red: 0.62, green: 0.72, blue: 1)))
+                        .contentTransition(.numericText())
+                    Text("LEVEL")
+                        .font(.brand(size: 12, weight: .heavy))
+                        .tracking(2)
+                        .foregroundStyle(OB.fg3)
                 }
-            }
-            .frame(maxWidth: compactPreview ? (viewModel.gridSize >= 6 ? 300 : 228) : .infinity)
-            .padding(.horizontal, compactPreview ? 0 : 32)
+                .padding(.top, compactPreview ? 4 : 18)
 
-            if !compactPreview { Spacer() }
+                Spacer(minLength: compactPreview ? 8 : 16)
 
-            // Always reserve space for button so grid doesn't shift between phases
-            Button {
-                viewModel.submit()
-            } label: {
-                Text("Submit")
-                    .accentButton()
+                ZStack(alignment: .topTrailing) {
+                    Grid(horizontalSpacing: spacing, verticalSpacing: spacing) {
+                        ForEach(0..<n, id: \.self) { row in
+                            GridRow {
+                                ForEach(0..<n, id: \.self) { col in
+                                    gridCell(index: row * n + col, interactable: interactable)
+                                        .frame(width: tile, height: tile)
+                                }
+                            }
+                        }
+                    }
+                    .padding(9)
+                    .background(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .fill(Color(red: 0.063, green: 0.067, blue: 0.133))
+                            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(.white.opacity(0.06)))
+                            .shadow(color: .black.opacity(0.5), radius: 10, y: 4)
+                    )
+                }
+                .overlay { PraisePop(text: viewModel.phase == .correct ? "PERFECT!" : nil, tint: OB.accent) }
+                .frame(maxWidth: .infinity)
+
+                Spacer(minLength: compactPreview ? 8 : 16)
+
+                Text(viewModel.phase == .showing ? "memorize…" : viewModel.phase == .correct ? " " : "tap the squares")
+                    .font(.brand(size: 13, weight: .heavy))
+                    .foregroundStyle(OB.fg3)
+                    .padding(.bottom, compactPreview ? 4 : 20)
             }
-            .disabled(!interactable || viewModel.selectedCells.count != viewModel.highlightCount)
-            .opacity(interactable && viewModel.selectedCells.count == viewModel.highlightCount ? 1.0 : interactable ? 0.5 : 0)
-            .padding(.horizontal, 32)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-        .padding(.vertical, compactPreview ? 8 : 24)
         .modifier(ShakeEffect(animatableData: shakeAmount))
-        .scaleEffect(correctPulse ? 1.03 : 1.0)
-        .animation(.spring(response: 0.2, dampingFraction: 0.5), value: correctPulse)
+        .animation(.easeOut(duration: 0.2), value: viewModel.phase)
     }
 
-    @ViewBuilder
     private func gridCell(index: Int, interactable: Bool) -> some View {
         let isHighlighted = viewModel.highlightedCells.contains(index)
         let isSelected = viewModel.selectedCells.contains(index)
-
-        RoundedRectangle(cornerRadius: 10)
-            .fill(cellFill(isHighlighted: isHighlighted, isSelected: isSelected, interactable: interactable))
-            .aspectRatio(1, contentMode: .fit)
-            .animation(.easeInOut(duration: 0.15), value: isHighlighted)
-            .animation(.easeInOut(duration: 0.15), value: isSelected)
+        let state: BevelState = {
+            switch viewModel.phase {
+            case .showing: return isHighlighted ? .lit : .idle
+            case .correct: return isHighlighted ? .correct : .idle
+            default: return isSelected ? .lit : .idle
+            }
+        }()
+        return BevelTile(state: state, tint: OB.accent, cornerRadius: 11)
+            .contentShape(Rectangle())
             .onTapGesture {
-                if interactable {
-                    viewModel.toggleCell(index)
-                }
+                if interactable { viewModel.toggleCell(index) }
             }
             .accessibilityLabel("Cell \(index + 1)")
             .accessibilityAddTraits(isSelected ? .isSelected : [])
-    }
-
-    private func cellFill(isHighlighted: Bool, isSelected: Bool, interactable: Bool) -> some ShapeStyle {
-        if !interactable && isHighlighted {
-            return AnyShapeStyle(AppColors.accent)
-        } else if interactable && isSelected {
-            return AnyShapeStyle(AppColors.accent)
-        } else {
-            return AnyShapeStyle(Color.gray.opacity(0.12))
-        }
     }
 
 
@@ -574,43 +598,15 @@ struct VisualMemoryView: View {
         paywallTrigger.recordExerciseCompleted(gameType: .visualMemory)
         trainingManager.addTrainingTime(viewModel.durationSeconds)
 
-        let exercise = Exercise(
+        GameResultRecorder.record(
             type: .visualMemory,
+            accuracy: viewModel.score,
             difficulty: viewModel.maxLevelReached,
-            score: viewModel.score,
-            durationSeconds: viewModel.durationSeconds
+            durationSeconds: viewModel.durationSeconds,
+            leaderboardScore: viewModel.maxLevelReached,
+            user: user,
+            modelContext: modelContext,
+            gameCenter: gameCenterService
         )
-        modelContext.insert(exercise)
-
-        let descriptor = FetchDescriptor<DailySession>(
-            sortBy: [SortDescriptor(\.date, order: .reverse)]
-        )
-        let allSessions = (try? modelContext.fetch(descriptor)) ?? []
-        let session: DailySession
-        if let existing = allSessions.first(where: { Calendar.current.isDateInToday($0.date) }) {
-            session = existing
-        } else {
-            session = DailySession()
-            modelContext.insert(session)
-        }
-        session.addExercise(exercise)
-        user?.updateStreak()
-        NotificationService.shared.cancelStreakRisk()
-        if let streak = user?.currentStreak {
-            NotificationService.shared.scheduleMilestone(streak: streak)
-        }
-
-        if let user {
-            _ = ContentView.awardXP(
-                user: user,
-                score: viewModel.score,
-                difficulty: viewModel.maxLevelReached,
-                achievementService: achievementService,
-                modelContext: modelContext,
-                gameCenterService: gameCenterService,
-                exerciseType: .visualMemory,
-                gameScore: viewModel.maxLevelReached
-            )
-        }
     }
 }

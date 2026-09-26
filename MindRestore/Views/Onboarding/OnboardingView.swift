@@ -173,7 +173,6 @@ struct OnboardingView: View {
     @State private var selectedDistractingAppHours: Double?
     @State private var trialReminderDaysBefore = NotificationService.selectedTrialReminderDaysBefore
     @State private var unlockLoopDemoStartedTracked = false
-    @State private var assessmentResult: BrainScoreResult?
     @State private var notificationsEnabled = false
     @State private var enteredName: String = ""
     @State private var selectedAge: Int = 0
@@ -213,8 +212,6 @@ struct OnboardingView: View {
     @State private var empathyCopyVisible = false
     @State private var empathyCTAVisible = false
     @State private var focusModeWasSetUp = false
-    @State private var quickAssessmentBgColor: Color = AppColors.pageBg
-    @State private var quickAssessmentIsFullscreen = false
     @State private var screenTimeAuthorized = false
     @State private var isRequestingScreenTimeAccess = false
     @State private var screenTimeEstimateHours: Double = 4
@@ -254,7 +251,6 @@ struct OnboardingView: View {
     @State private var hasTrackedOnboardingStart = false
 
     enum OnboardingCover: Identifiable {
-        case brainAgeReveal
         case paywall
         var id: Self { self }
     }
@@ -496,8 +492,8 @@ struct OnboardingView: View {
                     selectedAge: collectedAgeForAnalytics,
                     screenTimeHours: collectedScreenTimeHoursForAnalytics,
                     screenTimeIsEstimate: collectedScreenTimeEstimateFlagForAnalytics,
-                    brainAge: assessmentResult?.brainAge,
-                    brainScore: assessmentResult?.brainScore,
+                    brainAge: nil,
+                    brainScore: nil,
                     receiptCount: receiptCount,
                     variant: onboardingVariant.rawValue
                 )
@@ -507,12 +503,6 @@ struct OnboardingView: View {
         // Tracked-last-value handles per-cover dismissal routing.
         .fullScreenCover(item: $presentedCover, onDismiss: handleCoverDismiss) { cover in
             switch cover {
-            case .brainAgeReveal:
-                OnboardingBrainAgeReveal(
-                    brainAge: assessmentResult?.brainAge ?? 25,
-                    userAge: selectedAge > 0 ? selectedAge : 25,
-                    onContinue: { presentedCover = nil }
-                )
             case .paywall:
                 PaywallView(
                     isHighIntent: true,
@@ -543,9 +533,6 @@ struct OnboardingView: View {
     private func handleCoverDismiss() {
         // Route based on which cover just closed.
         switch lastDismissedCover {
-        case .brainAgeReveal:
-            trackOnboardingStepCompleted("revealDismissed")
-            goToPage(OnboardingPage.screenTimeAccess.rawValue)
         case .paywall:
             if didRouteAfterPaywallConversion {
                 if onboardingVariant == .concise {
@@ -763,8 +750,8 @@ struct OnboardingView: View {
             selectedAge: collectedAgeForAnalytics,
             screenTimeHours: collectedScreenTimeHoursForAnalytics,
             screenTimeIsEstimate: collectedScreenTimeEstimateFlagForAnalytics,
-            brainAge: assessmentResult?.brainAge,
-            brainScore: assessmentResult?.brainScore,
+            brainAge: nil,
+            brainScore: nil,
             receiptCount: receiptCount,
             extraProperties: extraProperties,
             variant: onboardingVariant.rawValue
@@ -2825,20 +2812,6 @@ struct OnboardingView: View {
         }
     }
 
-    // MARK: - Quick Assessment Page
-
-    private var quickAssessmentPage: some View {
-        QuickAssessmentView(
-            backgroundColor: $quickAssessmentBgColor,
-            isInFullscreenPhase: $quickAssessmentIsFullscreen
-        ) { result in
-            assessmentResult = result
-            trackOnboardingStepCompleted("quickAssessment")
-            // Present dramatic reveal as a full-screen cover so it escapes the TabView.
-            // Cover only fires from a legitimate onComplete — swiping the TabView won't trigger it.
-            presentedCover = .brainAgeReveal
-        }
-    }
 
     // MARK: - Plan Reveal Page (was Personal Solution)
     //
@@ -2848,7 +2821,7 @@ struct OnboardingView: View {
     private var planRevealPage: some View {
         OnboardingPersonalSolutionView(
             userGoals: selectedGoals,
-            brainAge: assessmentResult?.brainAge,
+            brainAge: nil,
             userAge: selectedAge,
             dailyScreenTimeHours: effectiveDailyScreenTimeHours,
             projectedScreenTimeHours: projectedScreenTimeHours,
@@ -2904,7 +2877,7 @@ struct OnboardingView: View {
         OnboardingComparisonView(
             pickupCount: 287,
             dailyHours: effectiveDailyScreenTimeHours,
-            brainAge: assessmentResult?.brainAge,
+            brainAge: nil,
             onContinue: {
                 trackOnboardingStepCompleted("comparison")
                 goToPage(5)
@@ -3471,19 +3444,14 @@ struct OnboardingView: View {
             sharedDefaults?.removeObject(forKey: "onboarding_projected_screen_time_hours")
         }
 
-        // Save brain score result — assessment does NOT count toward daily session/limit
-        if let result = assessmentResult {
-            modelContext.insert(result)
-            user.totalXP += 50  // Bonus XP for completing onboarding assessment
-        }
 
         Analytics.onboardingCompleted(
             goals: onboardingGoalValues,
             selectedAge: collectedAgeForAnalytics,
             screenTimeHours: collectedScreenTimeHoursForAnalytics,
             screenTimeIsEstimate: collectedScreenTimeEstimateFlagForAnalytics,
-            brainAge: assessmentResult?.brainAge,
-            brainScore: assessmentResult?.brainScore,
+            brainAge: nil,
+            brainScore: nil,
             receiptCount: receiptCount,
             focusModeWasSetUp: focusModeWasSetUp,
             notificationsEnabled: notificationsEnabled,

@@ -113,7 +113,6 @@ struct MainScreenPreview<Content: View>: View {
     private let modelContainer: ModelContainer
 
     @State private var storeService = StoreService(loadProductsOnInit: false)
-    @State private var achievementService = AchievementService()
     @State private var paywallTrigger = PaywallTriggerService()
     @State private var trainingManager = TrainingSessionManager()
     @State private var gameCenterService = GameCenterService()
@@ -128,7 +127,6 @@ struct MainScreenPreview<Content: View>: View {
     var body: some View {
         content
             .environment(storeService)
-            .environment(achievementService)
             .environment(paywallTrigger)
             .environment(trainingManager)
             .environment(gameCenterService)
@@ -193,11 +191,6 @@ struct MainScreenPreview<Content: View>: View {
         brainScore.visualMemoryMax = 6
         context.insert(brainScore)
 
-        for type in [AchievementType.firstExercise, .streak3, .brainScore700] {
-            let achievement = Achievement(type: type)
-            achievement.isNew = false
-            context.insert(achievement)
-        }
     }
 }
 #endif

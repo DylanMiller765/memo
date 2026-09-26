@@ -32,6 +32,7 @@ final class User {
     var userAge: Int = 0  // 0 = not provided
     var avatarEmoji: String = ""
     var totalExercises: Int = 0
+    var resistedCount: Int = 0
     var totalPerfectScores: Int = 0
     var hasShared: Bool = false
 

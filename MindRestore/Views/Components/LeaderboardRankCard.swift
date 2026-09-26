@@ -17,19 +17,7 @@ struct LeaderboardRankCard: View {
     @State private var animateIn = false
 
     private var leaderboardCategory: LeaderboardCategory? {
-        guard let type = exerciseType else { return .brainScore }
-        switch type {
-        case .reactionTime: return .reactionTime
-        case .colorMatch: return .colorMatch
-        case .speedMatch: return .speedMatch
-        case .visualMemory: return .visualMemory
-        case .sequentialMemory: return .numberMemory
-        case .mathSpeed: return .mathSpeed
-        case .dualNBack: return .dualNBack
-        case .wordScramble: return .wordScramble
-        case .memoryChain: return .memoryChain
-        default: return nil  // exercises without leaderboards
-        }
+        exerciseType.flatMap(UnlockGame.init(exerciseType:))?.leaderboardCategory
     }
 
     private var accentColor: Color {

@@ -31,6 +31,17 @@ final class SequentialMemoryViewModel {
     var challengeSeed: Int?
     private var rng: SeededGenerator?
     private var digitTimer: Timer?
+    /// Called with the digit count each time a number is recalled correctly.
+    var onLevelCleared: ((Int) -> Void)?
+    /// While true, the next number waits (cash-out choice, backgrounding).
+    var holdAdvance = false {
+        didSet { if !holdAdvance { tryAdvance() } }
+    }
+    private var pendingAdvance = false
+    /// Seconds the whole number stays on screen: 1.0 + 0.6 per digit.
+    var displayDuration: TimeInterval { 1.0 + 0.6 * Double(currentLength) }
+    var lastAnswerCorrect = false
+    var targetNumber: String { currentDigits.map(String.init).joined() }
 
     var score: Double {
         // maxCorrectLength of 4 = baseline (0.5), 10+ = perfect
@@ -53,7 +64,7 @@ final class SequentialMemoryViewModel {
     }
 
     func startGame() {
-        currentLength = max(4, 3 + adaptiveLevel)
+        currentLength = 3
         round = 0
         maxCorrectLength = 0
         roundResults = []
@@ -73,65 +84,60 @@ final class SequentialMemoryViewModel {
         } else {
             currentDigits = (0..<currentLength).map { _ in Int.random(in: 0...9) }
         }
-        displayDigitIndex = -1
         userInput = ""
         phase = .showing
-        showNextDigit()
+        digitTimer?.invalidate()
+        digitTimer = Timer.scheduledTimer(withTimeInterval: displayDuration, repeats: false) { [weak self] _ in
+            Task { @MainActor in self?.phase = .input }
+        }
     }
 
-    private func showNextDigit() {
-        digitTimer?.invalidate()
-        displayDigitIndex += 1
 
-        if displayDigitIndex >= currentDigits.count {
-            digitTimer = Timer.scheduledTimer(withTimeInterval: 0.4, repeats: false) { [weak self] _ in
-                Task { @MainActor in
-                    self?.displayDigitIndex = -1
-                    self?.phase = .input
-                }
-            }
-            return
-        }
 
-        let interval: TimeInterval = currentLength <= 5 ? 0.8 : 0.65
-        digitTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { [weak self] _ in
-            Task { @MainActor in
-                self?.showNextDigit()
-            }
-        }
+    func type(_ digit: Int) {
+        guard phase == .input, userInput.count < currentLength else { return }
+        userInput.append(String(digit))
+        if userInput.count == currentLength { submitAnswer() }
+    }
+
+    func deleteDigit() {
+        guard phase == .input, !userInput.isEmpty else { return }
+        userInput.removeLast()
     }
 
     func submitAnswer() {
-        let correct = currentDigits.map(String.init).joined()
-        let isCorrect = userInput == correct
-
+        let isCorrect = userInput == targetNumber
+        lastAnswerCorrect = isCorrect
         roundResults.append((length: currentLength, correct: isCorrect))
         round += 1
-
+        phase = .roundResult
+        digitTimer?.invalidate()
         if isCorrect {
             maxCorrectLength = max(maxCorrectLength, currentLength)
-            currentLength += 1
             HapticService.correct()
-            SoundService.shared.playCorrect()
+            onLevelCleared?(maxCorrectLength)
+            digitTimer = Timer.scheduledTimer(withTimeInterval: 0.7, repeats: false) { [weak self] _ in
+                Task { @MainActor in
+                    self?.pendingAdvance = true
+                    self?.tryAdvance()
+                }
+            }
         } else {
             HapticService.wrong()
-            SoundService.shared.playWrong()
-        }
-
-        phase = .roundResult
-    }
-
-    func continueOrFinish() {
-        let lastCorrect = roundResults.last?.correct ?? false
-
-        if !lastCorrect || round >= maxRounds {
-            HapticService.complete()
-            phase = .finished
-        } else {
-            HapticService.levelUp()
-            nextRound()
+            digitTimer = Timer.scheduledTimer(withTimeInterval: 1.8, repeats: false) { [weak self] _ in
+                Task { @MainActor in self?.phase = .finished }
+            }
         }
     }
+
+    func tryAdvance() {
+        guard pendingAdvance, !holdAdvance, phase == .roundResult else { return }
+        pendingAdvance = false
+        currentLength += 1
+        nextRound()
+    }
+
+
 
     var correctRounds: Int {
         roundResults.filter(\.correct).count
@@ -148,7 +154,6 @@ final class SequentialMemoryViewModel {
 struct SequentialMemoryView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-    @Environment(AchievementService.self) private var achievementService
     @Environment(TrainingSessionManager.self) private var trainingManager
     @Environment(PaywallTriggerService.self) private var paywallTrigger
     @Environment(StoreService.self) private var storeService
@@ -159,6 +164,7 @@ struct SequentialMemoryView: View {
     /// Skip the setup screen on appear when entering from a Focus unlock.
     var autoStart: Bool = false
 
+    var mode: GameMode = .train
     @State private var viewModel = SequentialMemoryViewModel()
     @State private var showingPaywall = false
     @State private var isNewPersonalBest = false
@@ -167,12 +173,21 @@ struct SequentialMemoryView: View {
     @State private var shakeAmount: CGFloat = 0
     @State private var correctPulse = false
     @State private var showingInfo = false
+    @State private var showStartedAt = Date()
     @FocusState private var inputFocused: Bool
 
     private var user: User? { users.first }
     private var isProUser: Bool { storeService.isProUser }
 
     var body: some View {
+        GameScaffold(mode: mode, trainTitle: "Number Memory",
+                     trainBest: PersonalBestTracker.shared.best(for: .sequentialMemory) > 0 ? "\(PersonalBestTracker.shared.best(for: .sequentialMemory))" : nil,
+                     glow: Color(red: 0.03, green: 0.16, blue: 0.16)) {
+            phaseContent
+        }
+    }
+
+    private var phaseContent: some View {
         VStack(spacing: 0) {
             switch viewModel.phase {
             case .setup:
@@ -188,8 +203,10 @@ struct SequentialMemoryView: View {
                 roundResultView
                     .transition(.scale(scale: 0.95).combined(with: .opacity))
             case .finished:
-                resultsView
-                    .transition(.scale(scale: 0.95).combined(with: .opacity))
+                if mode.run != nil { Color.clear } else {
+                    resultsView
+                        .transition(.scale(scale: 0.95).combined(with: .opacity))
+                }
             }
         }
         .animation(.easeInOut(duration: 0.3), value: viewModel.phase)
@@ -197,6 +214,9 @@ struct SequentialMemoryView: View {
         .navigationTitle("Number Memory")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
+            if let run = mode.run {
+                viewModel.onLevelCleared = { run.report(score: $0) }
+            }
             if autoStart && viewModel.phase == .setup {
                 Analytics.exerciseStarted(game: ExerciseType.sequentialMemory.rawValue)
                 viewModel.startGame()
@@ -206,6 +226,9 @@ struct SequentialMemoryView: View {
             if viewModel.phase != .setup && viewModel.phase != .finished {
                 Analytics.exerciseAbandoned(game: ExerciseType.sequentialMemory.rawValue, roundReached: viewModel.round)
             }
+        }
+        .onChange(of: mode.run?.isFrozen ?? false) { _, frozen in
+            viewModel.holdAdvance = frozen
         }
         .onChange(of: viewModel.phase) { _, newPhase in
             if newPhase == .roundResult {
@@ -227,6 +250,7 @@ struct SequentialMemoryView: View {
                 AdaptiveDifficultyEngine.shared.recordBlock(domain: .sequentialMemory, correct: viewModel.correctRounds, total: viewModel.roundResults.count)
                 // Auto-save so GC gets the score even if user doesn't tap Done
                 saveExercise()
+                mode.run?.finish(finalScore: viewModel.maxCorrectLength)
                 let card = ExerciseShareCard(
                     exerciseName: "Number Memory",
                     exerciseIcon: "number.circle.fill",
@@ -312,153 +336,82 @@ struct SequentialMemoryView: View {
     // MARK: - Showing Digits
 
     private var showingView: some View {
-        VStack(spacing: 24) {
-            HStack {
-                Text("Level \(viewModel.currentLength)")
-                    .font(.headline)
-                    .foregroundStyle(AppColors.teal)
-                    .contentTransition(.numericText())
+        GeometryReader { geo in
+            let digits = viewModel.currentLength
+            let size = min(64, (geo.size.width - 48) / (CGFloat(digits) * 0.62))
+            VStack(spacing: 10) {
                 Spacer()
-                Text("Round \(viewModel.round + 1)")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
-                    .contentTransition(.numericText())
-            }
-            .padding(.horizontal)
-
-            ProgressView(value: Double(viewModel.displayDigitIndex + 1), total: Double(viewModel.currentDigits.count))
-                .tint(AppColors.teal)
-                .padding(.horizontal)
-
-            Spacer()
-
-            if viewModel.isShowingDigit {
-                VStack(spacing: 16) {
-                    Text(viewModel.currentDisplayDigit)
-                        .font(.system(size: 96, weight: .bold, design: .monospaced))
-                        .foregroundStyle(AppColors.accent)
-                        .id("digit-\(viewModel.displayDigitIndex)")
-                        .transition(.scale(scale: 0.5).combined(with: .opacity))
-                        .accessibilityLabel("Remember this number: \(viewModel.currentDisplayDigit)")
-
-                    // Dot indicator showing position in sequence
-                    HStack(spacing: 6) {
-                        ForEach(0..<viewModel.currentDigits.count, id: \.self) { i in
-                            Circle()
-                                .fill(i == viewModel.displayDigitIndex ? AppColors.accent : AppColors.accent.opacity(0.2))
-                                .frame(width: 8, height: 8)
-                                .scaleEffect(i == viewModel.displayDigitIndex ? 1.2 : 1.0)
-                                .animation(.easeInOut(duration: 0.15), value: viewModel.displayDigitIndex)
-                        }
-                    }
+                Text(viewModel.targetNumber)
+                    .font(HeroNumber.font(size))
+                    .tracking(4)
+                    .foregroundStyle(LinearGradient.hero(Color(red: 0.5, green: 0.9, blue: 0.82)))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+                Text("\(digits) DIGITS")
+                    .font(.brand(size: 12, weight: .heavy))
+                    .tracking(1.5)
+                    .foregroundStyle(OB.fg3)
+                TimelineView(.animation) { context in
+                    let elapsed = context.date.timeIntervalSince(showStartedAt)
+                    let left = max(0, 1 - elapsed / viewModel.displayDuration)
+                    Capsule().fill(.white.opacity(0.1)).frame(width: 200, height: 5)
+                        .overlay(alignment: .leading) { Capsule().fill(Color(red: 0.18, green: 0.83, blue: 0.75)).frame(width: 200 * left, height: 5) }
                 }
-                .animation(.spring(response: 0.3, dampingFraction: 0.6), value: viewModel.displayDigitIndex)
-            } else {
-                Text("...")
-                    .font(.system(size: 48, weight: .bold))
-                    .foregroundStyle(.secondary)
+                .padding(.top, 8)
+                Spacer()
+                Text("memorize…")
+                    .font(.brand(size: 13, weight: .heavy))
+                    .foregroundStyle(OB.fg3)
+                    .padding(.bottom, 20)
             }
-
-            Spacer()
-
-            Text("Watch carefully")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .padding(.bottom, 32)
+            .frame(maxWidth: .infinity)
         }
-        .padding(.vertical, 24)
+        .onAppear { showStartedAt = Date() }
     }
 
     // MARK: - Input
 
     private var inputView: some View {
-        VStack(spacing: 24) {
-            Text("Level \(viewModel.currentLength)")
-                .font(.headline)
-                .foregroundStyle(AppColors.teal)
-                .contentTransition(.numericText())
-
+        VStack(spacing: 10) {
+            AnswerBoxes(entry: viewModel.userInput, length: viewModel.currentLength, tint: Color(red: 0.18, green: 0.83, blue: 0.75), flash: .idle)
+                .padding(.horizontal, 16)
+                .padding(.top, 60)
+            Text("WHAT WAS IT?")
+                .font(.brand(size: 12, weight: .heavy))
+                .tracking(1.5)
+                .foregroundStyle(OB.fg3)
+            
             Spacer()
-
-            VStack(spacing: 16) {
-                Text("Enter the sequence")
-                    .font(.title3.weight(.semibold))
-
-                MonoKeypadSlots(
-                    input: viewModel.userInput,
-                    length: viewModel.currentLength
-                )
-                .padding(.bottom, 4)
-
-                MonoKeypad(
-                    input: Binding(
-                        get: { viewModel.userInput },
-                        set: { viewModel.userInput = $0 }
-                    ),
-                    maxLength: viewModel.currentLength,
-                    onSubmit: { viewModel.submitAnswer() }
-                )
-                .padding(.horizontal, 28)
-            }
-
-            Spacer()
+            BevelKeypad(onDigit: { viewModel.type($0) }, onDelete: { viewModel.deleteDigit() })
+                .padding(.horizontal, 16)
+                .padding(.bottom, 8)
         }
-        .padding(.vertical, 24)
         .modifier(ShakeEffect(animatableData: shakeAmount))
-        .scaleEffect(correctPulse ? 1.03 : 1.0)
-        .animation(.spring(response: 0.2, dampingFraction: 0.5), value: correctPulse)
     }
 
     // MARK: - Round Result
 
     private var roundResultView: some View {
-        let lastResult = viewModel.roundResults.last
-        let isCorrect = lastResult?.correct ?? false
-
-        return VStack(spacing: 24) {
+        VStack(spacing: 10) {
+            AnswerBoxes(entry: viewModel.userInput, length: viewModel.currentLength, tint: Color(red: 0.18, green: 0.83, blue: 0.75), flash: viewModel.lastAnswerCorrect ? .correct : .wrong)
+                .padding(.horizontal, 16)
+                .padding(.top, 60)
+            Text("WHAT WAS IT?")
+                .font(.brand(size: 12, weight: .heavy))
+                .tracking(1.5)
+                .foregroundStyle(OB.fg3)
+            if !viewModel.lastAnswerCorrect {
+                Text(viewModel.targetNumber)
+                    .font(HeroNumber.font(22)).tracking(3)
+                    .foregroundStyle(OB.fg2)
+            }
             Spacer()
-
-            ZStack {
-                Circle()
-                    .fill(AppColors.cardBorder)
-                    .frame(width: 80, height: 80)
-                Image(systemName: isCorrect ? "checkmark.circle.fill" : "xmark.circle.fill")
-                    .font(.system(size: 56))
-                    .foregroundStyle(isCorrect ? AppColors.accent : AppColors.coral)
-            }
-
-            Text(isCorrect ? "Correct!" : "Wrong")
-                .font(.title.weight(.bold))
-
-            if !isCorrect {
-                VStack(spacing: 8) {
-                    Text("The sequence was:")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                    Text(viewModel.currentDigits.map(String.init).joined())
-                        .font(.system(size: 28, weight: .bold, design: .monospaced))
-                        .foregroundStyle(AppColors.teal)
-                    Text("You entered: \(viewModel.userInput)")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            Text("Level \(lastResult?.length ?? 0)")
-                .font(.headline)
-                .foregroundStyle(.secondary)
-
-            Spacer()
-
-            Button {
-                viewModel.continueOrFinish()
-            } label: {
-                Text(isCorrect && viewModel.round < viewModel.maxRounds ? "Next Level" : "See Results")
-                    .accentButton()
-            }
-            .padding(.horizontal, 32)
+            BevelKeypad(onDigit: { viewModel.type($0) }, onDelete: { viewModel.deleteDigit() })
+                .padding(.horizontal, 16)
+                .padding(.bottom, 8)
         }
-        .padding(.vertical, 24)
+        .modifier(ShakeEffect(animatableData: shakeAmount))
+        .overlay { PraisePop(text: viewModel.lastAnswerCorrect ? "PERFECT!" : nil, tint: Color(red: 0.18, green: 0.83, blue: 0.75)) }
     }
 
     // MARK: - Final Results
@@ -508,43 +461,15 @@ struct SequentialMemoryView: View {
         paywallTrigger.recordExerciseCompleted(gameType: .sequentialMemory)
         trainingManager.addTrainingTime(viewModel.durationSeconds)
 
-        let exercise = Exercise(
+        GameResultRecorder.record(
             type: .sequentialMemory,
+            accuracy: viewModel.score,
             difficulty: viewModel.maxCorrectLength,
-            score: viewModel.score,
-            durationSeconds: viewModel.durationSeconds
+            durationSeconds: viewModel.durationSeconds,
+            leaderboardScore: viewModel.maxCorrectLength,
+            user: user,
+            modelContext: modelContext,
+            gameCenter: gameCenterService
         )
-        modelContext.insert(exercise)
-
-        let descriptor = FetchDescriptor<DailySession>(
-            sortBy: [SortDescriptor(\.date, order: .reverse)]
-        )
-        let allSessions = (try? modelContext.fetch(descriptor)) ?? []
-        let session: DailySession
-        if let existing = allSessions.first(where: { Calendar.current.isDateInToday($0.date) }) {
-            session = existing
-        } else {
-            session = DailySession()
-            modelContext.insert(session)
-        }
-        session.addExercise(exercise)
-        user?.updateStreak()
-        NotificationService.shared.cancelStreakRisk()
-        if let streak = user?.currentStreak {
-            NotificationService.shared.scheduleMilestone(streak: streak)
-        }
-
-        if let user {
-            _ = ContentView.awardXP(
-                user: user,
-                score: viewModel.score,
-                difficulty: viewModel.maxCorrectLength,
-                achievementService: achievementService,
-                modelContext: modelContext,
-                gameCenterService: gameCenterService,
-                exerciseType: .sequentialMemory,
-                gameScore: viewModel.maxCorrectLength
-            )
-        }
     }
 }

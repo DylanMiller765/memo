@@ -87,7 +87,7 @@ struct ProgressDashboardView: View {
             || focusModeService.weeklyBlockedMinutes > 0
             || focusModeService.authorizationStatus == .approved
     }
-    private var hasAnyInsightData: Bool { hasBrainInsightData || hasFocusInsightData }
+    private var hasAnyInsightData: Bool { hasFocusInsightData }
 
     // MARK: - Filtered Data
 
@@ -147,11 +147,6 @@ struct ProgressDashboardView: View {
             .navigationTitle("Insights")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(.hidden, for: .navigationBar)
-            .onAppear {
-                if !hasFocusInsightData && hasBrainInsightData {
-                    selectedMode = .brain
-                }
-            }
             .sheet(isPresented: $showingPaywall) {
                 PaywallView()
             }
@@ -162,17 +157,8 @@ struct ProgressDashboardView: View {
         VStack(spacing: 20) {
             insightsHeader
                 .staggeredEntrance(index: 0)
-            insightsModePicker
+            focusInsightsTab()
                 .staggeredEntrance(index: 1)
-
-            switch selectedMode {
-            case .focus:
-                focusInsightsTab()
-                    .staggeredEntrance(index: 2)
-            case .brain:
-                brainInsightsTab
-                    .staggeredEntrance(index: 2)
-            }
         }
     }
 
@@ -215,33 +201,6 @@ struct ProgressDashboardView: View {
         MainScreenTitle(text: "Insights")
     }
 
-    private var insightsModePicker: some View {
-        HStack(spacing: 24) {
-            ForEach(InsightsMode.allCases, id: \.self) { mode in
-                Button {
-                    withAnimation(.snappy(duration: 0.22)) {
-                        selectedMode = mode
-                    }
-                } label: {
-                    Text(mode.rawValue)
-                        .font(.system(size: 15, weight: .bold, design: .rounded))
-                        .foregroundStyle(selectedMode == mode ? .primary : AppColors.textSecondary)
-                        .padding(.vertical, 6)
-                        .overlay(alignment: .bottom) {
-                            Capsule()
-                                .fill(mode.accentColor)
-                                .frame(width: selectedMode == mode ? 20 : 0, height: 2)
-                                .opacity(selectedMode == mode ? 1 : 0)
-                        }
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("\(mode.rawValue) insights")
-                .accessibilityAddTraits(selectedMode == mode ? [.isSelected] : [])
-            }
-
-            Spacer(minLength: 0)
-        }
-    }
 
     // MARK: - Focus Tab
 
@@ -673,21 +632,6 @@ struct ProgressDashboardView: View {
                         .font(.system(size: 12, weight: .black))
                         .foregroundStyle(AppColors.accent)
                 )
-        }
-    }
-
-    private var brainInsightsTab: some View {
-        VStack(spacing: 28) {
-            trendlineSection
-            statsTableSection
-
-            if isProUser {
-                cognitiveDomainsSection
-                personalBestsSection
-                trainingHeatmapSection
-            } else {
-                proSectionsTeaser
-            }
         }
     }
 

@@ -144,148 +144,6 @@ private struct ShareCardSurface<Content: View>: View {
 
 // MARK: - 1. BrainScoreShareCard
 
-struct TikTokBrainScoreCard: View {
-    let brainScore: Int
-    let brainAge: Int
-    let brainType: BrainType
-    let percentile: Int
-    let digitScore: Double
-    let reactionScore: Double
-    let visualScore: Double
-    var userAge: Int = 0
-
-    private var ageColor: Color {
-        switch brainAge {
-        case ...25: return Color(red: 0, green: 0.82, blue: 0.62)
-        case 26...40: return Color(red: 0.25, green: 0.61, blue: 0.98)
-        case 41...55: return Color(red: 1.0, green: 0.76, blue: 0.28)
-        default: return Color(red: 0.98, green: 0.42, blue: 0.35)
-        }
-    }
-
-    private var verdict: String {
-        switch brainAge {
-        case ...20: return "Built different"
-        case 21...25: return "Sharp... for now"
-        case 26...30: return "TikTok hasn't won yet"
-        case 31...35: return "Attention span left the chat"
-        case 36...45: return "More screen time than brain time"
-        case 46...55: return "The doomscrolling is showing"
-        default: return "Brain rot is real"
-        }
-    }
-
-    private var gradient: LinearGradient {
-        if brainAge <= 25 {
-            return LinearGradient(colors: [Color(red: 0, green: 0.18, blue: 0.38), Color(red: 0, green: 0.28, blue: 0.48), Color(red: 0, green: 0.12, blue: 0.25)], startPoint: .topLeading, endPoint: .bottomTrailing)
-        } else if brainAge <= 40 {
-            return LinearGradient(colors: [Color(red: 0.15, green: 0.05, blue: 0.32), Color(red: 0.25, green: 0.10, blue: 0.45), Color(red: 0.10, green: 0.04, blue: 0.20)], startPoint: .topLeading, endPoint: .bottomTrailing)
-        } else {
-            return LinearGradient(colors: [Color(red: 0.32, green: 0.06, blue: 0.06), Color(red: 0.45, green: 0.12, blue: 0.08), Color(red: 0.18, green: 0.04, blue: 0.04)], startPoint: .topLeading, endPoint: .bottomTrailing)
-        }
-    }
-
-    var body: some View {
-        ZStack {
-            // Wrapped-style gradient background
-            gradient
-
-            // Glow orb
-            Circle()
-                .fill(ageColor.opacity(0.15))
-                .blur(radius: 80)
-                .frame(width: 250, height: 250)
-                .offset(y: -60)
-
-            VStack(spacing: 0) {
-                Spacer().frame(height: 40)
-
-                // Mascot
-                Image(brainAge <= 30 ? "mascot-crown" : brainAge >= 50 ? "mascot-low-score" : "mascot-celebrate")
-                    .renderingMode(.original)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(height: 80)
-
-                // Label
-                Text("MY BRAIN AGE")
-                    .font(.system(size: 10, weight: .heavy))
-                    .foregroundStyle(.white.opacity(0.5))
-                    .tracking(5)
-                    .padding(.top, 8)
-
-                // Big number
-                Text("\(brainAge)")
-                    .font(.system(size: 120, weight: .black, design: .rounded))
-                    .foregroundStyle(.white)
-                    .shadow(color: ageColor.opacity(0.6), radius: 30, y: 0)
-                    .minimumScaleFactor(0.6)
-                    .padding(.vertical, -12)
-
-                // Verdict
-                Text(verdict)
-                    .font(.system(size: 20, weight: .black, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.9))
-                    .multilineTextAlignment(.center)
-
-                // Age comparison
-                if userAge > 0 {
-                    let diff = userAge - brainAge
-                    if diff > 0 {
-                        Text("\(diff) years younger than me!")
-                            .font(.system(size: 15, weight: .bold, design: .rounded))
-                            .foregroundStyle(ageColor)
-                            .padding(.top, 6)
-                    } else if diff < 0 {
-                        Text("\(abs(diff)) years older than my real age")
-                            .font(.system(size: 15, weight: .bold, design: .rounded))
-                            .foregroundStyle(ageColor)
-                            .padding(.top, 6)
-                    }
-                }
-
-                Spacer()
-
-                // Domain scores inline
-                HStack(spacing: 16) {
-                    Text("MEM \(Int(digitScore))").foregroundStyle(AppColors.violet)
-                    Text("·").foregroundStyle(.white.opacity(0.2))
-                    Text("SPD \(Int(reactionScore))").foregroundStyle(AppColors.coral)
-                    Text("·").foregroundStyle(.white.opacity(0.2))
-                    Text("VIS \(Int(visualScore))").foregroundStyle(AppColors.sky)
-                }
-                .font(.system(size: 13, weight: .heavy, design: .rounded))
-
-                Text("Better than \(percentile)% of players")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.4))
-                    .padding(.top, 8)
-
-                Spacer().frame(height: 16)
-
-                // CTA
-                Text("What's your Brain Age?")
-                    .font(.system(size: 18, weight: .bold))
-                    .foregroundStyle(.white.opacity(0.7))
-
-                Spacer().frame(height: 8)
-
-                // Branding
-                HStack(spacing: 5) {
-                    Text("🧠")
-                        .font(.system(size: 10))
-                    Text("MEMO")
-                        .font(.system(size: 9, weight: .heavy))
-                        .foregroundStyle(.white.opacity(0.25))
-                        .tracking(3)
-                }
-
-                Spacer().frame(height: 20)
-            }
-        }
-        .frame(width: 360, height: 640)
-    }
-}
 
 // MARK: - 4. ReactionTimeShareCard
 
@@ -634,18 +492,6 @@ struct ExerciseShareCard: View {
 
 // MARK: - Previews
 
-#Preview("Brain Score Card") {
-    TikTokBrainScoreCard(
-        brainScore: 87,
-        brainAge: 23,
-        brainType: .lightningReflex,
-        percentile: 94,
-        digitScore: 82,
-        reactionScore: 95,
-        visualScore: 78
-    )
-}
-
 #Preview("Exercise Card — Dark") {
     ExerciseShareCard(
         exerciseName: "Color Match",
@@ -680,4 +526,19 @@ struct ExerciseShareCard: View {
         ctaText: "Can you beat this?"
     )
     .environment(\.colorScheme, .light)
+}
+
+// MARK: - Render to Image
+
+extension View {
+    @MainActor
+    func renderAsImage(size: CGSize = CGSize(width: 300, height: 400), scale: CGFloat? = nil) -> UIImage {
+        // Detect current color scheme and pass it to the renderer
+        let isDark = UITraitCollection.current.userInterfaceStyle == .dark
+        let content = self.environment(\.colorScheme, isDark ? .dark : .light)
+        let renderer = ImageRenderer(content: content)
+        renderer.proposedSize = .init(size)
+        renderer.scale = scale ?? UIScreen.main.scale
+        return renderer.uiImage ?? UIImage()
+    }
 }

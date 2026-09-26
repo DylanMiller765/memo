@@ -1,209 +1,82 @@
 import SwiftUI
 import SwiftData
-import GameKit
-
-// MARK: - Difficulty
-
-enum MathDifficulty: String, CaseIterable, Identifiable {
-    case easy = "Easy"
-    case medium = "Medium"
-    case hard = "Hard"
-
-    var id: String { rawValue }
-
-    var description: String {
-        switch self {
-        case .easy: return "1-9 × 1-9"
-        case .medium: return "2-12 × 2-12"
-        case .hard: return "5-20 × 5-20"
-        }
-    }
-
-    var range: ClosedRange<Int> {
-        switch self {
-        case .easy: return 1...9
-        case .medium: return 2...12
-        case .hard: return 5...20
-        }
-    }
-
-    var difficultyValue: Int {
-        switch self {
-        case .easy: return 1
-        case .medium: return 2
-        case .hard: return 3
-        }
-    }
-}
-
-// MARK: - Game Phase
-
-enum MSPhase {
-    case setup
-    case playing
-    case finished
-}
-
-// MARK: - Problem
-
-struct MathProblem {
-    let a: Int
-    let b: Int
-    var answer: Int { a * b }
-}
 
 // MARK: - ViewModel
 
+/// Math Sprint: one draining time bank, auto-submitting keypad, problems that
+/// get harder once you pass the qualify line. Score = questions completed.
 @MainActor @Observable
-final class MathSpeedViewModel {
-    var phase: MSPhase = .setup
-    var difficulty: MathDifficulty = .medium
-    var totalProblems: Int = 20
-    var currentProblemIndex: Int = 0
-    var problems: [MathProblem] = []
-    var userAnswer: String = ""
-    var correctCount: Int = 0
-    var wrongCount: Int = 0
-    var results: [(problem: MathProblem, userAnswer: Int?, correct: Bool)] = []
-    var challengeSeed: Int?
-    var startTime: Date?
-    var elapsedSeconds: Double = 0
-    private var timer: Timer?
+final class MathSprintViewModel {
+    private(set) var bank = TimeBank()
+    private(set) var problem: SprintProblem
+    private(set) var entry = ""
+    private(set) var flash: BevelState = .idle
+    private(set) var float: FuseFloat?
+    private(set) var isOver = false
+    private(set) var wrongCount = 0
+    private(set) var started = false
+    private var rng = SystemRandomNumberGenerator()
+    private var lastTick: Date?
+    private(set) var startedAt = Date()
 
-    var currentProblem: MathProblem? {
-        guard currentProblemIndex < problems.count else { return nil }
-        return problems[currentProblemIndex]
+    init() {
+        var seed = SystemRandomNumberGenerator()
+        problem = MathSprintEngine.problem(completed: 0, using: &seed)
     }
 
-    var progress: Double {
-        guard totalProblems > 0 else { return 0 }
-        return Double(currentProblemIndex) / Double(totalProblems)
-    }
+    var completed: Int { bank.completed }
+    var isOvertime: Bool { completed >= MathSprintEngine.qualifyCount }
+    var durationSeconds: Int { Int(Date().timeIntervalSince(startedAt)) }
+    var accuracy: Double { Double(completed) / Double(max(1, completed + wrongCount)) }
 
-    var averageTimePerProblem: Double {
-        guard correctCount + wrongCount > 0 else { return 0 }
-        return elapsedSeconds / Double(correctCount + wrongCount)
-    }
-
-    var score: Double {
-        guard totalProblems > 0 else { return 0 }
-        let accuracy = Double(correctCount) / Double(totalProblems)
-        let speedBonus: Double
-        if averageTimePerProblem <= 2.0 {
-            speedBonus = 1.0
-        } else if averageTimePerProblem >= 8.0 {
-            speedBonus = 0.0
-        } else {
-            speedBonus = (8.0 - averageTimePerProblem) / 6.0
-        }
-        return accuracy * 0.7 + speedBonus * 0.3
-    }
-
-    var durationSeconds: Int {
-        Int(elapsedSeconds)
-    }
-
-    /// Composite leaderboard score: correct × 1000 + speed bonus (faster avg = higher)
-    /// Speed bonus: 999 at ≤1s avg, 0 at ≥10s avg, linear between
-    var leaderboardScore: Int {
-        let speedBonus: Int
-        if averageTimePerProblem <= 1.0 {
-            speedBonus = 999
-        } else if averageTimePerProblem >= 10.0 {
-            speedBonus = 0
-        } else {
-            speedBonus = Int((10.0 - averageTimePerProblem) / 9.0 * 999.0)
-        }
-        return correctCount * 1000 + speedBonus
-    }
-
-    func startGame() {
-        let range = difficulty.range
-        if let seed = challengeSeed {
-            var rng = SeededGenerator(seed: UInt64(seed))
-            problems = (0..<totalProblems).map { _ in
-                MathProblem(
-                    a: Int.random(in: range, using: &rng),
-                    b: Int.random(in: range, using: &rng)
-                )
-            }
-        } else {
-            problems = (0..<totalProblems).map { _ in
-                MathProblem(
-                    a: Int.random(in: range),
-                    b: Int.random(in: range)
-                )
-            }
-        }
-        currentProblemIndex = 0
-        correctCount = 0
+    func start() {
+        bank = TimeBank()
         wrongCount = 0
-        results = []
-        userAnswer = ""
-        startTime = Date.now
-        elapsedSeconds = 0
-        phase = .playing
-        startTimer()
+        entry = ""
+        isOver = false
+        startedAt = Date()
+        lastTick = nil
+        problem = MathSprintEngine.problem(completed: 0, using: &rng)
+        started = true
     }
 
-    func submitAnswer() {
-        guard let problem = currentProblem else { return }
-        let parsed = Int(userAnswer)
-        let isCorrect = parsed == problem.answer
+    func tick(now: Date, frozen: Bool) {
+        defer { lastTick = frozen ? nil : now }
+        guard started, !isOver, !frozen, let last = lastTick else { return }
+        bank.elapse(now.timeIntervalSince(last))
+        if bank.isEmpty { isOver = true }
+    }
 
-        if isCorrect {
-            correctCount += 1
+    func type(_ digit: Int) {
+        guard started, !isOver, flash == .idle, entry.count < problem.digits else { return }
+        entry.append(String(digit))
+        guard entry.count == problem.digits else { return }
+        if Int(entry) == problem.answer {
+            let bonus = bank.correct()
+            let text = bonus.truncatingRemainder(dividingBy: 1) == 0 ? "+\(Int(bonus))" : String(format: "+%.1f", bonus)
+            float = FuseFloat(text: text, positive: true)
+            flash = .correct
             HapticService.correct()
         } else {
+            bank.wrong()
             wrongCount += 1
+            float = FuseFloat(text: "−3", positive: false)
+            flash = .wrong
             HapticService.wrong()
+            if bank.isEmpty { isOver = true }
         }
-
-        results.append((problem: problem, userAnswer: parsed, correct: isCorrect))
-        userAnswer = ""
-        currentProblemIndex += 1
-
-        if currentProblemIndex >= totalProblems {
-            finishGame()
-        }
-    }
-
-    func skipProblem() {
-        guard let problem = currentProblem else { return }
-        wrongCount += 1
-        results.append((problem: problem, userAnswer: nil, correct: false))
-        userAnswer = ""
-        currentProblemIndex += 1
-
-        if currentProblemIndex >= totalProblems {
-            finishGame()
+        let next = MathSprintEngine.problem(completed: bank.completed, using: &rng)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) { [weak self] in
+            guard let self else { return }
+            self.entry = ""
+            self.flash = .idle
+            self.problem = next
         }
     }
 
-    private func finishGame() {
-        stopTimer()
-        HapticService.complete()
-        phase = .finished
-    }
-
-    private func startTimer() {
-        timer?.invalidate()
-        timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                guard let self, let start = self.startTime else { return }
-                self.elapsedSeconds = Date.now.timeIntervalSince(start)
-            }
-        }
-    }
-
-    private func stopTimer() {
-        timer?.invalidate()
-        timer = nil
-    }
-
-    func reset() {
-        stopTimer()
-        phase = .setup
+    func deleteDigit() {
+        guard flash == .idle, !entry.isEmpty else { return }
+        entry.removeLast()
     }
 }
 
@@ -212,327 +85,157 @@ final class MathSpeedViewModel {
 struct MathSpeedView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-    @Environment(AchievementService.self) private var achievementService
     @Environment(TrainingSessionManager.self) private var trainingManager
     @Environment(PaywallTriggerService.self) private var paywallTrigger
-    @Environment(StoreService.self) private var storeService
     @Environment(GameCenterService.self) private var gameCenterService
-    @Environment(DeepLinkRouter.self) private var deepLinkRouter
     @Query private var users: [User]
 
-    /// Skip the setup screen on appear when entering from a Focus unlock.
     var autoStart: Bool = false
+    var mode: GameMode = .train
 
-    @State private var viewModel = MathSpeedViewModel()
-    @State private var showingPaywall = false
-    @State private var isNewPersonalBest = false
-    @State private var shareImage: UIImage?
+    @State private var viewModel = MathSprintViewModel()
     @State private var exerciseSaved = false
+    @State private var isNewPersonalBest = false
     @State private var shakeAmount: CGFloat = 0
-    @State private var correctPulse = false
-    @State private var showingInfo = false
-    @FocusState private var inputFocused: Bool
 
     private var user: User? { users.first }
-    private var isProUser: Bool { storeService.isProUser }
+    private var best: Int { PersonalBestTracker.shared.best(for: .mathSpeed) }
 
     var body: some View {
-        VStack(spacing: 0) {
-            switch viewModel.phase {
-            case .setup:
-                setupView
-                    .transition(.opacity)
-            case .playing:
-                playingView
-                    .transition(.opacity)
-            case .finished:
-                resultsView
-                    .transition(.scale(scale: 0.95).combined(with: .opacity))
-            }
-        }
-        .animation(.easeInOut(duration: 0.3), value: viewModel.phase)
-        .sheet(isPresented: $showingPaywall) { PaywallView(isHighIntent: true) }
-        .navigationTitle("Math Speed")
-        .navigationBarTitleDisplayMode(.inline)
-        .onAppear {
-            if autoStart && viewModel.phase == .setup {
-                Analytics.exerciseStarted(game: ExerciseType.mathSpeed.rawValue)
-                viewModel.startGame()
-            }
-        }
-        .onChange(of: viewModel.phase) { _, newPhase in
-            if newPhase == .finished {
-                SoundService.shared.playComplete()
-                isNewPersonalBest = PersonalBestTracker.shared.record(score: viewModel.correctCount, for: .mathSpeed)
-                if isNewPersonalBest {
-                    Analytics.personalBest(game: ExerciseType.mathSpeed.rawValue, score: viewModel.correctCount)
+        GameScaffold(mode: mode, trainTitle: "Math Sprint", trainBest: best > 0 ? "\(best)" : nil,
+                     glow: viewModel.isOvertime ? Color(red: 0.227, green: 0.102, blue: 0.071) : Color(red: 0.086, green: 0.094, blue: 0.227)) {
+            Group {
+                if !viewModel.started {
+                    intro
+                } else if viewModel.isOver {
+                    if mode.run != nil { Color.clear } else { results }
+                } else {
+                    playing
                 }
-                AdaptiveDifficultyEngine.shared.recordBlock(domain: .mathSpeed, correct: viewModel.correctCount, total: viewModel.totalProblems)
-                // Auto-save so GC gets the score even if user doesn't tap Done
-                saveExercise()
-                let card = ExerciseShareCard(
-                    exerciseName: "Math Speed",
-                    exerciseIcon: "function",
-                    accentColor: AppColors.amber,
-                    mainValue: "\(viewModel.correctCount)",
-                    mainLabel: "Correct",
-                    ratingText: viewModel.score >= 0.9 ? "Math Genius" : viewModel.score >= 0.7 ? "Quick Thinker" : "Keep Practicing",
-                    stats: [
-                        ("Time", String(format: "%.1fs", viewModel.elapsedSeconds)),
-                        ("Avg/Problem", String(format: "%.1fs", viewModel.averageTimePerProblem))
-                    ],
-                    ctaText: "Think you're faster?"
-                )
-                shareImage = card.renderAsImage(size: CGSize(width: 360, height: 640), scale: 3)
             }
-        }
-        .onDisappear {
-            if viewModel.phase == .playing {
-                Analytics.exerciseAbandoned(game: ExerciseType.mathSpeed.rawValue, roundReached: viewModel.currentProblemIndex)
-            }
+            .animation(.easeInOut(duration: 0.35), value: viewModel.isOvertime)
         }
         .onAppear {
-            let level = AdaptiveDifficultyEngine.shared.currentLevel(for: .mathSpeed)
-            switch level {
-            case 1: viewModel.difficulty = .easy
-            case 2...3: viewModel.difficulty = .medium
-            default: viewModel.difficulty = .medium
+            if autoStart && !viewModel.started {
+                Analytics.exerciseStarted(game: ExerciseType.mathSpeed.rawValue)
+                viewModel.start()
             }
+        }
+        .onChange(of: viewModel.completed) { _, completed in
+            mode.run?.report(score: completed)
+        }
+        .onChange(of: viewModel.isOver) { _, over in
+            guard over else { return }
+            isNewPersonalBest = PersonalBestTracker.shared.record(score: viewModel.completed, for: .mathSpeed)
+            if isNewPersonalBest {
+                Analytics.personalBest(game: ExerciseType.mathSpeed.rawValue, score: viewModel.completed)
+            }
+            saveExercise()
+            mode.run?.finish(finalScore: viewModel.completed)
+        }
+        .onChange(of: viewModel.flash) { _, flash in
+            if flash == .wrong { withAnimation(.default) { shakeAmount += 1 } }
         }
     }
 
-    // MARK: - Setup
+    // MARK: Intro (Train mode, first run)
 
-    private var setupView: some View {
-        VStack(spacing: 32) {
+    private var intro: some View {
+        VStack(spacing: 16) {
             Spacer()
-
-            TrainingTileMiniPreview(type: .mathSpeed, color: AppColors.amber, scale: 2.0)
-                .frame(width: 200, height: 140)
-
-            VStack(spacing: 8) {
-                Text("Math Speed")
-                    .font(.title.weight(.bold))
-                Text("Solve multiplication problems as fast as you can")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-
-            // Difficulty picker
-            VStack(spacing: 12) {
-                Text("Difficulty")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.secondary)
-
-                HStack(spacing: 10) {
-                    ForEach(MathDifficulty.allCases) { diff in
-                        Button {
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                viewModel.difficulty = diff
-                            }
-                        } label: {
-                            VStack(spacing: 4) {
-                                Text(diff.rawValue)
-                                    .font(.subheadline.weight(.bold))
-                                Text(diff.description)
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(viewModel.difficulty == diff
-                                        ? AnyShapeStyle(LinearGradient(
-                                            colors: [AppColors.amber.opacity(0.15), AppColors.amber.opacity(0.05)],
-                                            startPoint: .top, endPoint: .bottom))
-                                        : AnyShapeStyle(Color.gray.opacity(0.12)))
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .stroke(viewModel.difficulty == diff
-                                        ? AppColors.amber.opacity(0.4)
-                                        : Color.clear, lineWidth: 1.5)
-                            )
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-            .appCard()
-            .padding(.horizontal)
-
+            Text("7 × 8")
+                .font(HeroNumber.font(56))
+                .foregroundStyle(LinearGradient.hero(Color(red: 0.56, green: 0.69, blue: 1)))
+            Text("Math Sprint")
+                .font(.brand(size: 28, weight: .black))
+                .foregroundStyle(OB.fg)
+            Text("Answer before the bar runs out.\nRight answers add time. Wrong ones cost 3 seconds.")
+                .font(.brand(size: 15, weight: .semibold))
+                .foregroundStyle(OB.fg2)
+                .multilineTextAlignment(.center)
             Spacer()
-
             Button {
                 Analytics.exerciseStarted(game: ExerciseType.mathSpeed.rawValue)
-                viewModel.startGame()
+                viewModel.start()
             } label: {
                 Text("Start")
-                    .accentButton()
+                    .font(.brand(size: 17, weight: .heavy))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity, minHeight: 56)
+                    .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(OB.accent))
             }
-            .pulsingWhenIdle()
-            .accessibilityHint("Starts the exercise")
-            .padding(.horizontal, 32)
+            .buttonStyle(.plain)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 12)
         }
-        .padding(.vertical, 24)
-        .overlay(alignment: .topTrailing) {
-            Button { showingInfo = true } label: {
-                Image(systemName: "questionmark.circle.fill")
-                    .font(.title3)
-                    .foregroundStyle(.white.opacity(0.3))
+        .padding(.horizontal, 20)
+    }
+
+    // MARK: Playing
+
+    private var playing: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
+            VStack(spacing: 0) {
+                FuseBar(fraction: viewModel.bank.fraction, overtime: viewModel.isOvertime, floatText: viewModel.float)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 22)
+                if viewModel.isOvertime {
+                    Label("\(viewModel.completed)", systemImage: "flame.fill")
+                        .font(.brand(size: 15, weight: .black))
+                        .foregroundStyle(OB.amber)
+                        .padding(.top, 14)
+                        .contentTransition(.numericText())
+                }
+                Text(viewModel.problem.text)
+                    .font(HeroNumber.font(56))
+                    .foregroundStyle(OB.fg)
+                    .minimumScaleFactor(0.6)
+                    .lineLimit(1)
+                    .padding(.horizontal, 20)
+                    .padding(.top, viewModel.isOvertime ? 18 : 40)
+                    .modifier(ShakeEffect(animatableData: shakeAmount))
+                AnswerBoxes(entry: viewModel.entry, length: viewModel.problem.digits,
+                            tint: viewModel.isOvertime ? OB.amber : OB.accent, flash: viewModel.flash)
+                    .padding(.horizontal, 40)
+                    .padding(.top, 14)
+                Spacer(minLength: 12)
+                BevelKeypad(onDigit: { viewModel.type($0) }, onDelete: { viewModel.deleteDigit() })
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 8)
             }
-            .padding(16)
-        }
-        .sheet(isPresented: $showingInfo) {
-            ExerciseInfoSheet(type: .mathSpeed)
-                .presentationDetents([.medium])
+            .onChange(of: context.date) { _, now in
+                viewModel.tick(now: now, frozen: mode.run?.isFrozen ?? false)
+            }
         }
     }
 
-    // MARK: - Playing
+    // MARK: Results (Train mode)
 
-    private var playingView: some View {
-        VStack(spacing: 16) {
-            // Header
-            HStack {
-                Text("\(viewModel.currentProblemIndex + 1) / \(viewModel.totalProblems)")
-                    .font(.headline.weight(.bold).monospacedDigit())
-                    .foregroundStyle(AppColors.amber)
-                    .contentTransition(.numericText())
-                Spacer()
-                Text(String(format: "%.1fs", viewModel.elapsedSeconds))
-                    .font(.caption.weight(.medium).monospacedDigit())
-                    .foregroundStyle(.secondary)
-                    .contentTransition(.numericText())
-                    .accessibilityLabel("Elapsed time: \(Int(viewModel.elapsedSeconds)) seconds")
-            }
-            .padding(.horizontal)
-
-            ProgressView(value: viewModel.progress)
-                .tint(AppColors.amber)
-                .padding(.horizontal)
-
-            // Score indicator
-            HStack(spacing: 16) {
-                Label("\(viewModel.correctCount)", systemImage: "checkmark.circle.fill")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(AppColors.teal)
-                    .contentTransition(.numericText())
-                Label("\(viewModel.wrongCount)", systemImage: "xmark.circle.fill")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(AppColors.coral)
-                    .contentTransition(.numericText())
-            }
-
-            Spacer()
-
-            // Problem display
-            if let problem = viewModel.currentProblem {
-                VStack(spacing: 12) {
-                    Text("\(problem.a) × \(problem.b)")
-                        .font(.system(size: 56, weight: .bold, design: .monospaced))
-                        .accessibilityLabel("\(problem.a) times \(problem.b)")
-                        .foregroundStyle(AppColors.accent)
-
-                    Text("= ?")
-                        .font(.system(size: 32, weight: .bold, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            Spacer()
-
-            // Input — large mono answer display + custom keypad
-            VStack(spacing: 12) {
-                Text(viewModel.userAnswer.isEmpty ? "—" : viewModel.userAnswer)
-                    .font(.system(size: 56, weight: .heavy, design: .monospaced))
-                    .foregroundStyle(viewModel.userAnswer.isEmpty ? AppColors.textTertiary : AppColors.amber)
-                    .frame(height: 70)
-                    .contentTransition(.numericText())
-
-                MonoKeypad(
-                    input: Binding(
-                        get: { viewModel.userAnswer },
-                        set: { viewModel.userAnswer = $0 }
-                    ),
-                    submitEnabled: !viewModel.userAnswer.isEmpty,
-                    onSubmit: { viewModel.submitAnswer() }
-                )
-                .padding(.horizontal, 28)
-
-                Button {
-                    viewModel.skipProblem()
-                } label: {
-                    Text("Skip")
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 24)
-                        .padding(.vertical, 8)
-                }
-                .padding(.top, 4)
-            }
-            .padding(.bottom, 16)
-        }
-        .padding(.vertical, 16)
-        .modifier(ShakeEffect(animatableData: shakeAmount))
-        .scaleEffect(correctPulse ? 1.03 : 1.0)
-        .animation(.spring(response: 0.2, dampingFraction: 0.5), value: correctPulse)
-        .onChange(of: viewModel.currentProblemIndex) { _, _ in
-            if let last = viewModel.results.last {
-                if last.correct {
-                    correctPulse = true
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { correctPulse = false }
-                } else {
-                    withAnimation(.default) { shakeAmount += 1 }
-                }
-            }
-        }
-        .onAppear { inputFocused = true }
-    }
-
-    // MARK: - Results
-
-    private var resultsView: some View {
-        return GameResultView(
-            gameTitle: "Math Speed",
+    private var results: some View {
+        GameResultView(
+            gameTitle: "Math Sprint",
             gameIcon: "multiply.circle.fill",
             accentColor: AppColors.amber,
-            mainScore: viewModel.correctCount,
-            scoreLabel: "CORRECT",
-            ratingText: viewModel.score >= 0.9 ? "Math Genius!" : viewModel.score >= 0.7 ? "Quick Thinker!" : "Keep Practicing!",
+            mainScore: viewModel.completed,
+            scoreLabel: "QUESTIONS",
+            ratingText: viewModel.completed >= 20 ? "Elite" : viewModel.completed >= 14 ? "Quick Thinker" : "Keep Practicing",
             stats: [
-                (label: "Correct", value: "\(viewModel.correctCount) / \(viewModel.totalProblems)"),
-                (label: "Time", value: String(format: "%.1fs", viewModel.elapsedSeconds)),
-                (label: "Avg per Problem", value: String(format: "%.1fs", viewModel.averageTimePerProblem))
+                (label: "Accuracy", value: "\(Int(viewModel.accuracy * 100))%"),
+                (label: "Time", value: viewModel.durationSeconds.durationString)
             ],
             isNewPersonalBest: isNewPersonalBest,
-            personalBest: PersonalBestTracker.shared.best(for: .mathSpeed),
+            personalBest: best,
             exerciseType: .mathSpeed,
-            leaderboardScore: viewModel.leaderboardScore,
+            leaderboardScore: viewModel.completed,
             onPlayAgain: {
                 exerciseSaved = false
-                viewModel.reset()
-                viewModel.startGame()
+                viewModel.start()
             },
-            onDone: {
-                saveExercise()
-                dismiss()
-            }
+            onDone: { dismiss() }
         )
     }
 
-    private func generateShareCard() {
-        guard let image = shareImage else { return }
-        let activityVC = UIActivityViewController(activityItems: [image], applicationActivities: nil)
-        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-           let root = windowScene.windows.first?.rootViewController {
-            root.present(activityVC, animated: true)
-        }
-    }
-
-    // MARK: - Save
+    // MARK: Save
 
     private func saveExercise() {
         guard !exerciseSaved else { return }
@@ -540,43 +243,15 @@ struct MathSpeedView: View {
         paywallTrigger.recordExerciseCompleted(gameType: .mathSpeed)
         trainingManager.addTrainingTime(viewModel.durationSeconds)
 
-        let exercise = Exercise(
+        GameResultRecorder.record(
             type: .mathSpeed,
-            difficulty: viewModel.difficulty.difficultyValue,
-            score: viewModel.score,
-            durationSeconds: viewModel.durationSeconds
+            accuracy: viewModel.accuracy,
+            difficulty: viewModel.completed,
+            durationSeconds: viewModel.durationSeconds,
+            leaderboardScore: viewModel.completed,
+            user: user,
+            modelContext: modelContext,
+            gameCenter: gameCenterService
         )
-        modelContext.insert(exercise)
-
-        let descriptor = FetchDescriptor<DailySession>(
-            sortBy: [SortDescriptor(\.date, order: .reverse)]
-        )
-        let allSessions = (try? modelContext.fetch(descriptor)) ?? []
-        let session: DailySession
-        if let existing = allSessions.first(where: { Calendar.current.isDateInToday($0.date) }) {
-            session = existing
-        } else {
-            session = DailySession()
-            modelContext.insert(session)
-        }
-        session.addExercise(exercise)
-        user?.updateStreak()
-        NotificationService.shared.cancelStreakRisk()
-        if let streak = user?.currentStreak {
-            NotificationService.shared.scheduleMilestone(streak: streak)
-        }
-
-        if let user {
-            _ = ContentView.awardXP(
-                user: user,
-                score: viewModel.score,
-                difficulty: viewModel.difficulty.difficultyValue,
-                achievementService: achievementService,
-                modelContext: modelContext,
-                gameCenterService: gameCenterService,
-                exerciseType: .mathSpeed,
-                gameScore: viewModel.leaderboardScore
-            )
-        }
     }
 }

@@ -275,21 +275,6 @@ final class NotificationService: Sendable {
 
     // MARK: - Brain Score Follow-Up
 
-    func scheduleBrainScoreFollowUp(currentScore: Int) {
-        let content = UNMutableNotificationContent()
-        content.title = "Brain Score: \(currentScore)"
-        content.body = "Nice receipt. One more quick game before the feed gets another shot."
-        content.sound = .default
-        content.userInfo = ["deepLink": "memo://train"]
-
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 24 * 60 * 60, repeats: false)
-        let request = UNNotificationRequest(
-            identifier: "brainScoreFollowUp",
-            content: content,
-            trigger: trigger
-        )
-        UNUserNotificationCenter.current().add(request)
-    }
 
     func cancelStreakRisk() {
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["streak_risk"])

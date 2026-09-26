@@ -21,7 +21,6 @@ private struct CachedLeaderboardSnapshot {
 struct LeaderboardView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Query private var users: [User]
-    @Query(sort: \BrainScoreResult.date, order: .reverse) private var brainScores: [BrainScoreResult]
     @Query(sort: \Exercise.completedAt, order: .reverse) private var exercises: [Exercise]
     @Environment(GameCenterService.self) private var gameCenterService
     @Environment(FocusModeService.self) private var focusModeService
@@ -59,21 +58,20 @@ struct LeaderboardView: View {
     }
 
     private static func displayedFilters(for category: LeaderboardCategory) -> [LeaderboardTimeFilter] {
-        category == .focusBlocking ? [.today, .thisWeek] : [.today, .thisWeek, .allTime]
+        category == .focusBlocking ? [.today, .thisWeek] : [.thisWeek, .allTime]
     }
 
     private static func defaultFilter(for category: LeaderboardCategory) -> LeaderboardTimeFilter {
-        category == .focusBlocking ? .thisWeek : .today
+        .thisWeek
     }
 
     private static func normalizedFilter(_ filter: LeaderboardTimeFilter, for category: LeaderboardCategory) -> LeaderboardTimeFilter {
         displayedFilters(for: category).contains(filter) ? filter : defaultFilter(for: category)
     }
 
+    /// Games first (Train-tab order), then Streak and Focus.
     private var displayedCategories: [LeaderboardCategory] {
-        [.focusBlocking] + LeaderboardCategory.allCases.filter {
-            $0 != .focusBlocking && $0 != .wordScramble && $0 != .memoryChain
-        }
+        LeaderboardCategory.allCases
     }
     private var categoryRows: [GridItem] {
         [
@@ -790,12 +788,6 @@ struct LeaderboardView: View {
 
     private func formatScoreCompact(_ score: Int) -> String {
         switch renderedCategory {
-        case .colorMatch, .speedMatch:
-            let accuracy = score / 1000
-            return "\(accuracy)%"
-        case .mathSpeed:
-            let correct = score / 1000
-            return "\(correct)/20"
         case .focusBlocking:
             let h = score / 60
             let m = score % 60
@@ -808,28 +800,11 @@ struct LeaderboardView: View {
     private func formatScore(_ score: Int) -> String {
         switch renderedCategory {
         case .streak: return "\(score)d"
-        case .reactionTime: return "\(score)ms"
-        case .colorMatch, .speedMatch:
-            // Composite score: accuracy% × 1000 + timeBonus
-            let accuracy = score / 1000
-            if accuracy == 0 { return "0%" }
-            let timeBonus = score % 1000
-            let seconds = max(0, 999 - timeBonus)
-            return "\(accuracy)% · \(seconds)s"
-        case .visualMemory, .dualNBack: return "Lvl \(score)"
+        case .reactionTime: return "\(score) ms"
+        case .visualMemory: return "Lvl \(score)"
         case .numberMemory: return "\(score) digits"
-        case .mathSpeed:
-            // Composite score: correctCount × 1000 + speedBonus
-            let correct = score / 1000
-            let speedBonus = score % 1000
-            let avgTime = max(1, Int((10.0 - Double(speedBonus) / 999.0 * 9.0)))
-            return "\(correct)/20 · \(avgTime)s"
-        case .wordScramble:
-            // Composite score: wordsCorrect × 1000 + timeBonus
-            let primary = score / 1000
-            return "\(primary)/10"
-        case .memoryChain:
-            return "\(score)"
+        case .chimpTest: return "\(score) numbers"
+        case .mathSprint, .colorMatch: return "\(score)"
         case .focusBlocking:
             let h = score / 60
             let m = score % 60
@@ -1121,36 +1096,22 @@ struct LeaderboardView: View {
     /// Get the user's local best score for a leaderboard category
     private func localScore(for category: LeaderboardCategory, timeFilter: LeaderboardTimeFilter) -> Int? {
         switch category {
-        case .brainScore:
-            return brainScores.first?.brainScore
-        case .xp:
-            return user?.totalXP
         case .streak:
             return user?.longestStreak
         case .reactionTime:
             // PersonalBestTracker stores inverted (1000-ms), but leaderboard is raw ms now
             let inverted = PersonalBestTracker.shared.best(for: .reactionTime)
             return inverted > 0 ? (1000 - inverted) : nil
-        case .colorMatch:
-            return PersonalBestTracker.shared.best(for: .colorMatch)
-        case .speedMatch:
-            return PersonalBestTracker.shared.best(for: .speedMatch)
         case .visualMemory:
             return PersonalBestTracker.shared.best(for: .visualMemory)
         case .numberMemory:
             return PersonalBestTracker.shared.best(for: .sequentialMemory)
-        case .mathSpeed:
-            return PersonalBestTracker.shared.best(for: .mathSpeed)
-        case .dualNBack:
-            return PersonalBestTracker.shared.best(for: .dualNBack)
-        case .wordScramble:
-            return PersonalBestTracker.shared.best(for: .wordScramble)
-        case .memoryChain:
-            return PersonalBestTracker.shared.best(for: .memoryChain)
         case .chimpTest:
             return PersonalBestTracker.shared.best(for: .chimpTest)
-        case .verbalMemory:
-            return PersonalBestTracker.shared.best(for: .verbalMemory)
+        case .mathSprint:
+            return PersonalBestTracker.shared.best(for: .mathSpeed)
+        case .colorMatch:
+            return PersonalBestTracker.shared.best(for: .colorMatch)
         case .focusBlocking:
             return focusModeService.focusLeagueScore(for: timeFilter)
         }
@@ -1277,69 +1238,46 @@ private extension LeaderboardCategory {
 
     var heroSubtitle: String {
         switch self {
-        case .focusBlocking: return "Most protected Focus time wins."
-        case .brainScore: return "Overall training score."
-        case .xp: return "Most training XP wins."
-        case .streak: return "Longest training streak wins."
-        case .reactionTime: return "Fastest reaction time wins."
-        case .colorMatch: return "Accuracy under pressure."
-        case .speedMatch: return "Speed and precision."
-        case .visualMemory: return "Highest grid level wins."
-        case .numberMemory: return "Longest sequence wins."
-        case .mathSpeed: return "Fast math, clean answers."
-        case .dualNBack: return "Highest N-back level wins."
-        case .wordScramble: return "Most words solved wins."
-        case .memoryChain: return "Longest memory chain wins."
-        case .chimpTest: return "Highest level reached wins."
-        case .verbalMemory: return "Longest clean streak wins."
+        case .focusBlocking: return "Most protected Focus time ranks first."
+        case .streak: return "Longest training streak ranks first."
+        case .reactionTime: return "Fastest 5-round average ranks first."
+        case .colorMatch: return "Most correct before the bar runs out."
+        case .visualMemory: return "Highest grid level ranks first."
+        case .numberMemory: return "Longest number recalled ranks first."
+        case .mathSprint: return "Most questions before the bar runs out."
+        case .chimpTest: return "Most numbers in a completed level."
         }
     }
 
     var pickerMetric: String {
         switch self {
         case .focusBlocking: return "Protected Focus time"
-        case .brainScore: return "Overall cognitive score"
-        case .xp: return "Total training XP"
         case .streak: return "Longest daily run"
         case .reactionTime: return "Lowest average milliseconds"
-        case .colorMatch: return "Best color accuracy"
-        case .speedMatch: return "Best speed-match accuracy"
+        case .colorMatch: return "Most correct"
         case .visualMemory: return "Highest grid level"
-        case .numberMemory: return "Longest digit sequence"
-        case .mathSpeed: return "Correct answers plus speed"
-        case .dualNBack: return "Highest N-back level"
-        case .wordScramble: return "Words solved out of 10"
-        case .memoryChain: return "Longest recalled chain"
-        case .chimpTest: return "Highest board level"
-        case .verbalMemory: return "Longest no-mistake streak"
+        case .numberMemory: return "Longest number"
+        case .mathSprint: return "Most questions"
+        case .chimpTest: return "Most numbers"
         }
     }
 
     var compactMetric: String {
         switch self {
         case .focusBlocking: return "Protected time"
-        case .brainScore: return "Overall score"
-        case .xp: return "Total XP"
         case .streak: return "Daily run"
         case .reactionTime: return "Lower ms"
-        case .colorMatch: return "Accuracy"
-        case .speedMatch: return "Accuracy"
+        case .colorMatch: return "Correct"
         case .visualMemory: return "Grid level"
         case .numberMemory: return "Digits"
-        case .mathSpeed: return "Correct + speed"
-        case .dualNBack: return "N-back level"
-        case .wordScramble: return "Words solved"
-        case .memoryChain: return "Chain length"
-        case .chimpTest: return "Board level"
-        case .verbalMemory: return "Clean streak"
+        case .mathSprint: return "Questions"
+        case .chimpTest: return "Numbers"
         }
     }
 
     var shelfTitle: String {
         switch self {
         case .focusBlocking: return "Focus"
-        case .brainScore: return "Brain"
-        case .xp: return "XP"
         case .streak: return "Streak"
         default: return shortTitle
         }
@@ -1348,30 +1286,23 @@ private extension LeaderboardCategory {
     var shortTitle: String {
         switch self {
         case .focusBlocking: return "Focus"
-        case .brainScore: return "Brain"
         case .reactionTime: return "Reaction"
         case .colorMatch: return "Color"
-        case .speedMatch: return "Speed"
         case .visualMemory: return "Visual"
         case .numberMemory: return "Number"
-        case .mathSpeed: return "Math"
-        case .dualNBack: return "N-Back"
-        case .wordScramble: return "Words"
-        case .memoryChain: return "Chain"
+        case .mathSprint: return "Math"
         case .chimpTest: return "Chimp"
-        case .verbalMemory: return "Verbal"
         default: return rawValue
         }
     }
 
     var chipWidth: CGFloat {
         switch self {
-        case .xp: return 78
-        case .streak, .colorMatch, .speedMatch, .visualMemory, .numberMemory, .mathSpeed, .memoryChain, .chimpTest:
+        case .streak, .colorMatch, .visualMemory, .numberMemory, .mathSprint, .chimpTest:
             return 96
-        case .focusBlocking, .brainScore, .wordScramble, .verbalMemory:
+        case .focusBlocking:
             return 104
-        case .reactionTime, .dualNBack:
+        case .reactionTime:
             return 112
         }
     }
@@ -1379,20 +1310,13 @@ private extension LeaderboardCategory {
     var pickerTint: Color {
         switch self {
         case .focusBlocking: return AppColors.periwinkle
-        case .brainScore: return AppColors.violet
-        case .xp: return AppColors.amber
         case .streak: return AppColors.coral
         case .reactionTime: return AppColors.sky
         case .colorMatch: return AppColors.rose
-        case .speedMatch: return AppColors.accent
         case .visualMemory: return AppColors.teal
         case .numberMemory: return AppColors.mint
-        case .mathSpeed: return AppColors.indigo
-        case .dualNBack: return AppColors.electricViolet
-        case .wordScramble: return AppColors.coral
-        case .memoryChain: return AppColors.periwinkle
+        case .mathSprint: return AppColors.indigo
         case .chimpTest: return AppColors.amber
-        case .verbalMemory: return AppColors.violet
         }
     }
 
@@ -1403,8 +1327,7 @@ private extension LeaderboardTimeFilter {
         switch self {
         case .today: return "Today"
         case .thisWeek: return "Week"
-        case .allTime: return "All Time"
-        case .thisMonth: return "30d"
+        case .allTime: return "All time"
         }
     }
 }

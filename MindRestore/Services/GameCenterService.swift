@@ -12,82 +12,71 @@ final class GameCenterService {
 
     // MARK: - Leaderboard IDs
 
-    static let brainScoreLeaderboard = "com.dylanmiller.mindrestore.leaderboard.brainScore"
-    static let xpLeaderboard = "com.dylanmiller.mindrestore.leaderboard.xp"
+    // v2 boards (2.1.6): fresh boards for the new scoring — levels, digits,
+    // numbers, correct answers and average ms. Game Center keeps the best score,
+    // and the Compete tab reads them as This week / All time.
+    static let visualMemoryLeaderboard = "com.dylanmiller.mindrestore.leaderboard.v2.visualMemory"
+    static let numberMemoryLeaderboard = "com.dylanmiller.mindrestore.leaderboard.v2.numberMemory"
+    static let chimpTestLeaderboard = "com.dylanmiller.mindrestore.leaderboard.v2.chimpTest"
+    static let mathSprintLeaderboard = "com.dylanmiller.mindrestore.leaderboard.v2.mathSprint"
+    static let colorMatchLeaderboard = "com.dylanmiller.mindrestore.leaderboard.v2.colorMatch"
+    static let reactionTimeLeaderboard = "com.dylanmiller.mindrestore.leaderboard.v2.reactionTime"
     static let longestStreakLeaderboard = "com.dylanmiller.mindrestore.leaderboard.longestStreak"
-    static let reactionTimeLeaderboard = "com.dylanmiller.mindrestore.leaderboard.reactionTime"
-    static let colorMatchLeaderboard = "com.dylanmiller.mindrestore.leaderboard.colorMatch"
-    static let speedMatchLeaderboard = "com.dylanmiller.mindrestore.leaderboard.speedMatch"
-    static let visualMemoryLeaderboard = "com.dylanmiller.mindrestore.leaderboard.visualMemory"
-    static let numberMemoryLeaderboard = "com.dylanmiller.mindrestore.leaderboard.numberMemory"
-    static let mathSpeedLeaderboard = "com.dylanmiller.mindrestore.leaderboard.mathSpeed"
-    static let dualNBackLeaderboard = "com.dylanmiller.mindrestore.leaderboard.dualNBack"
-    static let wordScrambleLeaderboard = "com.dylanmiller.mindrestore.leaderboard.wordScramble"
-    static let memoryChainLeaderboard = "com.dylanmiller.mindrestore.leaderboard.memoryChain"
-    static let chimpTestLeaderboard = "com.dylanmiller.mindrestore.leaderboard.chimpTest"
-    static let verbalMemoryLeaderboard = "com.dylanmiller.mindrestore.leaderboard.verbalMemory"
     static let focusBlockingLeaderboard = "com.dylanmiller.mindrestore.leaderboard.focusBlocking"
     static let focusBlockingDailyLeaderboard = "com.dylanmiller.mindrestore.leaderboard.focusBlocking.today"
     static let focusBlockingWeeklyLeaderboard = "com.dylanmiller.mindrestore.leaderboard.focusBlocking.weekly"
 
-    // MARK: - Monthly Leaderboards
-    //
-    // Convention: every lifetime leaderboard ID has a sibling monthly-reset leaderboard
-    // with `.monthly` appended. Configure these in App Store Connect as recurring
-    // leaderboards with reset cadence = monthly. Reporting via `reportScore(...)` below
-    // submits to BOTH the lifetime and monthly IDs in one call so all callsites get
-    // monthly support automatically.
-    //
-    // MANUAL STEP for user: in App Store Connect, create a monthly recurring leaderboard
-    // for each ID below (lifetime ID + ".monthly"), e.g.
-    //   com.dylanmiller.mindrestore.leaderboard.brainScore.monthly
-    //   com.dylanmiller.mindrestore.leaderboard.xp.monthly
-    //   ...
-    static let monthlySuffix = ".monthly"
+    /// Per-game leaderboard for the six active games; nil for everything else.
+    static func gameLeaderboardID(for type: ExerciseType) -> String? {
+        switch type {
+        case .visualMemory: return visualMemoryLeaderboard
+        case .sequentialMemory: return numberMemoryLeaderboard
+        case .chimpTest: return chimpTestLeaderboard
+        case .mathSpeed: return mathSprintLeaderboard
+        case .colorMatch: return colorMatchLeaderboard
+        case .reactionTime: return reactionTimeLeaderboard
+        default: return nil
+        }
+    }
 
-    static func monthlyLeaderboardID(for category: LeaderboardCategory) -> String {
-        leaderboardID(for: category) + monthlySuffix
+    /// Categories for the six active games, in Train-tab order.
+    static let activeGameCategories: [LeaderboardCategory] = [
+        .visualMemory, .numberMemory, .chimpTest, .mathSprint, .colorMatch, .reactionTime
+    ]
+
+    /// The local player's best (lowest) rank across the six game boards this week.
+    func bestWeeklyRank() async -> Int? {
+        guard isAuthenticated else { return nil }
+        var best: Int?
+        for category in Self.activeGameCategories {
+            let result = await loadLeaderboardEntries(category: category, timeFilter: .thisWeek, range: NSRange(location: 1, length: 1))
+            if let rank = result.localPlayerEntry?.rank, rank > 0 {
+                best = min(best ?? rank, rank)
+            }
+        }
+        return best
     }
 
     // MARK: - Achievement ID Mapping
 
-    static func gameCenterAchievementID(for type: AchievementType) -> String {
-        "com.dylanmiller.mindrestore.achievement.\(type.rawValue)"
-    }
 
     // MARK: - Category → Leaderboard ID
 
     static func leaderboardID(for category: LeaderboardCategory) -> String {
         switch category {
-        case .brainScore: return brainScoreLeaderboard
-        case .xp: return xpLeaderboard
-        case .streak: return longestStreakLeaderboard
-        case .reactionTime: return reactionTimeLeaderboard
-        case .colorMatch: return colorMatchLeaderboard
-        case .speedMatch: return speedMatchLeaderboard
         case .visualMemory: return visualMemoryLeaderboard
         case .numberMemory: return numberMemoryLeaderboard
-        case .mathSpeed: return mathSpeedLeaderboard
-        case .dualNBack: return dualNBackLeaderboard
-        case .wordScramble: return wordScrambleLeaderboard
-        case .memoryChain: return memoryChainLeaderboard
         case .chimpTest: return chimpTestLeaderboard
-        case .verbalMemory: return verbalMemoryLeaderboard
+        case .mathSprint: return mathSprintLeaderboard
+        case .colorMatch: return colorMatchLeaderboard
+        case .reactionTime: return reactionTimeLeaderboard
+        case .streak: return longestStreakLeaderboard
         case .focusBlocking: return focusBlockingLeaderboard
         }
     }
 
     static func leaderboardID(for category: LeaderboardCategory, timeFilter: LeaderboardTimeFilter) -> String {
-        if category == .focusBlocking {
-            return focusLeaderboardID(for: timeFilter)
-        }
-
-        switch timeFilter {
-        case .today, .thisWeek, .allTime:
-            return leaderboardID(for: category)
-        case .thisMonth:
-            return monthlyLeaderboardID(for: category)
-        }
+        category == .focusBlocking ? focusLeaderboardID(for: timeFilter) : leaderboardID(for: category)
     }
 
     static func focusLeaderboardID(for timeFilter: LeaderboardTimeFilter) -> String {
@@ -95,10 +84,6 @@ final class GameCenterService {
         case .today:
             return focusBlockingDailyLeaderboard
         case .thisWeek, .allTime:
-            return focusBlockingWeeklyLeaderboard
-        case .thisMonth:
-            // Focus League exposes Today and Week only; keep month routed away
-            // from the legacy encoded monthly board if it is ever requested.
             return focusBlockingWeeklyLeaderboard
         }
     }
@@ -108,14 +93,9 @@ final class GameCenterService {
         timeFilter: LeaderboardTimeFilter
     ) -> GKLeaderboard.TimeScope {
         switch timeFilter {
-        case .today:
-            return .today
-        case .thisWeek:
-            return .week
-        case .thisMonth:
-            return category == .focusBlocking ? .week : .allTime
-        case .allTime:
-            return .allTime
+        case .today: return .today
+        case .thisWeek: return .week
+        case .allTime: return .allTime
         }
     }
 
@@ -167,8 +147,6 @@ final class GameCenterService {
             return LeaderboardResult(entries: [], localPlayerEntry: nil, totalPlayerCount: 0)
         }
 
-        // Monthly uses a separate, monthly-reset leaderboard ID and queries it as `.allTime`
-        // (the leaderboard itself resets monthly server-side via App Store Connect config).
         // Focus League uses distinct direct-minute leaderboards for Today and Week.
         let leaderboardID = Self.leaderboardID(for: category, timeFilter: timeFilter)
         let timeScope = Self.gameCenterTimeScope(for: category, timeFilter: timeFilter)
@@ -232,12 +210,7 @@ final class GameCenterService {
     func reportScore(_ score: Int, leaderboardID: String) {
         guard isAuthenticated else { return }
 
-        // Submit to lifetime + monthly in one call. If the monthly leaderboard isn't yet
-        // configured in App Store Connect, the call fails and is logged — lifetime
-        // submissions are not affected because Game Center accepts/rejects each ID
-        // independently inside a single submitScore call.
-        let monthlyID = leaderboardID + Self.monthlySuffix
-        let ids = [leaderboardID, monthlyID]
+        let ids = [leaderboardID]
 
         Task {
             do {
@@ -285,27 +258,7 @@ final class GameCenterService {
 
     // MARK: - Achievement Reporting
 
-    func reportAchievement(_ id: String, percentComplete: Double) {
-        guard isAuthenticated else { return }
 
-        Task {
-            let achievement = GKAchievement(identifier: id)
-            achievement.percentComplete = percentComplete
-            achievement.showsCompletionBanner = true
-
-            do {
-                try await GKAchievement.report([achievement])
-            } catch {
-                print("[GameCenterService] Failed to report achievement: \(error.localizedDescription)")
-            }
-        }
-    }
-
-    /// Report an app achievement as fully completed to Game Center.
-    func reportAchievement(for type: AchievementType) {
-        let gcID = Self.gameCenterAchievementID(for: type)
-        reportAchievement(gcID, percentComplete: 100.0)
-    }
 
     // MARK: - Show Game Center UI
 
@@ -323,10 +276,6 @@ final class GameCenterService {
         presentGameCenterVC(state: .leaderboards, leaderboardID: leaderboardID, timeScope: timeScope)
     }
 
-    func showAchievements() {
-        guard isAuthenticated else { return }
-        presentGameCenterVC(state: .achievements)
-    }
 
     // MARK: - Private
 

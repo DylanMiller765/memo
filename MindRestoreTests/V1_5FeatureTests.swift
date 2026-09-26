@@ -291,114 +291,19 @@ final class FocusUnlockSlotTests: XCTestCase {
     func testFocusUnlockSlotCopyStaysShortAndNative() {
         XCTAssertEqual(FocusUnlockSlotCopy.eyebrow, "MEMO'S BOOTH")
         XCTAssertEqual(FocusUnlockSlotCopy.headline, "NO FEED TIL YOU TRAIN")
-        // "win" is banned for the core loop (AGENTS.md) — play / finish / complete.
-        XCTAssertEqual(FocusUnlockSlotCopy.subhead, "Play a brain game. Get your time back.")
+        XCTAssertEqual(FocusUnlockSlotCopy.pendingHeadline, "YOUR SPIN")
         XCTAssertEqual(FocusUnlockSlotCopy.idleStatus, "spin when you're ready")
         XCTAssertEqual(FocusUnlockSlotCopy.spinningStatus, "MEMO'S PICKING")
-        XCTAssertEqual(FocusUnlockSlotCopy.landedStatus(for: nil), "LOCKED IN")
+        XCTAssertEqual(FocusUnlockSlotCopy.freePassStatus, "FREE PASS · 10 MIN")
 
-        // Landed lines rotate from a per-tier pool but always lead with the
-        // game name so the stake is unambiguous.
-        let game = TrainingGameCatalog.focusUnlockGames.first!
-        XCTAssertTrue(FocusUnlockSlotCopy.landedStatus(for: game).hasPrefix("NUMBER MEMORY. "))
+        // The landed line names the game and the pass line, so the stake is unambiguous.
+        XCTAssertEqual(FocusUnlockSlotCopy.landedStatus(for: .visualMemory), "VISUAL MEMORY · REACH LV 4")
     }
 
     func testFocusUnlockCatalogMatchesVisibleTrainGames() {
         let games = TrainingGameCatalog.focusUnlockGames
-
-        XCTAssertEqual(games.map(\.type), [
-            .sequentialMemory,
-            .visualMemory,
-            .chunkingTraining,
-            .verbalMemory,
-            .reactionTime,
-            .mathSpeed,
-            .speedMatch,
-            .colorMatch,
-            .dualNBack,
-            .chimpTest,
-        ])
-        XCTAssertEqual(games.map(\.title), [
-            "Number Memory",
-            "Visual Memory",
-            "Chunking",
-            "Verbal Memory",
-            "Reaction Time",
-            "Math Speed",
-            "Speed Match",
-            "Color Match",
-            "Dual N-Back",
-            "Chimp Test",
-        ])
-    }
-
-    func testFocusUnlockCompletionGateOnlyGrantsForSelectedGame() {
-        XCTAssertTrue(
-            FocusUnlockCompletionGate.shouldGrant(
-                completedGameRawValue: ExerciseType.colorMatch.rawValue,
-                expectedGame: .colorMatch
-            )
-        )
-
-        XCTAssertFalse(
-            FocusUnlockCompletionGate.shouldGrant(
-                completedGameRawValue: ExerciseType.reactionTime.rawValue,
-                expectedGame: .colorMatch
-            )
-        )
-
-        XCTAssertFalse(
-            FocusUnlockCompletionGate.shouldGrant(
-                completedGameRawValue: ExerciseType.colorMatch.rawValue,
-                expectedGame: nil
-            )
-        )
-
-        XCTAssertFalse(
-            FocusUnlockCompletionGate.shouldGrant(
-                completedGameRawValue: "not-a-game",
-                expectedGame: .colorMatch
-            )
-        )
-    }
-}
-
-final class FocusUnlockPayoutTests: XCTestCase {
-    func testPayoutMinutesMatchTierPerGame() {
-        XCTAssertEqual(FocusUnlockPayout.minutes(for: .dualNBack), 20)
-        XCTAssertEqual(FocusUnlockPayout.minutes(for: .chimpTest), 20)
-        XCTAssertEqual(FocusUnlockPayout.minutes(for: .sequentialMemory), 10)
-        XCTAssertEqual(FocusUnlockPayout.minutes(for: .visualMemory), 10)
-        XCTAssertEqual(FocusUnlockPayout.minutes(for: .chunkingTraining), 10)
-        XCTAssertEqual(FocusUnlockPayout.minutes(for: .verbalMemory), 10)
-        XCTAssertEqual(FocusUnlockPayout.minutes(for: .reactionTime), 5)
-        XCTAssertEqual(FocusUnlockPayout.minutes(for: .mathSpeed), 5)
-        XCTAssertEqual(FocusUnlockPayout.minutes(for: .speedMatch), 5)
-        XCTAssertEqual(FocusUnlockPayout.minutes(for: .colorMatch), 5)
-    }
-
-    func testWeightedSpinSelectsTierByRoll() {
-        let games = TrainingGameCatalog.focusUnlockGames
-
-        let quick = FocusUnlockPayout.weightedRandomGame(from: games, roll: 0.10)
-        XCTAssertEqual(quick.map { FocusUnlockPayout.tier(for: $0.type) }, .quick)
-
-        let solid = FocusUnlockPayout.weightedRandomGame(from: games, roll: 0.75)
-        XCTAssertEqual(solid.map { FocusUnlockPayout.tier(for: $0.type) }, .solid)
-
-        let jackpot = FocusUnlockPayout.weightedRandomGame(from: games, roll: 0.95)
-        XCTAssertEqual(jackpot.map { FocusUnlockPayout.tier(for: $0.type) }, .jackpot)
-    }
-
-    func testWeightedSpinFallsBackWhenTierPoolIsEmpty() {
-        let onlyQuickGames = TrainingGameCatalog.speedGames
-        let landed = FocusUnlockPayout.weightedRandomGame(from: onlyQuickGames, roll: 0.95)
-        XCTAssertNotNil(landed)
-        XCTAssertEqual(landed.map { FocusUnlockPayout.tier(for: $0.type) }, .quick)
-    }
-
-    func testWeightedSpinEmptyPoolReturnsNil() {
-        XCTAssertNil(FocusUnlockPayout.weightedRandomGame(from: [], roll: 0.5))
+        XCTAssertEqual(games.map(\.type), [.visualMemory, .sequentialMemory, .chimpTest, .mathSpeed, .colorMatch, .reactionTime])
+        XCTAssertEqual(games.map(\.title), ["Visual Memory", "Number Memory", "Chimp Test", "Math Sprint", "Color Match", "Reaction Time"])
     }
 }
 

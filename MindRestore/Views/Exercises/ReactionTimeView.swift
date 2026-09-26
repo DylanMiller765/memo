@@ -1,112 +1,112 @@
 import SwiftUI
 import SwiftData
-import GameKit
 
-// MARK: - Game Phase
+// MARK: - ViewModel
 
-enum RTPhase {
+enum RTPhase: Equatable {
     case setup
     case waiting
     case ready
-    case tooEarly
+    case tooSoon
     case result
     case finished
 }
 
-// MARK: - ViewModel
-
+/// Reaction Time: 5 valid rounds, score = average ms (lower is better).
+/// A false start shows "TOO SOON!" and replays the same round.
 @MainActor @Observable
 final class ReactionTimeViewModel {
-    var phase: RTPhase = .setup
-    var rounds: Int = 5
-    var currentRound: Int = 0
-    var reactionTimes: [Int] = []
-    var lastReactionMs: Int = 0
-    var reactionStartTime: Date?
-    var startTime: Date?
-    var challengeSeed: Int?
-    private var rng: SeededGenerator?
-    private var waitTimer: Timer?
+    static let rounds = 5
+
+    private(set) var phase: RTPhase = .setup
+    private(set) var reactionTimes: [Int] = []
+    private(set) var lastReactionMs = 0
+    private(set) var startTime: Date?
+    private var goAt: Date?
+    /// Bumped whenever a scheduled step becomes stale (tap, freeze, restart).
+    private var generation = 0
+    private var isFrozen = false
+
+    var validRounds: Int { reactionTimes.count }
 
     var averageMs: Int {
         guard !reactionTimes.isEmpty else { return 0 }
         return reactionTimes.reduce(0, +) / reactionTimes.count
     }
 
-    var bestMs: Int {
-        reactionTimes.min() ?? 0
-    }
+    var bestMs: Int { reactionTimes.min() ?? 0 }
 
-    var score: Double {
+    /// 200 ms or less = 1.0, 500 ms+ = 0.0.
+    var accuracy: Double {
         let avg = Double(averageMs)
-        if avg <= 0 { return 0 }
-        // 200ms or less = 1.0, 500ms+ = 0.0
+        guard avg > 0 else { return 0 }
         return max(0, min(1, (500 - avg) / 300))
     }
 
     var durationSeconds: Int {
-        guard let start = startTime else { return 0 }
-        return Int(Date.now.timeIntervalSince(start))
+        guard let startTime else { return 0 }
+        return Int(Date.now.timeIntervalSince(startTime))
     }
 
-    var ratingText: String {
-        let avg = averageMs
-        if avg < 200 { return "Lightning Fast!" }
-        if avg < 250 { return "Excellent!" }
-        if avg < 300 { return "Great Reflexes!" }
-        if avg < 350 { return "Good!" }
-        if avg < 400 { return "Average" }
-        return "Keep Practicing!"
+    static func verdict(for ms: Int) -> String {
+        if ms < 250 { return "LIGHTNING ⚡" }
+        if ms < 320 { return "QUICK" }
+        if ms < 400 { return "SOLID" }
+        return "SLOW"
     }
 
-    func startGame() {
+    func start() {
         reactionTimes = []
-        currentRound = 0
-        startTime = Date.now
-        if let seed = challengeSeed {
-            rng = SeededGenerator(seed: UInt64(seed))
-        } else {
-            rng = nil
-        }
+        lastReactionMs = 0
+        startTime = .now
         startRound()
     }
 
-    func startRound() {
+    func tap() {
+        switch phase {
+        case .waiting:
+            generation += 1
+            HapticService.wrong()
+            phase = .tooSoon
+            schedule(after: 0.8) { $0.startRound() }
+        case .ready:
+            guard let goAt else { return }
+            generation += 1
+            let ms = Int(Date.now.timeIntervalSince(goAt) * 1000)
+            lastReactionMs = ms
+            reactionTimes.append(ms)
+            HapticService.tap()
+            phase = .result
+            schedule(after: 1.2) { $0.nextOrFinish() }
+        default:
+            break
+        }
+    }
+
+    /// Backgrounding cancels the pending "go green" and replays the round from "wait…" on return.
+    func setFrozen(_ frozen: Bool) {
+        guard frozen != isFrozen else { return }
+        isFrozen = frozen
+        generation += 1
+        guard !frozen else { return }
+        switch phase {
+        case .waiting, .ready, .tooSoon: startRound()
+        case .result: nextOrFinish()
+        default: break
+        }
+    }
+
+    private func startRound() {
+        goAt = nil
         phase = .waiting
-        let delay: Double
-        if var r = rng {
-            delay = Double.random(in: 1.5...4.0, using: &r)
-            rng = r
-        } else {
-            delay = Double.random(in: 1.5...4.0)
-        }
-        waitTimer?.invalidate()
-        waitTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
-            Task { @MainActor in
-                self?.phase = .ready
-                self?.reactionStartTime = Date.now
-            }
+        schedule(after: Double.random(in: 1.5...4.0)) { vm in
+            vm.goAt = .now
+            vm.phase = .ready
         }
     }
 
-    func tappedDuringWait() {
-        waitTimer?.invalidate()
-        HapticService.wrong()
-        phase = .tooEarly
-    }
-
-    func tappedOnGreen() {
-        guard let start = reactionStartTime else { return }
-        let ms = Int(Date.now.timeIntervalSince(start) * 1000)
-        lastReactionMs = ms
-        reactionTimes.append(ms)
-        currentRound += 1
-        HapticService.tap()
-        phase = .result
-    }
-
-    func nextOrFinish() {
-        if currentRound >= rounds {
+    private func nextOrFinish() {
+        if validRounds >= Self.rounds {
             HapticService.complete()
             phase = .finished
         } else {
@@ -114,9 +114,12 @@ final class ReactionTimeViewModel {
         }
     }
 
-    func reset() {
-        waitTimer?.invalidate()
-        phase = .setup
+    private func schedule(after delay: Double, _ step: @escaping (ReactionTimeViewModel) -> Void) {
+        let token = generation
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+            guard let self, self.generation == token, !self.isFrozen else { return }
+            step(self)
+        }
     }
 }
 
@@ -125,310 +128,204 @@ final class ReactionTimeViewModel {
 struct ReactionTimeView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-    @Environment(AchievementService.self) private var achievementService
     @Environment(TrainingSessionManager.self) private var trainingManager
     @Environment(PaywallTriggerService.self) private var paywallTrigger
-    @Environment(StoreService.self) private var storeService
     @Environment(GameCenterService.self) private var gameCenterService
-    @Environment(DeepLinkRouter.self) private var deepLinkRouter
     @Query private var users: [User]
 
-    /// When true, skip the setup screen on appear and jump straight into the
-    /// game after a brief "get ready" overlay. Used for Focus unlock launches
-    /// where the user already pressed "Train" — landing on a Tap-to-Begin
-    /// screen is one step too many.
     var autoStart: Bool = false
+    var mode: GameMode = .train
 
     @State private var viewModel = ReactionTimeViewModel()
-    @State private var showingPaywall = false
-    @State private var isNewPersonalBest = false
-    @State private var shareImage: UIImage?
     @State private var exerciseSaved = false
-    @State private var showingInfo = false
+    @State private var isNewPersonalBest = false
 
     private var user: User? { users.first }
-    private var isProUser: Bool { storeService.isProUser }
+    /// PersonalBestTracker stores Reaction Time inverted (1000 − ms) so higher is better.
+    private var bestMs: Int {
+        let inverted = PersonalBestTracker.shared.best(for: .reactionTime)
+        return inverted > 0 ? 1000 - inverted : 0
+    }
+
+    private var isGreen: Bool { viewModel.phase == .ready || viewModel.phase == .result }
+    private var isArena: Bool { ![.setup, .finished].contains(viewModel.phase) }
 
     var body: some View {
-        VStack(spacing: 0) {
-            switch viewModel.phase {
-            case .setup:
-                setupView
-                    .transition(.opacity)
-            case .waiting:
-                waitingView
-                    .transition(.opacity)
-            case .ready:
-                goView
-                    .transition(.opacity)
-            case .tooEarly:
-                tooEarlyView
-                    .transition(.opacity)
-            case .result:
-                roundResultView
-                    .transition(.opacity)
-            case .finished:
-                resultsView
-                    .transition(.scale(scale: 0.95).combined(with: .opacity))
+        GameScaffold(mode: mode, trainTitle: "Reaction Time", trainBest: bestMs > 0 ? "\(bestMs)ms" : nil,
+                     glow: .clear, backdrop: isArena ? AnyView(arenaBackground) : nil) {
+            Group {
+                switch viewModel.phase {
+                case .setup:
+                    intro
+                case .finished:
+                    if mode.run != nil { Color.clear } else { results }
+                default:
+                    arena
+                }
             }
         }
-        .animation(.easeInOut(duration: 0.3), value: viewModel.phase)
-        .sheet(isPresented: $showingPaywall) { PaywallView(isHighIntent: true) }
-        .navigationTitle("Reaction Time")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar(viewModel.phase == .waiting || viewModel.phase == .ready || viewModel.phase == .tooEarly ? .hidden : .automatic, for: .tabBar)
-        .toolbar(viewModel.phase == .waiting || viewModel.phase == .ready || viewModel.phase == .tooEarly ? .hidden : .automatic, for: .navigationBar)
         .onAppear {
             if autoStart && viewModel.phase == .setup {
                 Analytics.exerciseStarted(game: ExerciseType.reactionTime.rawValue)
-                viewModel.startGame()
+                viewModel.start()
             }
         }
-        .onDisappear {
-            if viewModel.phase != .setup && viewModel.phase != .finished {
-                Analytics.exerciseAbandoned(game: ExerciseType.reactionTime.rawValue, roundReached: viewModel.currentRound)
-            }
+        .onChange(of: mode.run?.isFrozen ?? false) { _, frozen in
+            viewModel.setFrozen(frozen)
         }
-        .onChange(of: viewModel.phase) { _, newPhase in
-            if newPhase == .finished {
-                SoundService.shared.playComplete()
-                let invertedScore = viewModel.averageMs > 0 ? (1000 - viewModel.averageMs) : 0
-                isNewPersonalBest = PersonalBestTracker.shared.record(score: invertedScore, for: .reactionTime)
-                if isNewPersonalBest { Analytics.personalBest(game: ExerciseType.reactionTime.rawValue, score: invertedScore) }
-                // Auto-save so GC gets the score even if user doesn't tap Done
-                saveExercise()
-                // Generate share card image
-                let card = ReactionTimeShareCard(
-                    averageMs: viewModel.averageMs,
-                    bestMs: viewModel.bestMs,
-                    ratingText: viewModel.ratingText,
-                    roundTimes: viewModel.reactionTimes
-                )
-                shareImage = card.renderAsImage(size: CGSize(width: 360, height: 640), scale: 3)
+        .onChange(of: viewModel.validRounds) { _, rounds in
+            guard rounds > 0 else { return }
+            mode.run?.reportRound(averageMs: viewModel.averageMs, roundsPlayed: rounds)
+        }
+        .onChange(of: viewModel.phase) { _, phase in
+            guard phase == .finished else { return }
+            let average = viewModel.averageMs
+            isNewPersonalBest = PersonalBestTracker.shared.record(score: 1000 - average, for: .reactionTime)
+            if isNewPersonalBest {
+                Analytics.personalBest(game: ExerciseType.reactionTime.rawValue, score: average)
             }
+            saveExercise()
+            mode.run?.finish(finalScore: average)
         }
     }
 
-    // MARK: - Setup
+    // MARK: Intro (Train mode, first run)
 
-    private var setupView: some View {
-        VStack(spacing: 32) {
+    private var intro: some View {
+        VStack(spacing: 16) {
             Spacer()
-
-            TrainingTileMiniPreview(type: .reactionTime, color: AppColors.coral, scale: 2.0)
-                .frame(width: 200, height: 140)
-
-            VStack(spacing: 8) {
-                Text("Reaction Time")
-                    .font(.title.weight(.bold))
-                Text("Tap as fast as you can when the screen turns green")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-
-            VStack(alignment: .leading, spacing: 12) {
-                infoRow(icon: "hand.tap", text: "Wait for the green screen, then tap immediately")
-                infoRow(icon: "exclamationmark.triangle", text: "Don't tap too early or it won't count")
-                infoRow(icon: "chart.line.downtrend.xyaxis", text: "Lower times = faster reactions")
-            }
-            .appCard()
-            .padding(.horizontal)
-
+            Text("⚡")
+                .font(.system(size: 56))
+            Text("Reaction Time")
+                .font(.brand(size: 28, weight: .black))
+                .foregroundStyle(OB.fg)
+            Text("Tap the moment the screen turns green.\n5 rounds. Tap early and the round replays.")
+                .font(.brand(size: 15, weight: .semibold))
+                .foregroundStyle(OB.fg2)
+                .multilineTextAlignment(.center)
             Spacer()
-
             Button {
                 Analytics.exerciseStarted(game: ExerciseType.reactionTime.rawValue)
-                viewModel.startGame()
+                viewModel.start()
             } label: {
                 Text("Start")
-                    .accentButton()
+                    .font(.brand(size: 17, weight: .heavy))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity, minHeight: 56)
+                    .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(OB.accent))
             }
-            .pulsingWhenIdle()
-            .accessibilityHint("Starts the exercise")
-            .padding(.horizontal, 32)
+            .buttonStyle(.plain)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 12)
         }
-        .padding(.vertical, 24)
-        .overlay(alignment: .topTrailing) {
-            Button { showingInfo = true } label: {
-                Image(systemName: "questionmark.circle.fill")
-                    .font(.title3)
-                    .foregroundStyle(.white.opacity(0.3))
-            }
-            .padding(16)
-        }
-        .sheet(isPresented: $showingInfo) {
-            ExerciseInfoSheet(type: .reactionTime)
-                .presentationDetents([.medium])
-        }
+        .padding(.horizontal, 20)
     }
 
-    private func infoRow(icon: String, text: String) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.body.weight(.semibold))
-                .foregroundStyle(AppColors.coral)
-                .frame(width: 24)
-            Text(text)
-                .font(.subheadline)
-        }
+    // MARK: Arena
+
+    private var arenaBackground: some View {
+        let colors = isGreen
+            ? [Color(red: 0.36, green: 1.0, blue: 0.61), Color(red: 0.09, green: 0.76, blue: 0.40), Color(red: 0.04, green: 0.54, blue: 0.28)]
+            : [Color(red: 1, green: 0.35, blue: 0.29), Color(red: 0.70, green: 0.15, blue: 0.12), Color(red: 0.48, green: 0.09, blue: 0.07)]
+        return RadialGradient(colors: colors, center: .center, startRadius: 0, endRadius: 560)
     }
 
-    // MARK: - Waiting (Red/Dark)
-
-    private var waitingView: some View {
-        AppColors.reactionWait
-            .ignoresSafeArea()
-            .overlay(
-                VStack(spacing: 24) {
-                    Text("Round \(viewModel.currentRound + 1) of \(viewModel.rounds)")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.white.opacity(0.5))
-                        .contentTransition(.numericText())
-
-                    Text("Wait for green...")
-                        .font(.title.weight(.bold))
-                        .foregroundStyle(.white)
-                }
-            )
-            .contentShape(Rectangle())
-            .onTapGesture {
-                viewModel.tappedDuringWait()
-            }
-    }
-
-    // MARK: - Go (Green)
-
-    private var goView: some View {
-        AppColors.reactionGo
-            .ignoresSafeArea()
-            .overlay(
-                VStack(spacing: 24) {
-                    Image(systemName: "hand.tap.fill")
-                        .font(.system(size: 48))
-                        .foregroundStyle(.white)
-
-                    Text("TAP!")
-                        .font(.system(size: 48, weight: .bold))
-                        .foregroundStyle(.white)
-                }
-                .allowsHitTesting(false)
-            )
-            .contentShape(Rectangle())
-            .onTapGesture {
-                viewModel.tappedOnGreen()
-            }
-    }
-
-    // MARK: - Too Early
-
-    private var tooEarlyView: some View {
-        AppColors.reactionTooEarly
-            .ignoresSafeArea()
-            .overlay(
-                VStack(spacing: 20) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 48))
-                        .foregroundStyle(.white)
-
-                    Text("Too Early!")
-                        .font(.title.weight(.bold))
-                        .foregroundStyle(.white)
-                    Text("Wait for the green screen before tapping")
-                        .font(.subheadline)
-                        .foregroundStyle(.white.opacity(0.7))
-
-                    Button {
-                        viewModel.startRound()
-                    } label: {
-                        Text("Try Again")
-                            .font(.headline.weight(.bold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 32)
-                            .padding(.vertical, 14)
-                            .background(.white.opacity(0.25), in: Capsule())
-                    }
-                    .padding(.top, 8)
-                }
-            )
-    }
-
-    // MARK: - Round Result
-
-    private var roundResultView: some View {
-        VStack(spacing: 24) {
+    private var arena: some View {
+        VStack(spacing: 0) {
             Spacer()
-
-            Text("\(viewModel.lastReactionMs)")
-                .font(.system(size: 72, weight: .bold, design: .monospaced))
-                .foregroundStyle(AppColors.accent)
-                .contentTransition(.numericText())
-                .accessibilityLabel("Reaction time: \(viewModel.lastReactionMs) milliseconds")
-
-            Text("milliseconds")
-                .font(.title3.weight(.medium))
-                .foregroundStyle(.secondary)
-                .accessibilityHidden(true)
-
-            Text("Round \(viewModel.currentRound) of \(viewModel.rounds)")
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
-                .contentTransition(.numericText())
-
+            center
             Spacer()
-
-            Button {
-                viewModel.nextOrFinish()
-            } label: {
-                Text(viewModel.currentRound >= viewModel.rounds ? "See Results" : "Next Round")
-                    .accentButton()
-            }
-            .padding(.horizontal, 32)
+            Text(footer)
+                .font(.brand(size: 15, weight: .heavy))
+                .foregroundStyle(.white.opacity(0.85))
+                .padding(.bottom, 28)
+                .contentTransition(.numericText())
         }
-        .padding(.vertical, 24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .contentShape(Rectangle())
+        .onTapGesture { viewModel.tap() }
+        .accessibilityAddTraits(.isButton)
+        .accessibilityLabel(viewModel.phase == .ready ? "Tap now" : "Wait for green")
     }
 
-    // MARK: - Final Results
+    @ViewBuilder private var center: some View {
+        switch viewModel.phase {
+        case .tooSoon:
+            Text("TOO SOON!")
+                .font(HeroNumber.font(48))
+                .foregroundStyle(.white)
+        case .result:
+            VStack(spacing: 6) {
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text(verbatim: "\(viewModel.lastReactionMs)")
+                        .font(HeroNumber.font(72))
+                    Text("ms")
+                        .font(HeroNumber.font(28))
+                }
+                .foregroundStyle(.white)
+                Text(ReactionTimeViewModel.verdict(for: viewModel.lastReactionMs))
+                    .font(.system(size: 26, weight: .heavy).italic())
+                    .foregroundStyle(.white)
+                    .rotationEffect(.degrees(-4))
+                roundDots.padding(.top, 14)
+            }
+            .accessibilityElement(children: .combine)
+        default:
+            VStack(spacing: 22) {
+                Text(viewModel.phase == .ready ? "TAP!" : "wait…")
+                    .font(HeroNumber.font(64))
+                    .foregroundStyle(.white)
+                roundDots
+            }
+        }
+    }
 
-    private var resultsView: some View {
-        return GameResultView(
+    private var roundDots: some View {
+        HStack(spacing: 8) {
+            ForEach(0..<ReactionTimeViewModel.rounds, id: \.self) { i in
+                Circle()
+                    .fill(.white.opacity(i < viewModel.validRounds ? 1 : 0.35))
+                    .frame(width: 9, height: 9)
+            }
+        }
+        .accessibilityHidden(true)
+    }
+
+    private var footer: String {
+        switch viewModel.phase {
+        case .result: "avg so far \(viewModel.averageMs)ms"
+        case .tooSoon: " "
+        default: "tap when it turns green"
+        }
+    }
+
+    // MARK: Results (Train mode)
+
+    private var results: some View {
+        GameResultView(
             gameTitle: "Reaction Time",
             gameIcon: "bolt.fill",
             accentColor: AppColors.coral,
             mainScore: viewModel.averageMs,
             scoreLabel: "MILLISECONDS",
-            ratingText: viewModel.ratingText,
+            ratingText: ReactionTimeViewModel.verdict(for: viewModel.averageMs).capitalized,
             stats: [
                 (label: "Average", value: "\(viewModel.averageMs) ms"),
-                (label: "Best", value: "\(viewModel.bestMs) ms"),
-                (label: "Rounds", value: "\(viewModel.reactionTimes.count)")
+                (label: "Best", value: "\(viewModel.bestMs) ms")
             ],
             isNewPersonalBest: isNewPersonalBest,
-            personalBest: PersonalBestTracker.shared.best(for: .reactionTime),
+            personalBest: bestMs,
             exerciseType: .reactionTime,
             leaderboardScore: viewModel.averageMs,
             onPlayAgain: {
                 exerciseSaved = false
-                viewModel.reset()
-                viewModel.startGame()
+                viewModel.start()
             },
-            onDone: {
-                saveExercise()
-                dismiss()
-            }
+            onDone: { dismiss() }
         )
     }
 
-    private func generateShareCard() {
-        guard let image = shareImage else { return }
-        let activityVC = UIActivityViewController(activityItems: [image], applicationActivities: nil)
-        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-           let root = windowScene.windows.first?.rootViewController {
-            root.present(activityVC, animated: true)
-        }
-    }
-
-    // MARK: - Save
+    // MARK: Save
 
     private func saveExercise() {
         guard !exerciseSaved else { return }
@@ -436,43 +333,15 @@ struct ReactionTimeView: View {
         paywallTrigger.recordExerciseCompleted(gameType: .reactionTime)
         trainingManager.addTrainingTime(viewModel.durationSeconds)
 
-        let exercise = Exercise(
+        GameResultRecorder.record(
             type: .reactionTime,
+            accuracy: viewModel.accuracy,
             difficulty: 1,
-            score: viewModel.score,
-            durationSeconds: viewModel.durationSeconds
+            durationSeconds: viewModel.durationSeconds,
+            leaderboardScore: viewModel.averageMs,
+            user: user,
+            modelContext: modelContext,
+            gameCenter: gameCenterService
         )
-        modelContext.insert(exercise)
-
-        let descriptor = FetchDescriptor<DailySession>(
-            sortBy: [SortDescriptor(\.date, order: .reverse)]
-        )
-        let allSessions = (try? modelContext.fetch(descriptor)) ?? []
-        let session: DailySession
-        if let existing = allSessions.first(where: { Calendar.current.isDateInToday($0.date) }) {
-            session = existing
-        } else {
-            session = DailySession()
-            modelContext.insert(session)
-        }
-        session.addExercise(exercise)
-        user?.updateStreak()
-        NotificationService.shared.cancelStreakRisk()
-        if let streak = user?.currentStreak {
-            NotificationService.shared.scheduleMilestone(streak: streak)
-        }
-
-        if let user {
-            _ = ContentView.awardXP(
-                user: user,
-                score: viewModel.score,
-                difficulty: 1,
-                achievementService: achievementService,
-                modelContext: modelContext,
-                gameCenterService: gameCenterService,
-                exerciseType: .reactionTime,
-                gameScore: viewModel.averageMs
-            )
-        }
     }
 }

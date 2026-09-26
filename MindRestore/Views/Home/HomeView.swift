@@ -6,17 +6,17 @@ struct HomeView: View {
     @Environment(StoreService.self) private var storeService
     @Environment(TrainingSessionManager.self) private var trainingManager
     @Environment(PaywallTriggerService.self) private var paywallTrigger
+    @Environment(GameCenterService.self) private var gameCenterService
     @Query private var users: [User]
     @Query(sort: \DailySession.date, order: .reverse) private var sessions: [DailySession]
-    @Query private var achievements: [Achievement]
     @Query private var exercises: [Exercise]
 
     @Binding var selectedTab: Int
     @State private var viewModel = HomeViewModel()
     @State private var showingPaywall = false
-    @State private var showingAssessment = false
     @State private var showingFreezeInfo = false
     @State private var cachedTodayExerciseCount: Int = 0
+    @State private var weeklyRank: Int?
 
     init(selectedTab: Binding<Int>) {
         _selectedTab = selectedTab
@@ -28,7 +28,7 @@ struct HomeView: View {
     }
 
     private var user: User? { users.first }
-    private var isNewUser: Bool { sessions.count <= 1 && (user?.totalXP ?? 0) < 100 }
+    private var isNewUser: Bool { sessions.count <= 1 && exercises.count < 3 }
 
     private func lastPlayedText(for type: ExerciseType) -> String? {
         guard let lastExercise = exercises.first(where: { $0.type == type }) else { return nil }
@@ -90,23 +90,6 @@ struct HomeView: View {
             .sheet(isPresented: $showingPaywall) {
                 PaywallView()
             }
-            .fullScreenCover(isPresented: $showingAssessment) {
-                NavigationStack {
-                    BrainAssessmentView()
-                        .toolbar {
-                            ToolbarItem(placement: .topBarLeading) {
-                                Button {
-                                    showingAssessment = false
-                                } label: {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .font(.title3)
-                                        .foregroundStyle(.secondary)
-                                }
-                                .accessibilityLabel("Close")
-                            }
-                        }
-                }
-            }
             .onAppear {
                 viewModel.refresh(user: user, sessions: sessions)
                 refreshTodayExerciseCount()
@@ -114,53 +97,8 @@ struct HomeView: View {
             .onChange(of: exercises.count) {
                 refreshTodayExerciseCount()
             }
+            .task { weeklyRank = await gameCenterService.bestWeeklyRank() }
         }
-    }
-
-    // MARK: - Level Bar
-
-    private func levelBar(_ user: User) -> some View {
-        HStack(spacing: 12) {
-            ZStack {
-                Circle()
-                    .fill(AppColors.accent.opacity(0.20))
-                    .frame(width: 44, height: 44)
-                Text("\(user.level)")
-                    .font(.system(size: 18, weight: .bold, design: .rounded))
-                    .foregroundStyle(AppColors.accent)
-                    .contentTransition(.numericText())
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text(user.levelName)
-                        .font(.subheadline.weight(.bold))
-
-                    Spacer()
-
-                    Text("\(user.totalXP) XP")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(AppColors.accent)
-                        .contentTransition(.numericText())
-                }
-
-                // XP Progress bar
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(AppColors.accent.opacity(0.20))
-                            .frame(height: 6)
-
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(AppColors.accent)
-                            .frame(width: max(4, geo.size.width * user.xpProgress), height: 6)
-                            .animation(.spring(response: 0.5), value: user.xpProgress)
-                    }
-                }
-                .frame(height: 6)
-            }
-        }
-        .glowingCard(color: AppColors.accent, intensity: 0.15)
     }
 
     // MARK: - Mascot Hero Section
@@ -219,9 +157,9 @@ struct HomeView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(greeting)
                     .mainScreenTitleStyle(size: 30, lineLimit: 2, minimumScaleFactor: 0.72)
-                if let user {
-                    Text("Level \(user.level) \u{00B7} \(user.levelName)")
-                        .font(.caption)
+                if let weeklyRank {
+                    Text("#\(weeklyRank) this week")
+                        .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                 }
             }

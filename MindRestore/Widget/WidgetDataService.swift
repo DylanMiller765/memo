@@ -12,61 +12,28 @@ enum WidgetDataService {
 
     private enum Key {
         static let streak       = "widget_streak"
-        static let level        = "widget_level"
-        static let levelName    = "widget_levelName"
-        static let totalXP      = "widget_totalXP"
-        static let xpForNextLevel = "widget_xpForNextLevel"
         static let exercisesToday = "widget_exercisesToday"
-        static let dailyGoal    = "widget_dailyGoal"
         static let trainedToday = "widget_trainedToday"
-        static let brainScore   = "widget_brainScore"
         static let lastUpdated  = "widget_lastUpdated"
     }
 
-    // MARK: - Write
+    // MARK: - Write (called from main app)
 
-    static func updateWidgetData(
-        streak: Int,
-        level: Int,
-        levelName: String,
-        xp: Int,
-        xpForNextLevel: Int = 0,
-        exercisesToday: Int,
-        dailyGoal: Int,
-        brainScore: Int = 0,
-        trainedToday: Bool
-    ) {
+    static func updateWidgetData(streak: Int, exercisesToday: Int, trainedToday: Bool) {
         guard let defaults = UserDefaults(suiteName: suiteName) else { return }
         defaults.set(streak, forKey: Key.streak)
-        defaults.set(level, forKey: Key.level)
-        defaults.set(levelName, forKey: Key.levelName)
-        defaults.set(xp, forKey: Key.totalXP)
-        defaults.set(xpForNextLevel, forKey: Key.xpForNextLevel)
         defaults.set(exercisesToday, forKey: Key.exercisesToday)
-        defaults.set(dailyGoal, forKey: Key.dailyGoal)
-        defaults.set(brainScore, forKey: Key.brainScore)
         defaults.set(trainedToday, forKey: Key.trainedToday)
         defaults.set(Date().timeIntervalSince1970, forKey: Key.lastUpdated)
 
-        // Only reload widgets if the shared defaults actually persisted.
-        // When the App Group is not configured in Xcode capabilities the
-        // synchronize call returns false and reloadAllTimelines() can hang.
-        if defaults.synchronize() {
-            WidgetCenter.shared.reloadAllTimelines()
-        }
+        WidgetCenter.shared.reloadAllTimelines()
     }
 
     // MARK: - Read (used by widget timeline provider)
 
     struct Snapshot {
         var streak: Int
-        var level: Int
-        var levelName: String
-        var totalXP: Int
-        var xpForNextLevel: Int
         var exercisesToday: Int
-        var dailyGoal: Int
-        var brainScore: Int
         var trainedToday: Bool
     }
 
@@ -74,13 +41,7 @@ enum WidgetDataService {
         let defaults = UserDefaults(suiteName: suiteName)
         return Snapshot(
             streak: defaults?.integer(forKey: Key.streak) ?? 0,
-            level: defaults?.integer(forKey: Key.level) ?? 1,
-            levelName: defaults?.string(forKey: Key.levelName) ?? "Novice",
-            totalXP: defaults?.integer(forKey: Key.totalXP) ?? 0,
-            xpForNextLevel: defaults?.integer(forKey: Key.xpForNextLevel) ?? 500,
             exercisesToday: defaults?.integer(forKey: Key.exercisesToday) ?? 0,
-            dailyGoal: defaults?.integer(forKey: Key.dailyGoal) ?? 3,
-            brainScore: defaults?.integer(forKey: Key.brainScore) ?? 0,
             trainedToday: defaults?.bool(forKey: Key.trainedToday) ?? false
         )
     }

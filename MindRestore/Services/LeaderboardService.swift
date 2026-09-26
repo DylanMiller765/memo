@@ -3,71 +3,52 @@ import Foundation
 // MARK: - Enums
 
 enum LeaderboardCategory: String, CaseIterable, Identifiable {
-    case brainScore = "Brain Score"
-    case xp = "XP"
-    case streak = "Streak"
-    // Per-game leaderboards
-    case reactionTime = "Reaction Time"
-    case colorMatch = "Color Match"
-    case speedMatch = "Speed Match"
+    // Per-game v2 boards, in Train-tab order
     case visualMemory = "Visual Memory"
     case numberMemory = "Number Memory"
-    case mathSpeed = "Math Speed"
-    case dualNBack = "Dual N-Back"
-    case wordScramble = "Word Scramble"
-    case memoryChain = "Memory Chain"
     case chimpTest = "Chimp Test"
-    case verbalMemory = "Verbal Memory"
+    case mathSprint = "Math Sprint"
+    case colorMatch = "Color Match"
+    case reactionTime = "Reaction Time"
+    case streak = "Streak"
     case focusBlocking = "Focus Mode"
 
     var id: String { rawValue }
 
     var icon: String {
         switch self {
-        case .brainScore: return "brain.head.profile"
-        case .xp: return "star.fill"
-        case .streak: return "flame.fill"
-        case .reactionTime: return "bolt.fill"
-        case .colorMatch: return "paintpalette.fill"
-        case .speedMatch: return "bolt.square.fill"
         case .visualMemory: return "square.grid.3x3.fill"
-        case .numberMemory: return "number.circle.fill"
-        case .mathSpeed: return "multiply.circle.fill"
-        case .dualNBack: return "square.grid.3x3"
-        case .wordScramble: return "textformat.abc.dottedunderline"
-        case .memoryChain: return "link.circle.fill"
+        case .numberMemory: return "number"
         case .chimpTest: return "pawprint.fill"
-        case .verbalMemory: return "text.book.closed.fill"
+        case .mathSprint: return "multiply"
+        case .colorMatch: return "paintpalette.fill"
+        case .reactionTime: return "bolt.fill"
+        case .streak: return "flame.fill"
         case .focusBlocking: return "shield.slash.fill"
         }
     }
 
     var scoreDescription: String {
         switch self {
-        case .brainScore: return "Overall cognitive score out of 1000"
-        case .xp: return "Total XP earned from exercises"
-        case .streak: return "Longest consecutive days trained"
-        case .reactionTime: return "Fastest average reaction time — lower is better"
-        case .colorMatch: return "Highest color matching accuracy %"
-        case .speedMatch: return "Highest speed matching accuracy %"
         case .visualMemory: return "Highest grid level completed"
-        case .numberMemory: return "Longest digit sequence recalled"
-        case .mathSpeed: return "Correct answers weighted by speed — faster + accurate wins"
-        case .dualNBack: return "Highest N-back level reached"
-        case .wordScramble: return "Most words unscrambled out of 10"
-        case .memoryChain: return "Longest sequence chain recalled"
-        case .chimpTest: return "Highest level reached — more numbers, harder positions"
-        case .verbalMemory: return "Longest streak without a mistake"
-        case .focusBlocking: return "Protected Focus Mode time. More wins."
+        case .numberMemory: return "Longest number recalled, in digits"
+        case .chimpTest: return "Most numbers in a completed level"
+        case .mathSprint: return "Most questions answered before the bar runs out"
+        case .colorMatch: return "Most correct before the bar runs out"
+        case .reactionTime: return "Fastest 5-round average — lower is better"
+        case .streak: return "Longest consecutive days trained"
+        case .focusBlocking: return "Protected Focus Mode time. More ranks higher."
         }
     }
+
+    /// Reaction Time sorts ascending (ms); every other board is higher-is-better.
+    var lowerIsBetter: Bool { self == .reactionTime }
 }
 
 enum LeaderboardTimeFilter: String, CaseIterable, Identifiable, Hashable {
     case today = "Today"
-    case thisWeek = "This Week"
-    case thisMonth = "This Month"
-    case allTime = "All Time"
+    case thisWeek = "This week"
+    case allTime = "All time"
 
     var id: String { rawValue }
 }

@@ -17,6 +17,11 @@ enum ExerciseType: String, Codable, CaseIterable, Identifiable {
     case verbalMemory
     var id: String { rawValue }
 
+    /// The six games still offered anywhere in the app (Train tab, slot, leaderboards).
+    static let activeGames: [ExerciseType] = [.visualMemory, .sequentialMemory, .chimpTest, .mathSpeed, .colorMatch, .reactionTime]
+    /// Retired games stay decodable for history but are never offered.
+    var isRetired: Bool { !Self.activeGames.contains(self) }
+
     var displayName: String {
         switch self {
         case .spacedRepetition: return "Spaced Repetition"
@@ -27,7 +32,7 @@ enum ExerciseType: String, Codable, CaseIterable, Identifiable {
         case .memoryPalace: return "Memory Palace"
         case .reactionTime: return "Reaction Time"
         case .sequentialMemory: return "Number Memory"
-        case .mathSpeed: return "Math Speed"
+        case .mathSpeed: return "Math Sprint"
         case .speedMatch: return "Speed Match"
         case .visualMemory: return "Visual Memory"
         case .colorMatch: return "Color Match"

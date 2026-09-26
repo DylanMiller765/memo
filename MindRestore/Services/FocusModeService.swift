@@ -135,7 +135,6 @@ final class FocusModeService {
     private let cooldownMinutes: Int = 10
     static let focusLeagueDailyCapacityMinutes = 1_440
     static let focusLeagueWeeklyCapacityMinutes = 10_080
-    static let focusLeagueMonthlyCapacityMinutes = 43_200
     private static let activityName = DeviceActivityName("com.memori.focus")
     private static let relockActivityName = DeviceActivityName("com.memori.focus.relock")
 
@@ -427,21 +426,12 @@ final class FocusModeService {
         )
     }
 
-    /// Current month's blocked minutes (for monthly Focus leaderboard display).
-    var monthlyBlockedMinutes: Int {
-        rolloverFocusCountersIfNeeded()
-        let stored = sharedDefaults.integer(forKey: FocusKey.monthlyMinutes)
-        return Self.effectiveProtectedMinutes(storedMinutes: stored, blockStart: currentBlockStartDate, now: .now)
-    }
-
     func focusLeagueProtectedMinutes(for filter: LeaderboardTimeFilter) -> Int {
         switch filter {
         case .today:
             return dailyBlockedMinutes
         case .thisWeek, .allTime:
             return weeklyBlockedMinutes
-        case .thisMonth:
-            return monthlyBlockedMinutes
         }
     }
 
@@ -458,8 +448,6 @@ final class FocusModeService {
             return focusLeagueDailyCapacityMinutes
         case .thisWeek, .allTime:
             return focusLeagueWeeklyCapacityMinutes
-        case .thisMonth:
-            return focusLeagueMonthlyCapacityMinutes
         }
     }
 

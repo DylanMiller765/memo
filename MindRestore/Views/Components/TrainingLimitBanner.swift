@@ -171,38 +171,6 @@ struct TrainingView: View {
         return "\(days / 7)w ago"
     }
 
-    private struct GameCategory {
-        let name: String
-        let icon: String
-        let color: Color
-        let subtitle: String
-        let games: [TrainingGame]
-    }
-
-    private static let gameCategories: [GameCategory] = [
-        GameCategory(
-            name: "Memory",
-            icon: "brain.head.profile",
-            color: AppColors.violet,
-            subtitle: "Train your recall",
-            games: TrainingGameCatalog.memoryGames
-        ),
-        GameCategory(
-            name: "Speed",
-            icon: "bolt.fill",
-            color: AppColors.coral,
-            subtitle: "Sharpen your reflexes",
-            games: TrainingGameCatalog.speedGames
-        ),
-        GameCategory(
-            name: "Focus",
-            icon: "eye.fill",
-            color: AppColors.sky,
-            subtitle: "Build concentration",
-            games: TrainingGameCatalog.focusGames
-        ),
-    ]
-
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -211,51 +179,21 @@ struct TrainingView: View {
                         .padding(.horizontal, 16)
                         .staggeredEntrance(index: 0)
 
-                    // Game Categories
-                    ForEach(Array(Self.gameCategories.enumerated()), id: \.offset) { index, category in
-                        VStack(alignment: .leading, spacing: 10) {
-                            // Section header
-                            HStack(spacing: 8) {
-                                Image(systemName: category.icon)
-                                    .font(.system(size: 14, weight: .bold))
-                                    .foregroundStyle(.white)
-                                    .frame(width: 28, height: 28)
-                                    .background(category.color, in: RoundedRectangle(cornerRadius: 8))
-
-                                VStack(alignment: .leading, spacing: 1) {
-                                    Text(category.name)
-                                        .font(.system(size: 18, weight: .heavy, design: .rounded))
-                                        .foregroundStyle(AppColors.textPrimary)
-                                    Text(category.subtitle)
-                                        .font(.system(size: 12, weight: .medium, design: .rounded))
-                                        .foregroundStyle(AppColors.textSecondary)
+                    // Six games, same glyphs as the slot reel
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+                        ForEach(TrainingGameCatalog.focusUnlockGames) { game in
+                            if let unlockGame = UnlockGame(exerciseType: game.type) {
+                                Button {
+                                    selectedExercise = game.type
+                                } label: {
+                                    TrainGameCard(game: unlockGame, lastPlayedText: lastPlayedText(for: game.type))
                                 }
-                            }
-                            .padding(.horizontal, 16)
-
-                            // Horizontal scroll of game cards
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 12) {
-                                    ForEach(Array(category.games.enumerated()), id: \.element.type) { offset, game in
-                                        Button {
-                                            selectedExercise = game.type
-                                        } label: {
-                                            GameCard(
-                                                title: game.title,
-                                                type: game.type,
-                                                color: game.color,
-                                                isLocked: false,
-                                                lastPlayedText: lastPlayedText(for: game.type)
-                                            )
-                                        }
-                                        .buttonStyle(GameCardButtonStyle())
-                                    }
-                                }
-                                .padding(.horizontal, 16)
+                                .buttonStyle(GameCardButtonStyle())
                             }
                         }
-                        .staggeredEntrance(index: index + 1)
                     }
+                    .padding(.horizontal, 16)
+                    .staggeredEntrance(index: 1)
                 }
                 .navigationDestination(item: $selectedExercise) { type in
                     exerciseDestination(for: type)
@@ -321,18 +259,6 @@ struct TrainingView: View {
     @ViewBuilder
     private func exerciseGame(for type: ExerciseType) -> some View {
         switch type {
-        case .spacedRepetition:
-            SpacedRepetitionView(category: .numbers)
-        case .dualNBack:
-            DualNBackView(autoStart: skipIntro(for: type))
-        case .activeRecall:
-            ActiveRecallView()
-        case .chunkingTraining:
-            ChunkingTrainingView(autoStart: skipIntro(for: type))
-        case .prospectiveMemory:
-            ProspectiveMemoryView()
-        case .memoryPalace:
-            MemoryPalaceView()
         case .reactionTime:
             ReactionTimeView(autoStart: skipIntro(for: type))
         case .sequentialMemory:
@@ -341,18 +267,12 @@ struct TrainingView: View {
             MathSpeedView(autoStart: skipIntro(for: type))
         case .colorMatch:
             ColorMatchView(autoStart: skipIntro(for: type))
-        case .speedMatch:
-            SpeedMatchView(autoStart: skipIntro(for: type))
         case .visualMemory:
             VisualMemoryView(autoStart: skipIntro(for: type))
-        case .wordScramble:
-            WordScrambleView()
-        case .memoryChain:
-            MemoryChainView()
         case .chimpTest:
             ChimpTestView(autoStart: skipIntro(for: type))
-        case .verbalMemory:
-            VerbalMemoryView(autoStart: skipIntro(for: type))
+        default:
+            EmptyView()
         }
     }
 
@@ -360,95 +280,46 @@ struct TrainingView: View {
 
 // MARK: - Training Tile (Game-style grid card)
 
-struct LockPulse: View {
-    let color: Color
+/// Train-tab card: the slot's game glyph, the game's name, and your best.
+struct TrainGameCard: View {
+    let game: UnlockGame
+    let lastPlayedText: String?
+
+    private var bestText: String? { game.personalBest.map { "Best \(game.scoreText($0))" } }
 
     var body: some View {
-        Image(systemName: "lock.fill")
-            .font(.system(size: 18, weight: .semibold))
-            .foregroundStyle(color.opacity(0.7))
-            .padding(8)
-            .background(color.opacity(0.16), in: Circle())
-    }
-}
-
-struct TrainingTile: View {
-    let title: String
-    let type: ExerciseType
-    let color: Color
-    let isLocked: Bool
-    var lastPlayedText: String? = nil
-
-    var body: some View {
-        VStack(spacing: 0) {
-            // Mini game preview
-            miniPreview
-                .frame(maxWidth: .infinity)
-                .frame(height: 72)
-                .clipped()
-
-            // Title bar + last played
-            VStack(spacing: 2) {
-                Text(title)
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(isLocked ? color.opacity(0.5) : .primary)
+        VStack(alignment: .leading, spacing: 14) {
+            GameGlyph(game: game, size: 52)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(game.title)
+                    .font(.brand(size: 16, weight: .black))
+                    .foregroundStyle(OB.fg)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
-
-                if !isLocked {
-                    if let lastPlayed = lastPlayedText {
-                        Text(lastPlayed)
-                            .font(.system(size: 9, weight: .medium))
-                            .foregroundStyle(AppColors.textTertiary)
-                    } else {
-                        Text("New")
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(AppColors.accent.opacity(0.7))
-                    }
-                }
+                Text([bestText, lastPlayedText].compactMap { $0 }.joined(separator: " · ").nonEmpty ?? "New")
+                    .font(.brand(size: 12, weight: .bold))
+                    .foregroundStyle(bestText == nil && lastPlayedText == nil ? OB.accent : OB.fg2)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 10)
-            .frame(maxWidth: .infinity)
         }
-        .background {
-            RoundedRectangle(cornerRadius: 14)
-                .fill(AppColors.cardSurface)
-        }
-        .overlay(
-            RoundedRectangle(cornerRadius: 14)
-                .stroke(color.opacity(0.2), lineWidth: 1)
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            ZStack {
+                OB.surface
+                RadialGradient(colors: [game.glyphTint.opacity(0.16), .clear], center: .topLeading, startRadius: 0, endRadius: 180)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         )
-        .overlay {
-            if isLocked {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 14)
-                        .fill(Color.black.opacity(0.55))
-                    LockPulse(color: color)
-                }
-            }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 14))
-        .accessibilityLabel("\(title)\(isLocked ? ", locked" : "")")
-    }
-
-    private var miniPreview: some View {
-        TrainingTileMiniPreview(type: type, color: color)
+        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(.white.opacity(0.06)))
+        .accessibilityElement(children: .combine)
     }
 }
 
-#if DEBUG
-#Preview("Train") {
-    MainScreenPreview {
-        TrainingView(
-            externalExercise: .constant(nil),
-            externalExerciseAutoStart: .constant(false)
-        )
-    }
+private extension String {
+    var nonEmpty: String? { isEmpty ? nil : self }
 }
-#endif
-
-// MARK: - Shared Mini Preview (used by TrainingTile and GameCard)
 
 struct TrainingTileMiniPreview: View {
     let type: ExerciseType
@@ -729,75 +600,6 @@ struct GameCardButtonStyle: ButtonStyle {
             .animation(.spring(response: 0.3, dampingFraction: 0.7), value: configuration.isPressed)
     }
 }
-
-struct GameCard: View {
-    let title: String
-    let type: ExerciseType
-    let color: Color
-    let isLocked: Bool
-    var lastPlayedText: String? = nil
-
-    // Darker shade for 3D shadow effect (Duolingo signature)
-    private var shadowColor: Color {
-        color.opacity(0.5)
-    }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            // Top: dark surface with colorful preview elements (matches old TrainingTile)
-            TrainingTileMiniPreview(type: type, color: color)
-                .frame(maxWidth: .infinity)
-                .frame(height: 88)
-                .clipped()
-
-            // Bottom: title area
-            VStack(spacing: 2) {
-                Text(title)
-                    .font(.system(size: 13, weight: .bold, design: .rounded))
-                    .foregroundStyle(AppColors.textPrimary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-
-                if let lastPlayed = lastPlayedText {
-                    Text(lastPlayed)
-                        .font(.system(size: 10, weight: .medium, design: .rounded))
-                        .foregroundStyle(AppColors.textSecondary)
-                } else {
-                    Text("NEW")
-                        .font(.system(size: 9, weight: .heavy, design: .rounded))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color(red: 0.35, green: 0.80, blue: 0.01), in: Capsule())
-                }
-            }
-            .padding(.vertical, 10)
-            .frame(width: 130)
-        }
-        .background {
-            // 3D raised card effect
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(AppColors.cardSurface)
-                .shadow(color: shadowColor, radius: 0, x: 0, y: 4)
-        }
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(color.opacity(0.2), lineWidth: 1)
-        )
-        .overlay {
-            if isLocked {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(Color.black.opacity(0.5))
-                    LockPulse(color: color)
-                }
-            }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-    }
-}
-
-// MARK: - Exercise Info Sheet
 
 struct ExerciseInfoSheet: View {
     let type: ExerciseType

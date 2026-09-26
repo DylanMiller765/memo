@@ -1,238 +1,74 @@
 import SwiftUI
 import SwiftData
-import GameKit
 
 // MARK: - ViewModel
 
+/// Color Match: Stroop prompts on one draining time bank. Right answers add
+/// time, wrong ones cost 3 seconds; a fifth color joins past the qualify line.
+/// Score = prompts answered correctly.
 @MainActor @Observable
-final class ColorMatchViewModel {
-    enum Phase { case setup, playing, finished }
+final class ColorMatchSprintViewModel {
+    private(set) var bank = TimeBank()
+    private(set) var prompt: StroopPrompt
+    private(set) var flash: BevelState = .idle
+    private(set) var float: FuseFloat?
+    private(set) var isOver = false
+    private(set) var wrongCount = 0
+    private(set) var started = false
+    private var rng = SystemRandomNumberGenerator()
+    private var lastTick: Date?
+    private(set) var startedAt = Date()
 
-    var phase: Phase = .setup
-    var startTime: Date?
-    var currentRound = 0
-    let totalRounds = 20
-    var correctCount = 0
-    var responseTimes: [Double] = []
-    var roundStartTime: Date?
-
-    // Current round state
-    var displayWord: String = ""
-    var displayColor: Color = .white
-    var correctAnswer: String = ""
-    var feedbackColor: Color? = nil
-    var showFeedback = false
-    var isTransitioning = false
-    var lastWrongCorrectAnswer: String? = nil
-    var currentStreak = 0
-    var bestStreak = 0
-    private var roundTimer: Timer?
-
-    var challengeSeed: Int?
-    private var rng: SeededGenerator?
-
-    let colorOptions: [(name: String, color: Color)] = [
-        ("Red", Color(red: 0.98, green: 0.42, blue: 0.35)),
-        ("Blue", Color(red: 0.30, green: 0.55, blue: 1.0)),
-        ("Green", Color(red: 0, green: 0.82, blue: 0.62)),
-        ("Yellow", Color(red: 1.0, green: 0.76, blue: 0.28)),
-        ("Purple", Color(red: 0.58, green: 0.34, blue: 0.92)),
-    ]
-
-    /// Time limit for current round in seconds (gets shorter as rounds progress)
-    var timeLimit: Double {
-        let base = 4.0
-        let minimum = 1.5
-        let reduction = Double(currentRound) * 0.12
-        return max(minimum, base - reduction)
+    init() {
+        var seed = SystemRandomNumberGenerator()
+        prompt = ColorMatchEngine.prompt(completed: 0, previous: nil, using: &seed)
     }
 
-    var accuracy: Double {
-        guard currentRound > 0 else { return 0 }
-        return Double(correctCount) / Double(currentRound)
+    var completed: Int { bank.completed }
+    var isOvertime: Bool { completed >= ColorMatchEngine.qualifyCount }
+    var durationSeconds: Int { Int(Date().timeIntervalSince(startedAt)) }
+    var accuracy: Double { Double(completed) / Double(max(1, completed + wrongCount)) }
+
+    func start() {
+        bank = TimeBank()
+        wrongCount = 0
+        flash = .idle
+        isOver = false
+        startedAt = Date()
+        lastTick = nil
+        prompt = ColorMatchEngine.prompt(completed: bank.completed, previous: nil, using: &rng)
+        started = true
     }
 
-    var averageResponseMs: Int {
-        guard !responseTimes.isEmpty else { return 0 }
-        return Int(responseTimes.reduce(0, +) / Double(responseTimes.count) * 1000)
+    func tick(now: Date, frozen: Bool) {
+        defer { lastTick = frozen ? nil : now }
+        guard started, !isOver, !frozen, let last = lastTick else { return }
+        bank.elapse(now.timeIntervalSince(last))
+        if bank.isEmpty { isOver = true }
     }
 
-    var score: Double {
-        let accuracyComponent = accuracy * 0.6
-        // Speed component: 500ms or less = 1.0, 2000ms+ = 0.0
-        let avgMs = Double(averageResponseMs)
-        let speedComponent: Double
-        if avgMs <= 0 {
-            speedComponent = 0
-        } else {
-            speedComponent = max(0, min(1, (2000 - avgMs) / 1500)) * 0.4
-        }
-        return min(1.0, accuracyComponent + speedComponent)
-    }
-
-    var durationSeconds: Int {
-        guard let start = startTime else { return 0 }
-        return Int(Date.now.timeIntervalSince(start))
-    }
-
-    /// Composite leaderboard score: accuracy% × 1000 + time bonus (faster = higher)
-    var leaderboardScore: Int {
-        Int(accuracy * 100) * 1000 + max(0, 999 - durationSeconds)
-    }
-
-    var ratingText: String {
-        if accuracy >= 0.95 { return "Stroop Master!" }
-        if accuracy >= 0.85 { return "Excellent Focus!" }
-        if accuracy >= 0.70 { return "Great Job!" }
-        if accuracy >= 0.50 { return "Good Effort!" }
-        return "Keep Practicing!"
-    }
-
-    // MARK: - Game Logic
-
-    func startGame() {
-        phase = .playing
-        currentRound = 0
-        correctCount = 0
-        currentStreak = 0
-        bestStreak = 0
-        responseTimes = []
-        startTime = Date.now
-        feedbackColor = nil
-        showFeedback = false
-        if let seed = challengeSeed {
-            rng = SeededGenerator(seed: UInt64(seed))
-        } else {
-            rng = nil
-        }
-        generateRound()
-    }
-
-    func generateRound() {
-        guard currentRound < totalRounds else {
-            phase = .finished
-            return
-        }
-
-        // Pick a random word (color name)
-        let wordIndex: Int
-        if var r = rng {
-            wordIndex = Int.random(in: 0..<colorOptions.count, using: &r)
-            rng = r
-        } else {
-            wordIndex = Int.random(in: 0..<colorOptions.count)
-        }
-        displayWord = colorOptions[wordIndex].name.uppercased()
-
-        // Pick a DIFFERENT color for the ink
-        var inkIndex: Int
-        repeat {
-            if var r = rng {
-                inkIndex = Int.random(in: 0..<colorOptions.count, using: &r)
-                rng = r
-            } else {
-                inkIndex = Int.random(in: 0..<colorOptions.count)
-            }
-        } while inkIndex == wordIndex
-        displayColor = colorOptions[inkIndex].color
-        correctAnswer = colorOptions[inkIndex].name
-
-        lastWrongCorrectAnswer = nil
-        showFeedback = false
-        feedbackColor = nil
-        roundStartTime = Date.now
-        startRoundTimer()
-    }
-
-    private func startRoundTimer() {
-        roundTimer?.invalidate()
-        let limit = timeLimit
-        roundTimer = Timer.scheduledTimer(withTimeInterval: limit, repeats: false) { [weak self] _ in
-            Task { @MainActor in
-                guard let self, !self.showFeedback else { return }
-                self.timeExpired()
-            }
-        }
-    }
-
-    private func timeExpired() {
-        guard !showFeedback else { return }
-        // Count as wrong — no response time recorded for timeout
-        currentStreak = 0
-        responseTimes.append(timeLimit)
-        feedbackColor = Color(red: 0.98, green: 0.42, blue: 0.35)
-        HapticService.wrong()
-        lastWrongCorrectAnswer = correctAnswer
-        showFeedback = true
-        isTransitioning = true
-        currentRound += 1
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
-            guard let self else { return }
-            if self.currentRound >= self.totalRounds {
-                self.phase = .finished
-                SoundService.shared.playComplete()
-                HapticService.complete()
-            } else {
-                self.generateRound()
-            }
-            self.isTransitioning = false
-        }
-    }
-
-    func submitAnswer(_ answer: String) {
-        guard !showFeedback, !isTransitioning else { return }
-        roundTimer?.invalidate()
-
-        let responseTime = Date.now.timeIntervalSince(roundStartTime ?? Date.now)
-        responseTimes.append(responseTime)
-
-        let isCorrect = answer == correctAnswer
-        if isCorrect {
-            correctCount += 1
-            currentStreak += 1
-            bestStreak = max(bestStreak, currentStreak)
-            feedbackColor = Color(red: 0, green: 0.82, blue: 0.62)
-            SoundService.shared.playTap()
+    func choose(_ color: InkColor) {
+        guard started, !isOver, flash == .idle else { return }
+        if color == prompt.ink {
+            let bonus = bank.correct()
+            let text = bonus.truncatingRemainder(dividingBy: 1) == 0 ? "+\(Int(bonus))" : String(format: "+%.1f", bonus)
+            float = FuseFloat(text: text, positive: true)
+            flash = .correct
             HapticService.correct()
         } else {
-            currentStreak = 0
-            feedbackColor = Color(red: 0.98, green: 0.42, blue: 0.35)
+            bank.wrong()
+            wrongCount += 1
+            float = FuseFloat(text: "−3", positive: false)
+            flash = .wrong
             HapticService.wrong()
-            lastWrongCorrectAnswer = correctAnswer
+            if bank.isEmpty { isOver = true }
         }
-
-        showFeedback = true
-        isTransitioning = true
-        currentRound += 1
-
-        // Brief feedback flash then advance
-        let delay: Double = isCorrect ? 0.45 : 0.8
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+        let next = ColorMatchEngine.prompt(completed: bank.completed, previous: prompt, using: &rng)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
             guard let self else { return }
-            if self.currentRound >= self.totalRounds {
-                self.phase = .finished
-                SoundService.shared.playComplete()
-                HapticService.complete()
-            } else {
-                self.generateRound()
-            }
-            self.isTransitioning = false
+            self.flash = .idle
+            self.prompt = next
         }
-    }
-
-    func reset() {
-        roundTimer?.invalidate()
-        phase = .setup
-        currentRound = 0
-        correctCount = 0
-        currentStreak = 0
-        bestStreak = 0
-        responseTimes = []
-        startTime = nil
-        feedbackColor = nil
-        showFeedback = false
-        isTransitioning = false
     }
 }
 
@@ -241,326 +77,200 @@ final class ColorMatchViewModel {
 struct ColorMatchView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-    @Environment(AchievementService.self) private var achievementService
     @Environment(TrainingSessionManager.self) private var trainingManager
     @Environment(PaywallTriggerService.self) private var paywallTrigger
-    @Environment(StoreService.self) private var storeService
     @Environment(GameCenterService.self) private var gameCenterService
-    @Environment(DeepLinkRouter.self) private var deepLinkRouter
     @Query private var users: [User]
 
-    /// Skip the setup screen on appear when entering from a Focus unlock.
     var autoStart: Bool = false
+    var mode: GameMode = .train
 
-    @State private var viewModel = ColorMatchViewModel()
-    @State private var showingPaywall = false
-    @State private var shareImage: UIImage?
+    @State private var viewModel = ColorMatchSprintViewModel()
     @State private var exerciseSaved = false
-    @State private var shakeAmount: CGFloat = 0
-    @State private var correctPulse = false
-    @State private var showingInfo = false
     @State private var isNewPersonalBest = false
+    @State private var shakeAmount: CGFloat = 0
+    @State private var correctPop = false
 
     private var user: User? { users.first }
-    private var isProUser: Bool { storeService.isProUser }
+    private var best: Int { PersonalBestTracker.shared.best(for: .colorMatch) }
 
     var body: some View {
-        VStack(spacing: 0) {
-            switch viewModel.phase {
-            case .setup:
-                setupView
-                    .transition(.opacity)
-            case .playing:
-                playingView
-                    .transition(.opacity)
-            case .finished:
-                resultsView
-                    .transition(.scale(scale: 0.95).combined(with: .opacity))
-            }
-        }
-        .animation(.easeInOut(duration: 0.3), value: viewModel.phase)
-        .sheet(isPresented: $showingPaywall) { PaywallView(isHighIntent: true) }
-        .navigationTitle("Color Match")
-        .navigationBarTitleDisplayMode(.inline)
-        .onAppear {
-            if autoStart && viewModel.phase == .setup {
-                Analytics.exerciseStarted(game: ExerciseType.colorMatch.rawValue)
-                viewModel.startGame()
-            }
-        }
-        .onDisappear {
-            if viewModel.phase == .playing {
-                Analytics.exerciseAbandoned(game: ExerciseType.colorMatch.rawValue, roundReached: viewModel.currentRound)
-            }
-        }
-        .onChange(of: viewModel.phase) { _, newPhase in
-            if newPhase == .finished {
-                isNewPersonalBest = PersonalBestTracker.shared.record(score: viewModel.correctCount, for: .colorMatch)
-                if isNewPersonalBest {
-                    Analytics.personalBest(game: ExerciseType.colorMatch.rawValue, score: viewModel.correctCount)
+        GameScaffold(mode: mode, trainTitle: "Color Match", trainBest: best > 0 ? "\(best)" : nil,
+                     glow: viewModel.isOvertime ? Color(red: 0.227, green: 0.102, blue: 0.071) : Color(red: 0.13, green: 0.07, blue: 0.2)) {
+            Group {
+                if !viewModel.started {
+                    intro
+                } else if viewModel.isOver {
+                    if mode.run != nil { Color.clear } else { results }
+                } else {
+                    playing
                 }
-                // Auto-save so GC gets the score even if user doesn't tap Done
-                saveExercise()
-                let card = ExerciseShareCard(
-                    exerciseName: "Color Match",
-                    exerciseIcon: "paintpalette.fill",
-                    accentColor: AppColors.violet,
-                    mainValue: viewModel.accuracy.percentString,
-                    mainLabel: "Accuracy",
-                    ratingText: viewModel.ratingText,
-                    stats: [
-                        ("Correct", "\(viewModel.correctCount) / \(viewModel.totalRounds)"),
-                        ("Avg Response", "\(viewModel.averageResponseMs) ms")
-                    ],
-                    ctaText: "Think you're faster?"
-                )
-                shareImage = card.renderAsImage(size: CGSize(width: 360, height: 640), scale: 3)
+            }
+            .animation(.easeInOut(duration: 0.35), value: viewModel.isOvertime)
+        }
+        .onAppear {
+            if autoStart && !viewModel.started {
+                Analytics.exerciseStarted(game: ExerciseType.colorMatch.rawValue)
+                viewModel.start()
+            }
+        }
+        .onChange(of: viewModel.completed) { _, completed in
+            mode.run?.report(score: completed)
+        }
+        .onChange(of: viewModel.isOver) { _, over in
+            guard over else { return }
+            isNewPersonalBest = PersonalBestTracker.shared.record(score: viewModel.completed, for: .colorMatch)
+            if isNewPersonalBest {
+                Analytics.personalBest(game: ExerciseType.colorMatch.rawValue, score: viewModel.completed)
+            }
+            saveExercise()
+            mode.run?.finish(finalScore: viewModel.completed)
+        }
+        .onChange(of: viewModel.flash) { _, flash in
+            switch flash {
+            case .wrong:
+                withAnimation(.default) { shakeAmount += 1 }
+            case .correct:
+                withAnimation(.spring(response: 0.12, dampingFraction: 0.5)) { correctPop = true }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                    withAnimation(.easeOut(duration: 0.12)) { correctPop = false }
+                }
+            default:
+                break
             }
         }
     }
 
-    // MARK: - Setup
+    // MARK: Intro (Train mode, first run)
 
-    private var setupView: some View {
-        VStack(spacing: 32) {
+    private var intro: some View {
+        VStack(spacing: 16) {
             Spacer()
-
-            TrainingTileMiniPreview(type: .colorMatch, color: AppColors.violet, scale: 2.0)
-                .frame(width: 200, height: 140)
-
-            VStack(spacing: 8) {
-                Text("Color Match")
-                    .font(.title.weight(.bold))
-                Text("Tap the color of the ink, not the word")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-
-            VStack(alignment: .leading, spacing: 12) {
-                infoRow(icon: "eye.fill", text: "A color word appears in a different ink color")
-                infoRow(icon: "hand.tap.fill", text: "Tap the button matching the INK color")
-                infoRow(icon: "brain.head.profile", text: "Based on the Stroop Effect — your brain wants to read the word, not see the color")
-                infoRow(icon: "timer", text: "20 rounds, gets faster as you progress")
-            }
-            .appCard()
-            .padding(.horizontal)
-
+            Text("BLUE")
+                .font(HeroNumber.font(56))
+                .foregroundStyle(InkColor.red.color)
+            Text("Color Match")
+                .font(.brand(size: 28, weight: .black))
+                .foregroundStyle(OB.fg)
+            Text("Tap the color of the ink, not the word.\nRight answers add time. Wrong ones cost 3 seconds.")
+                .font(.brand(size: 15, weight: .semibold))
+                .foregroundStyle(OB.fg2)
+                .multilineTextAlignment(.center)
             Spacer()
-
             Button {
                 Analytics.exerciseStarted(game: ExerciseType.colorMatch.rawValue)
-                viewModel.startGame()
+                viewModel.start()
             } label: {
                 Text("Start")
-                    .accentButton()
+                    .font(.brand(size: 17, weight: .heavy))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity, minHeight: 56)
+                    .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(OB.accent))
             }
-            .pulsingWhenIdle()
-            .accessibilityHint("Starts the exercise")
-            .padding(.horizontal, 32)
+            .buttonStyle(.plain)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 12)
         }
-        .padding(.vertical, 24)
-        .overlay(alignment: .topTrailing) {
-            Button { showingInfo = true } label: {
-                Image(systemName: "questionmark.circle.fill")
-                    .font(.title3)
-                    .foregroundStyle(.white.opacity(0.3))
+        .padding(.horizontal, 20)
+    }
+
+    // MARK: Playing
+
+    private var playing: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
+            VStack(spacing: 0) {
+                FuseBar(fraction: viewModel.bank.fraction, overtime: viewModel.isOvertime, floatText: viewModel.float)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 22)
+                Text(viewModel.prompt.word.label)
+                    .font(HeroNumber.font(64))
+                    .foregroundStyle(viewModel.prompt.ink.color)
+                    .minimumScaleFactor(0.6)
+                    .lineLimit(1)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 70)
+                    .scaleEffect(correctPop ? 1.08 : 1)
+                    .modifier(ShakeEffect(animatableData: shakeAmount))
+                    .accessibilityLabel("The word \(viewModel.prompt.word.label) in \(viewModel.prompt.ink.label) ink")
+                Text("tap the COLOR, not the word")
+                    .font(.brand(size: 13, weight: .heavy))
+                    .foregroundStyle(OB.fg2)
+                    .padding(.top, 10)
+                Spacer(minLength: 12)
+                swatches
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 8)
             }
-            .padding(16)
-        }
-        .sheet(isPresented: $showingInfo) {
-            ExerciseInfoSheet(type: .colorMatch)
-                .presentationDetents([.medium])
+            .onChange(of: context.date) { _, now in
+                viewModel.tick(now: now, frozen: mode.run?.isFrozen ?? false)
+            }
         }
     }
 
-    private func infoRow(icon: String, text: String) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.body.weight(.semibold))
-                .foregroundStyle(AppColors.violet)
-                .frame(width: 24)
-            Text(text)
-                .font(.subheadline)
-        }
-    }
-
-    // MARK: - Playing
-
-    private var playingView: some View {
-        VStack(spacing: 24) {
-            // Round counter + progress
-            HStack {
-                Text("Round \(viewModel.currentRound + 1)")
-                    .font(.headline)
-                    .foregroundStyle(AppColors.accent)
-                    .contentTransition(.numericText())
-                Spacer()
-                Text("\(viewModel.currentRound) / \(viewModel.totalRounds)")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
-                    .contentTransition(.numericText())
-            }
-            .padding(.horizontal)
-
-            ProgressView(value: Double(viewModel.currentRound), total: Double(viewModel.totalRounds))
-                .tint(AppColors.accent)
-                .padding(.horizontal)
-
-            Spacer()
-
-            // The Stroop word
-            ZStack {
-                // Feedback flash background
-                if viewModel.showFeedback, let fbColor = viewModel.feedbackColor {
-                    RoundedRectangle(cornerRadius: 24)
-                        .fill(fbColor.opacity(0.15))
-                        .frame(width: 280, height: 160)
-                        .transition(.opacity)
-                }
-
-                Text(viewModel.displayWord)
-                    .font(.system(size: 64, weight: .bold))
-                    .foregroundStyle(viewModel.displayColor)
-                    .accessibilityLabel("The word \(viewModel.displayWord) displayed in \(viewModel.correctAnswer) ink")
-
-                // Show correct answer when wrong
-                if viewModel.showFeedback, let correctColor = viewModel.lastWrongCorrectAnswer {
-                    Text("Correct: \(correctColor)")
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundStyle(viewModel.colorOptions.first(where: { $0.name == correctColor })?.color ?? .white)
-                        .transition(.opacity.combined(with: .move(edge: .bottom)))
-                        .offset(y: 50)
-                }
-            }
-            .frame(height: 160)
-            .animation(.easeInOut(duration: 0.15), value: viewModel.displayWord)
-
-            // Correct/incorrect count
-            HStack(spacing: 16) {
-                Label("\(viewModel.correctCount)", systemImage: "checkmark.circle.fill")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(AppColors.mint)
-                    .contentTransition(.numericText())
-                Label("\(viewModel.currentRound - viewModel.correctCount)", systemImage: "xmark.circle.fill")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(AppColors.coral)
-                    .contentTransition(.numericText())
-            }
-
-            Spacer()
-
-            // Color buttons
+    /// Two columns; an odd last color (purple, in overtime) sits alone, centered.
+    private var swatches: some View {
+        let choices = viewModel.prompt.choices
+        let rows = stride(from: 0, to: choices.count, by: 2).map { Array(choices[$0..<min($0 + 2, choices.count)]) }
+        return GeometryReader { geo in
+            let width = (geo.size.width - 10) / 2
             VStack(spacing: 10) {
-                HStack(spacing: 10) {
-                    ForEach(0..<3, id: \.self) { index in
-                        colorButton(for: viewModel.colorOptions[index])
+                ForEach(rows, id: \.self) { row in
+                    HStack(spacing: 10) {
+                        ForEach(row, id: \.self) { color in
+                            swatch(color).frame(width: width)
+                        }
                     }
-                }
-                HStack(spacing: 10) {
-                    ForEach(3..<5, id: \.self) { index in
-                        colorButton(for: viewModel.colorOptions[index])
-                    }
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 8)
-        }
-        .padding(.vertical, 24)
-        .edgeGlow(
-            color: .green,
-            intensity: viewModel.currentStreak >= 3 ? min(Double(viewModel.currentStreak - 2) / 5.0, 1.0) : 0,
-            edge: .top
-        )
-        .edgeGlow(
-            color: .red,
-            intensity: Double(viewModel.currentRound) / Double(viewModel.totalRounds) >= 0.8 ? 1.0 : 0,
-            edge: .bottom
-        )
-        .modifier(ShakeEffect(animatableData: shakeAmount))
-        .onChange(of: viewModel.showFeedback) { _, showing in
-            if showing {
-                if viewModel.lastWrongCorrectAnswer != nil {
-                    withAnimation(.default) { shakeAmount += 1 }
+                    .frame(maxWidth: .infinity)
                 }
             }
         }
+        .frame(height: CGFloat(rows.count) * 64 + CGFloat(rows.count - 1) * 10)
+        .animation(.easeInOut(duration: 0.25), value: choices.count)
     }
 
-    private func colorButton(for option: (name: String, color: Color)) -> some View {
+    private func swatch(_ color: InkColor) -> some View {
         Button {
-            viewModel.submitAnswer(option.name)
+            viewModel.choose(color)
         } label: {
-            Text(option.name)
-                .font(.headline.weight(.bold))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 16)
-                .background(
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(option.color.opacity(0.18))
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(
-                                LinearGradient(
-                                    colors: [option.color.opacity(0.12), .clear],
-                                    startPoint: .top,
-                                    endPoint: .bottom
-                                )
-                            )
-                    }
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(option.color.opacity(0.3), lineWidth: 1)
-                )
-                .foregroundStyle(option.color)
+            BevelTile(state: .lit, tint: color.color, cornerRadius: 16) {
+                Text(color.label)
+                    .font(.brand(size: 18, weight: .black))
+                    .foregroundStyle(color == .yellow ? .black : .white)
+                    .shadow(radius: 2)
+            }
+            .frame(height: 64)
         }
-        .disabled(viewModel.showFeedback)
-        .accessibilityLabel("Answer \(option.name)")
+        .buttonStyle(.plain)
+        .accessibilityLabel("Answer \(color.label.lowercased())")
     }
 
-    // MARK: - Results
+    // MARK: Results (Train mode)
 
-    private var resultsView: some View {
-        return GameResultView(
+    private var results: some View {
+        GameResultView(
             gameTitle: "Color Match",
             gameIcon: "paintpalette.fill",
             accentColor: AppColors.violet,
-            mainScore: viewModel.correctCount,
+            mainScore: viewModel.completed,
             scoreLabel: "CORRECT",
-            ratingText: viewModel.ratingText,
+            ratingText: viewModel.completed >= 26 ? "Stroop Master" : viewModel.completed >= 18 ? "Sharp Focus" : "Keep Practicing",
             stats: [
-                (label: "Accuracy", value: viewModel.accuracy.percentString),
-                (label: "Correct", value: "\(viewModel.correctCount) / \(viewModel.totalRounds)"),
-                (label: "Avg Response", value: "\(viewModel.averageResponseMs) ms"),
+                (label: "Accuracy", value: "\(Int(viewModel.accuracy * 100))%"),
                 (label: "Time", value: viewModel.durationSeconds.durationString)
             ],
             isNewPersonalBest: isNewPersonalBest,
-            personalBest: PersonalBestTracker.shared.best(for: .colorMatch),
+            personalBest: best,
             exerciseType: .colorMatch,
-            leaderboardScore: viewModel.leaderboardScore,
+            leaderboardScore: viewModel.completed,
             onPlayAgain: {
                 exerciseSaved = false
-                viewModel.reset()
-                viewModel.startGame()
+                viewModel.start()
             },
-            onDone: {
-                saveExercise()
-                dismiss()
-            }
+            onDone: { dismiss() }
         )
     }
 
-    private func generateShareCard() {
-        guard let image = shareImage else { return }
-        let activityVC = UIActivityViewController(activityItems: [image], applicationActivities: nil)
-        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-           let root = windowScene.windows.first?.rootViewController {
-            root.present(activityVC, animated: true)
-        }
-    }
-
-    // MARK: - Save
+    // MARK: Save
 
     private func saveExercise() {
         guard !exerciseSaved else { return }
@@ -568,45 +278,15 @@ struct ColorMatchView: View {
         paywallTrigger.recordExerciseCompleted(gameType: .colorMatch)
         trainingManager.addTrainingTime(viewModel.durationSeconds)
 
-        AdaptiveDifficultyEngine.shared.recordBlock(domain: .colorMatch, correct: viewModel.correctCount, total: viewModel.totalRounds)
-
-        let exercise = Exercise(
+        GameResultRecorder.record(
             type: .colorMatch,
-            difficulty: 3,
-            score: viewModel.score,
-            durationSeconds: viewModel.durationSeconds
+            accuracy: viewModel.accuracy,
+            difficulty: viewModel.completed,
+            durationSeconds: viewModel.durationSeconds,
+            leaderboardScore: viewModel.completed,
+            user: user,
+            modelContext: modelContext,
+            gameCenter: gameCenterService
         )
-        modelContext.insert(exercise)
-
-        let descriptor = FetchDescriptor<DailySession>(
-            sortBy: [SortDescriptor(\.date, order: .reverse)]
-        )
-        let allSessions = (try? modelContext.fetch(descriptor)) ?? []
-        let session: DailySession
-        if let existing = allSessions.first(where: { Calendar.current.isDateInToday($0.date) }) {
-            session = existing
-        } else {
-            session = DailySession()
-            modelContext.insert(session)
-        }
-        session.addExercise(exercise)
-        user?.updateStreak()
-        NotificationService.shared.cancelStreakRisk()
-        if let streak = user?.currentStreak {
-            NotificationService.shared.scheduleMilestone(streak: streak)
-        }
-
-        if let user {
-            _ = ContentView.awardXP(
-                user: user,
-                score: viewModel.score,
-                difficulty: 3,
-                achievementService: achievementService,
-                modelContext: modelContext,
-                gameCenterService: gameCenterService,
-                exerciseType: .colorMatch,
-                gameScore: viewModel.leaderboardScore
-            )
-        }
     }
 }

@@ -11,13 +11,20 @@ final class ChimpTestViewModel {
     var phase: Phase = .setup
     var startTime: Date?
 
-    // Grid: 8 columns x 6 rows = 48 cells
-    let columns = 8
+    // Grid: 5 columns x 6 rows = 30 cells — fits every iPhone width.
+    let columns = 5
     let rows = 6
 
     // Game state
     var currentLevel = 4
-    var bestLevel = 4
+    var bestLevel = 0
+    /// Called with the numbers count each time a level is completed.
+    var onLevelCleared: ((Int) -> Void)?
+    /// While true, the next level waits (cash-out choice, backgrounding).
+    var holdAdvance = false {
+        didSet { if !holdAdvance && pendingAdvance { pendingAdvance = false; setupLevel() } }
+    }
+    private var pendingAdvance = false
     var lives = 3
     var nextExpected = 1
     var numbersHidden = false
@@ -73,7 +80,7 @@ final class ChimpTestViewModel {
     func startGame() {
         phase = .playing
         currentLevel = 4
-        bestLevel = 4
+        bestLevel = 0
         lives = 3
         startTime = Date.now
         if let seed = challengeSeed {
@@ -130,9 +137,10 @@ final class ChimpTestViewModel {
                 SoundService.shared.playCorrect()
                 bestLevel = max(bestLevel, currentLevel)
                 currentLevel += 1
-
+                onLevelCleared?(bestLevel)
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-                    self?.setupLevel()
+                    guard let self else { return }
+                    if self.holdAdvance { self.pendingAdvance = true } else { self.setupLevel() }
                 }
             }
         } else {
@@ -166,7 +174,7 @@ final class ChimpTestViewModel {
     func reset() {
         phase = .setup
         currentLevel = 4
-        bestLevel = 4
+        bestLevel = 0
         lives = 3
         startTime = nil
         numbersHidden = false
@@ -182,7 +190,6 @@ final class ChimpTestViewModel {
 struct ChimpTestView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-    @Environment(AchievementService.self) private var achievementService
     @Environment(TrainingSessionManager.self) private var trainingManager
     @Environment(PaywallTriggerService.self) private var paywallTrigger
     @Environment(StoreService.self) private var storeService
@@ -193,6 +200,7 @@ struct ChimpTestView: View {
     /// Skip the setup screen on appear when entering from a Focus unlock.
     var autoStart: Bool = false
 
+    var mode: GameMode = .train
     @State private var viewModel = ChimpTestViewModel()
     @State private var showingPaywall = false
     @State private var shareImage: UIImage?
@@ -206,6 +214,14 @@ struct ChimpTestView: View {
     private var isProUser: Bool { storeService.isProUser || (user?.isProUser ?? false) }
 
     var body: some View {
+        GameScaffold(mode: mode, trainTitle: "Chimp Test",
+                     trainBest: PersonalBestTracker.shared.best(for: .chimpTest) > 0 ? "\(PersonalBestTracker.shared.best(for: .chimpTest))" : nil,
+                     glow: Color(red: 0.2, green: 0.145, blue: 0.047)) {
+            phaseContent
+        }
+    }
+
+    private var phaseContent: some View {
         VStack(spacing: 0) {
             switch viewModel.phase {
             case .setup:
@@ -215,17 +231,23 @@ struct ChimpTestView: View {
                 playingView
                     .transition(.opacity)
             case .finished:
-                resultsView
-                    .transition(.scale(scale: 0.95).combined(with: .opacity))
+                if mode.run != nil {
+                    Color.clear
+                } else {
+                    resultsView
+                        .transition(.scale(scale: 0.95).combined(with: .opacity))
+                }
             }
         }
-        .background(AppColors.pageBg)
         .animation(.easeInOut(duration: 0.3), value: viewModel.phase)
         .sheet(isPresented: $showingPaywall) { PaywallView(isHighIntent: true) }
         .navigationTitle("Chimp Test")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(viewModel.phase == .playing)
         .onAppear {
+            if let run = mode.run {
+                viewModel.onLevelCleared = { run.report(score: $0) }
+            }
             if autoStart && viewModel.phase == .setup {
                 Analytics.exerciseStarted(game: ExerciseType.chimpTest.rawValue)
                 viewModel.startGame()
@@ -236,14 +258,18 @@ struct ChimpTestView: View {
                 Analytics.exerciseAbandoned(game: ExerciseType.chimpTest.rawValue, roundReached: viewModel.currentLevel)
             }
         }
+        .onChange(of: mode.run?.isFrozen ?? false) { _, frozen in
+            viewModel.holdAdvance = frozen
+        }
         .onChange(of: viewModel.phase) { _, newPhase in
             if newPhase == .finished {
                 isNewPersonalBest = PersonalBestTracker.shared.record(score: viewModel.leaderboardScore, for: .chimpTest)
                 if isNewPersonalBest {
                     Analytics.personalBest(game: ExerciseType.chimpTest.rawValue, score: viewModel.leaderboardScore)
                 }
-                AdaptiveDifficultyEngine.shared.recordBlock(domain: .chimpTest, correct: viewModel.bestLevel - 4, total: viewModel.bestLevel)
+                AdaptiveDifficultyEngine.shared.recordBlock(domain: .chimpTest, correct: max(0, viewModel.bestLevel - 4), total: max(1, viewModel.bestLevel))
                 saveExercise()
+                mode.run?.finish(finalScore: viewModel.bestLevel)
                 generateShareCard()
             }
         }
@@ -319,99 +345,78 @@ struct ChimpTestView: View {
     // MARK: - Playing
 
     private var playingView: some View {
-        VStack(spacing: 12) {
-            // Header: Level + Hearts
-            HStack {
-                Text("Level \(viewModel.currentLevel)")
-                    .font(.headline)
-                    .foregroundStyle(AppColors.amber)
+        GeometryReader { geo in
+            let spacing: CGFloat = 6
+            let cols = viewModel.columns
+            let tile = floor((min(geo.size.width - 32, 400) - 16 - spacing * CGFloat(cols - 1)) / CGFloat(cols))
+            VStack(spacing: 0) {
+                Text("\(viewModel.currentLevel)")
+                    .font(HeroNumber.font(64))
+                    .foregroundStyle(LinearGradient.hero(Color(red: 1, green: 0.85, blue: 0.54)))
                     .contentTransition(.numericText())
-                Spacer()
-                HStack(spacing: 4) {
-                    ForEach(0..<3, id: \.self) { i in
-                        Image(systemName: i < viewModel.lives ? "heart.fill" : "heart")
-                            .font(.system(size: 18))
-                            .foregroundStyle(i < viewModel.lives ? AppColors.coral : AppColors.coral.opacity(0.3))
+                    .padding(.top, 14)
+                Group {
+                    if viewModel.numbersHidden || viewModel.lives < 3 {
+                        HStack(spacing: 4) {
+                            ForEach(0..<3, id: \.self) { i in
+                                Image(systemName: i < viewModel.lives ? "heart.fill" : "heart")
+                                    .foregroundStyle(i < viewModel.lives ? OB.coral : OB.fg3)
+                            }
+                        }
+                        .accessibilityLabel("\(viewModel.lives) lives")
+                    } else {
+                        Label("chimps average 7. can you?", systemImage: "pawprint.fill")
                     }
                 }
-            }
-            .padding(.horizontal)
-            .padding(.top, 8)
-
-            // 8x6 Grid
-            let spacing: CGFloat = 4
-            GeometryReader { geo in
-                let totalHSpacing = spacing * CGFloat(viewModel.columns - 1)
-                let totalVSpacing = spacing * CGFloat(viewModel.rows - 1)
-                let cellWidth = (geo.size.width - totalHSpacing) / CGFloat(viewModel.columns)
-                let cellHeight = (geo.size.height - totalVSpacing) / CGFloat(viewModel.rows)
-                let cellSize = min(cellWidth, cellHeight)
-
-                let gridWidth = cellSize * CGFloat(viewModel.columns) + totalHSpacing
-                let gridHeight = cellSize * CGFloat(viewModel.rows) + totalVSpacing
-
-                VStack(spacing: spacing) {
+                .font(.brand(size: 13, weight: .bold))
+                .foregroundStyle(OB.fg2)
+                .padding(.top, 6)
+                Spacer(minLength: 12)
+                Grid(horizontalSpacing: spacing, verticalSpacing: spacing) {
                     ForEach(0..<viewModel.rows, id: \.self) { row in
-                        HStack(spacing: spacing) {
-                            ForEach(0..<viewModel.columns, id: \.self) { col in
-                                let index = row * viewModel.columns + col
-                                cellView(at: index, size: cellSize)
+                        GridRow {
+                            ForEach(0..<cols, id: \.self) { col in
+                                cellView(at: row * cols + col, size: tile)
                             }
                         }
                     }
                 }
-                .frame(width: gridWidth, height: gridHeight)
-                .position(x: geo.size.width / 2, y: geo.size.height / 2)
+                .padding(8)
+                .background(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(Color(red: 0.063, green: 0.067, blue: 0.133))
+                        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(.white.opacity(0.06)))
+                )
+                Spacer(minLength: 12)
+                Text(viewModel.numbersHidden ? "from memory…" : "tap 1 — then they vanish")
+                    .font(.brand(size: 13, weight: .heavy))
+                    .foregroundStyle(OB.fg3)
+                    .padding(.bottom, 20)
             }
-            .padding(.horizontal, 8)
-
-            Spacer().frame(height: 16)
+            .frame(maxWidth: .infinity)
         }
     }
 
-    @ViewBuilder
     private func cellView(at index: Int, size: CGFloat) -> some View {
-        let number = viewModel.grid[index]
+        let number = viewModel.grid.indices.contains(index) ? viewModel.grid[index] : nil
         let isCorrect = viewModel.correctCells.contains(index)
         let isWrong = viewModel.wrongCell == index
-
-        Button {
-            withAnimation(.easeInOut(duration: 0.15)) {
-                viewModel.tapCell(at: index)
-            }
-        } label: {
-            ZStack {
-                if let num = number {
-                    if isCorrect {
-                        // Already tapped correctly
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(AppColors.teal.opacity(0.3))
-                    } else if isWrong {
-                        // Wrong tap flash
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(AppColors.coral)
-                    } else if viewModel.numbersHidden {
-                        // Hidden behind blank square
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(AppColors.accent)
-                    } else {
-                        // Showing number
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(AppColors.amber)
-                        Text("\(num)")
-                            .font(.system(size: size * 0.4, weight: .bold, design: .rounded))
-                            .foregroundStyle(.white)
-                    }
-                } else {
-                    // Empty cell
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(Color.secondary.opacity(0.08))
+        return Group {
+            if let number {
+                let state: BevelState = isWrong ? .wrong : isCorrect ? .correct : .lit
+                BevelTile(state: state, tint: OB.amber, cornerRadius: 10) {
+                    Text(isCorrect ? "✓" : (viewModel.numbersHidden ? "" : "\(number)"))
+                        .font(HeroNumber.font(size * 0.45))
+                        .foregroundStyle(isCorrect ? Color(red: 0, green: 0.23, blue: 0.17) : Color(red: 0.23, green: 0.14, blue: 0))
                 }
+                .onTapGesture { viewModel.tapCell(at: index) }
+                .accessibilityLabel(viewModel.numbersHidden ? "Hidden tile" : "Number \(number)")
+            } else {
+                BevelTile(state: .idle, cornerRadius: 10)
+                    .accessibilityHidden(true)
             }
-            .frame(width: size, height: size)
         }
-        .buttonStyle(.plain)
-        .disabled(number == nil || isCorrect)
+        .frame(width: size, height: size)
     }
 
     // MARK: - Results
@@ -476,39 +481,15 @@ struct ChimpTestView: View {
         paywallTrigger.recordExerciseCompleted(gameType: .chimpTest)
         trainingManager.addTrainingTime(viewModel.durationSeconds)
 
-        let exercise = Exercise(
+        GameResultRecorder.record(
             type: .chimpTest,
+            accuracy: viewModel.score,
             difficulty: viewModel.difficulty,
-            score: viewModel.score,
-            durationSeconds: viewModel.durationSeconds
+            durationSeconds: viewModel.durationSeconds,
+            leaderboardScore: viewModel.bestLevel,
+            user: user,
+            modelContext: modelContext,
+            gameCenter: gameCenterService
         )
-        modelContext.insert(exercise)
-
-        let descriptor = FetchDescriptor<DailySession>(sortBy: [SortDescriptor(\.date, order: .reverse)])
-        let allSessions = (try? modelContext.fetch(descriptor)) ?? []
-        let session: DailySession
-        if let existing = allSessions.first(where: { Calendar.current.isDateInToday($0.date) }) {
-            session = existing
-        } else {
-            session = DailySession()
-            modelContext.insert(session)
-        }
-        session.addExercise(exercise)
-        user?.updateStreak()
-
-        if let user {
-            _ = ContentView.awardXP(
-                user: user,
-                score: viewModel.score,
-                difficulty: viewModel.difficulty,
-                achievementService: achievementService,
-                modelContext: modelContext,
-                gameCenterService: gameCenterService,
-                exerciseType: .chimpTest,
-                gameScore: viewModel.bestLevel
-            )
-        }
-
-        gameCenterService.reportScore(viewModel.leaderboardScore, leaderboardID: GameCenterService.chimpTestLeaderboard)
     }
 }

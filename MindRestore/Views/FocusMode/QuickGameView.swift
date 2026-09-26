@@ -12,135 +12,74 @@ struct TrainingGame: Identifiable {
 
 enum TrainingGameCatalog {
     static let memoryGames: [TrainingGame] = [
-        TrainingGame(type: .sequentialMemory, title: "Number Memory", icon: "number.circle.fill", color: AppColors.teal),
         TrainingGame(type: .visualMemory, title: "Visual Memory", icon: "square.grid.3x3.fill", color: AppColors.indigo),
-        TrainingGame(type: .chunkingTraining, title: "Chunking", icon: "rectangle.split.3x1.fill", color: AppColors.rose),
-        TrainingGame(type: .verbalMemory, title: "Verbal Memory", icon: "text.book.closed.fill", color: AppColors.violet),
-    ]
-
-    static let speedGames: [TrainingGame] = [
-        TrainingGame(type: .reactionTime, title: "Reaction Time", icon: "bolt.fill", color: AppColors.coral),
-        TrainingGame(type: .mathSpeed, title: "Math Speed", icon: "multiply.circle.fill", color: AppColors.amber),
-        TrainingGame(type: .speedMatch, title: "Speed Match", icon: "bolt.square.fill", color: AppColors.sky),
-        TrainingGame(type: .colorMatch, title: "Color Match", icon: "paintpalette.fill", color: AppColors.violet),
-    ]
-
-    static let focusGames: [TrainingGame] = [
-        TrainingGame(type: .dualNBack, title: "Dual N-Back", icon: "square.grid.3x3", color: AppColors.sky),
+        TrainingGame(type: .sequentialMemory, title: "Number Memory", icon: "number.circle.fill", color: AppColors.teal),
         TrainingGame(type: .chimpTest, title: "Chimp Test", icon: "pawprint.fill", color: AppColors.amber),
     ]
 
-    static let focusUnlockGames: [TrainingGame] = memoryGames + speedGames + focusGames
+    static let speedGames: [TrainingGame] = [
+        TrainingGame(type: .mathSpeed, title: "Math Sprint", icon: "multiply.circle.fill", color: AppColors.amber),
+        TrainingGame(type: .colorMatch, title: "Color Match", icon: "paintpalette.fill", color: AppColors.violet),
+        TrainingGame(type: .reactionTime, title: "Reaction Time", icon: "bolt.fill", color: AppColors.coral),
+    ]
+
+    static let focusUnlockGames: [TrainingGame] = memoryGames + speedGames
 }
 
-/// The spin decides the game AND the unlock window — coupled payouts.
-/// Harder games pay disproportionately more, so the rare tile is a real
-/// jackpot, but the payout only cashes when the game is completed.
-enum FocusUnlockPayout {
-    enum Tier: CaseIterable {
-        case quick   // easy reps, short window
-        case solid   // memory games, medium window
-        case jackpot // hardest games, big window
+// MARK: - Spin results
 
-        var minutes: Int {
-            switch self {
-            case .quick: return 5
-            case .solid: return 10
-            case .jackpot: return 20
-            }
+enum SlotResult: Equatable {
+    case game(UnlockGame)
+    case freePass
+
+    var analyticsName: String {
+        switch self {
+        case .game(let game): game.rawValue
+        case .freePass: "freePass"
         }
-
-        /// Spin weights: commons dominate so the jackpot stays an event.
-        var weight: Double {
-            switch self {
-            case .quick: return 0.60
-            case .solid: return 0.30
-            case .jackpot: return 0.10
-            }
-        }
-    }
-
-    static func tier(for type: ExerciseType) -> Tier {
-        switch type {
-        case .dualNBack, .chimpTest:
-            return .jackpot
-        case .sequentialMemory, .visualMemory, .chunkingTraining, .verbalMemory:
-            return .solid
-        default:
-            return .quick
-        }
-    }
-
-    static func minutes(for type: ExerciseType) -> Int {
-        tier(for: type).minutes
-    }
-
-    /// Pick a tier by weight, then a uniform game within that tier. Falls
-    /// back across tiers if the pool doesn't cover one.
-    static func weightedRandomGame(
-        from games: [TrainingGame],
-        roll: Double = .random(in: 0..<1)
-    ) -> TrainingGame? {
-        guard !games.isEmpty else { return nil }
-
-        var cumulative = 0.0
-        var chosenTier: Tier = .quick
-        for tier in Tier.allCases {
-            cumulative += tier.weight
-            if roll < cumulative {
-                chosenTier = tier
-                break
-            }
-        }
-
-        let pool = games.filter { tier(for: $0.type) == chosenTier }
-        return pool.randomElement() ?? games.randomElement()
     }
 }
 
-enum FocusUnlockCompletionGate {
-    static func shouldGrant(completedGameRawValue: String?, expectedGame: ExerciseType?) -> Bool {
-        guard
-            let expectedGame,
-            let completedGameRawValue,
-            let completedGame = ExerciseType(rawValue: completedGameRawValue)
-        else {
-            return false
-        }
-
-        return completedGame == expectedGame
-    }
+enum SlotSymbol: Hashable {
+    case game(UnlockGame)
+    case freePass(usedToday: Bool)
 }
 
+/// The live draw: FREE PASS at `UnlockRulebook.freePassWeight` while it is
+/// still available today, otherwise one of the six games, uniformly.
+enum SlotOdds {
+    static func pick<R: RandomNumberGenerator>(freePassAvailable: Bool, using rng: inout R) -> SlotResult {
+        #if DEBUG
+        let args = ProcessInfo.processInfo.arguments
+        if let i = args.firstIndex(of: "--unlock-game"), i + 1 < args.count {
+            // A forced FREE PASS still honors once-a-day, so QA can check the second spin can't land it.
+            if args[i + 1] == "freePass", freePassAvailable { return .freePass }
+            if let game = UnlockGame(rawValue: args[i + 1]) { return .game(game) }
+        }
+        #endif
+        if freePassAvailable, Double.random(in: 0..<1, using: &rng) < UnlockRulebook.freePassWeight { return .freePass }
+        return .game(UnlockGame.allCases.randomElement(using: &rng)!)
+    }
+}
 
 // MARK: - Memo's Booth — copy
 
 enum FocusUnlockSlotCopy {
     static let eyebrow = "MEMO'S BOOTH"
     static let headline = "NO FEED TIL YOU TRAIN"
-    static let subhead = "Play a brain game. Get your time back."
+    static let pendingHeadline = "YOUR SPIN"
     static let idleStatus = "spin when you're ready"
     static let spinningStatus = "MEMO'S PICKING"
+    static let freePassStatus = "FREE PASS · \(UnlockRulebook.freePassMinutes) MIN"
 
-    /// Rotating landed lines per payout tier — fresh screenshots every spin.
-    static func landedStatus(for game: TrainingGame?) -> String {
-        guard let game else { return "LOCKED IN" }
-        let pool: [String]
-        switch FocusUnlockPayout.tier(for: game.type) {
-        case .quick:
-            pool = ["QUICK REP, QUICK FIX.", "EASY ONE. IN AND OUT.", "WARM-UP PACE. GO."]
-        case .solid:
-            pool = ["TEN ON THE LINE.", "MEMORY PAYS DOUBLE.", "SOLID PULL. EARN IT."]
-        case .jackpot:
-            pool = ["20 MIN IF YOU SURVIVE.", "JACKPOT. NOW PROVE IT.", "THE BIG ONE. DON'T CHOKE."]
-        }
-        return "\(game.title.uppercased()). \(pool.randomElement() ?? "GO.")"
+    static func landedStatus(for game: UnlockGame) -> String {
+        "\(game.title.uppercased()) · \(game.passLineText.uppercased())"
     }
 }
 
 enum FocusUnlockSlotMode {
     case live
-    /// Onboarding demo: rigged near-miss past a jackpot tile, no game launch,
+    /// Onboarding demo: rigged near-miss past a FREE PASS, no game launch, no sound,
     /// always the full ceremony.
     case demo
 }
@@ -200,165 +139,161 @@ struct DeblockConfirmSheet: View {
     }
 }
 
-// MARK: - The machine (mascot + reel + spin) — shared by the fullscreen
+// MARK: - The machine (dealer + reel + spin) — shared by the fullscreen
 // unlock view and the onboarding demo.
 
 struct FocusUnlockSlotMachine: View {
-    let games: [TrainingGame]
     var mode: FocusUnlockSlotMode = .live
-    /// Fires the moment the reel lands: (game, payout minutes).
-    var onLanded: ((TrainingGame, Int) -> Void)? = nil
-    /// Live mode only: fires after the landed hold to launch the game.
-    var onGameSelected: ((TrainingGame) -> Void)? = nil
+    /// A spin taken in the last 30 minutes: show it centered, never re-roll.
+    var pending: UnlockGame? = nil
+    var reelHeight: CGFloat = 300
+    var dealerSize: CGFloat = 150
+    /// Fires the moment the reel lands (the onboarding demo listens here).
+    var onLanded: ((SlotResult) -> Void)? = nil
+    /// Live mode only: fires once, after PLAY or the FREE PASS hold.
+    var onResult: ((SlotResult) -> Void)? = nil
+
+    enum SlotPhase: Equatable {
+        case idle
+        case spinning
+        case landed(SlotResult)
+    }
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var phase: SlotPhase = .idle
-    @State private var reelItems: [TrainingGame] = []
+    @State private var strip: [SlotSymbol] = []
     @State private var reelOffset: CGFloat = 0
-    @State private var selectedGame: TrainingGame?
     @State private var spinIntensity: CGFloat = 0
-    @State private var launchTask: Task<Void, Never>?
+    @State private var bulbPhase: CGFloat = 0
+    @State private var bulbsDimmed = false
+    @State private var dealerBounce = false
+    @State private var countdown = 3
+    @State private var isResumedSpin = false
+    @State private var resultSent = false
+    @State private var task: Task<Void, Never>?
 
-    private let reelHeight: CGFloat = 300
-    private let tileHeight: CGFloat = 96
-    private let tileSpacing: CGFloat = 4
+    private let rowStride: CGFloat = 60
+    private let windowHeight: CGFloat = 62
+    /// Strip index centered before a spin; the spin strip keeps these rows so the reel doesn't jump.
+    private let idleCenter = 3
 
-    private enum SlotPhase {
-        case idle
-        case spinning
-        case landed
+    private var landed: SlotResult? {
+        if case .landed(let result) = phase { return result }
+        return nil
     }
 
-    private var rowStride: CGFloat { tileHeight + tileSpacing }
-    private var centerOffset: CGFloat { (reelHeight - tileHeight) / 2 }
-    private var canSpin: Bool { phase == .idle && !games.isEmpty }
+    private var isFreePass: Bool { landed == .freePass }
+
+    private var freePassUsedToday: Bool {
+        mode == .live && !PendingSpinStore.shared.freePassAvailableToday
+    }
+
+    private var windowTint: Color {
+        switch landed {
+        case .game(let game): game.glyphTint
+        case .freePass: OB.amber
+        case nil: .white
+        }
+    }
 
     private var statusText: String {
         switch phase {
         case .idle: FocusUnlockSlotCopy.idleStatus
         case .spinning: FocusUnlockSlotCopy.spinningStatus
-        case .landed: FocusUnlockSlotCopy.landedStatus(for: selectedGame)
+        case .landed(.game(let game)): FocusUnlockSlotCopy.landedStatus(for: game)
+        case .landed(.freePass): FocusUnlockSlotCopy.freePassStatus
         }
     }
 
-    private var landedTier: FocusUnlockPayout.Tier? {
-        guard phase == .landed, let selectedGame else { return nil }
-        return FocusUnlockPayout.tier(for: selectedGame.type)
-    }
-
-    private var windowTint: Color {
-        switch landedTier {
-        case .jackpot: return OB.amber
-        case .solid: return OB.accent
-        case .quick: return OB.success
-        case nil: return phase == .spinning ? OB.accent.opacity(0.7) : Color.white.opacity(0.22)
-        }
-    }
-
-    private var mascotPose: String {
+    /// The demo hands off to the page's own CTA once it lands; FREE PASS hands off on its own.
+    private var showsButton: Bool {
         switch phase {
-        case .idle, .spinning:
-            return "mascot-lookout"
-        case .landed:
-            return landedTier == .jackpot ? "mascot-celebrate" : "mascot-cool"
+        case .idle, .spinning: true
+        case .landed(.game): mode == .live
+        case .landed(.freePass): false
         }
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            // Memo the dealer, leaning on the machine's top edge. The animated
-            // dealer loop is the identity when bundled; static poses fall back.
-            // The mp4 has a black background — .lighten keys it out over the
-            // dark backdrop, and the machine's top edge hides the bottom strip.
-            Group {
-                if Bundle.main.url(forResource: "mascot-dealer", withExtension: "mp4") != nil {
-                    OnboardingLoopingVideo(videoName: "mascot-dealer", videoExt: "mp4")
-                        .blendMode(.lighten)
-                        .frame(width: 150, height: 150)
-                } else {
-                    ZStack {
-                        ForEach(["mascot-lookout", "mascot-cool", "mascot-celebrate"], id: \.self) { pose in
-                            Image(pose)
-                                .resizable()
-                                .scaledToFit()
-                                .opacity(pose == mascotPose ? 1 : 0)
-                        }
-                    }
-                    .frame(height: 132)
-                    .animation(.easeInOut(duration: 0.25), value: mascotPose)
-                }
-            }
-            .padding(.bottom, -42)
-            .accessibilityHidden(true)
+            dealer
+                .padding(.bottom, -dealerSize * 0.28)
+                .scaleEffect(dealerBounce ? 1.12 : 1, anchor: .bottom)
+                .accessibilityHidden(true)
 
             machineBody
                 .zIndex(1)
+                .overlay { OnboardingSparkBurst(active: isFreePass, radius: 140) }
 
-            if let selectedGame, phase == .landed {
-                FocusUnlockRewardTicket(
-                    minutes: FocusUnlockPayout.minutes(for: selectedGame.type),
-                    color: windowTint,
-                    isPreview: mode == .demo
-                )
-                .padding(.top, 14)
-                .transition(.scale.combined(with: .opacity))
-            } else {
-                statusLine
-                    .padding(.top, 14)
+            Group {
+                if isFreePass {
+                    FocusUnlockRewardTicket()
+                        .transition(.scale.combined(with: .opacity))
+                } else {
+                    FocusUnlockStatusPill(text: statusText, isLanded: landed != nil, landedColor: windowTint)
+                }
             }
+            .padding(.top, 14)
 
-            // In the onboarding demo the page's own CTA takes over once the
-            // reel lands — a dimmed dead SPIN next to it would just confuse.
-            if phase != .landed {
+            if showsButton {
                 spinButton
                     .padding(.top, 14)
                     .transition(.opacity)
             }
         }
-        .animation(.easeOut(duration: 0.25), value: phase == .landed)
-        .onAppear {
-            if reelItems.isEmpty {
-                var transaction = Transaction()
-                transaction.disablesAnimations = true
-                withTransaction(transaction) {
-                    setIdleReel()
-                }
-            }
-        }
-        .onDisappear {
-            launchTask?.cancel()
-        }
+        .animation(.easeOut(duration: 0.25), value: landed != nil)
+        .onAppear(perform: setUp)
+        .onDisappear { task?.cancel() }
         .accessibilityElement(children: .contain)
     }
 
+    // MARK: Dealer
+
+    @ViewBuilder private var dealer: some View {
+        // The mp4 has a black background — .lighten keys it out over the dark
+        // backdrop, and the machine's top edge hides the bottom strip.
+        if Bundle.main.url(forResource: "mascot-dealer", withExtension: "mp4") != nil {
+            OnboardingLoopingVideo(videoName: "mascot-dealer", videoExt: "mp4")
+                .blendMode(.lighten)
+                .frame(width: dealerSize, height: dealerSize)
+        } else {
+            Image(isFreePass ? "mascot-celebrate" : "mascot-lookout")
+                .resizable()
+                .scaledToFit()
+                .frame(height: dealerSize * 0.88)
+        }
+    }
+
+    // MARK: Machine
+
     private var machineBody: some View {
         ZStack {
-            // Machined frame: outer hairline + inset bezel so the reel reads
-            // as recessed hardware, not a painted panel.
             RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .fill(OB.surface.opacity(0.92))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .stroke(Color.white.opacity(0.10), lineWidth: 1)
-                )
                 .overlay(
                     RoundedRectangle(cornerRadius: 21, style: .continuous)
                         .stroke(Color.black.opacity(0.55), lineWidth: 1.5)
                         .padding(3)
                 )
 
+            // Center window: a quiet highlight at rest, the game's color once it lands.
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(windowTint.opacity(landed == nil ? 0.06 : 0.16))
+                .frame(height: windowHeight)
+                .padding(.horizontal, 12)
+
             GeometryReader { geometry in
-                VStack(spacing: tileSpacing) {
-                    ForEach(Array(reelItems.enumerated()), id: \.offset) { index, game in
-                        FocusUnlockReelTile(
-                            game: game,
-                            isSelected: selectedGame?.type == game.type && phase == .landed,
-                            isLanded: phase == .landed,
-                            distanceFromCenter: rowDistance(for: index),
-                            spinIntensity: spinIntensity
+                VStack(spacing: 0) {
+                    ForEach(Array(strip.enumerated()), id: \.offset) { index, symbol in
+                        let distance = rowDistance(for: index)
+                        FocusUnlockReelRow(
+                            symbol: symbol,
+                            distance: distance,
+                            showsPassLine: landed != nil && abs(distance) < 0.5,
+                            isDimmed: landed != nil && abs(distance) >= 0.5
                         )
-                        .frame(height: tileHeight)
-                        .padding(.horizontal, 10)
+                        .frame(height: rowStride)
+                        .padding(.horizontal, 16)
                     }
                 }
                 .frame(width: geometry.size.width, alignment: .top)
@@ -369,8 +304,8 @@ struct FocusUnlockSlotMachine: View {
                 LinearGradient(
                     stops: [
                         .init(color: .clear, location: 0),
-                        .init(color: .black, location: 0.13),
-                        .init(color: .black, location: 0.87),
+                        .init(color: .white, location: 0.3),
+                        .init(color: .white, location: 0.7),
                         .init(color: .clear, location: 1)
                     ],
                     startPoint: .top,
@@ -378,194 +313,205 @@ struct FocusUnlockSlotMachine: View {
                 )
             )
 
-            // Recessed depth: the reel falls away into shadow at both ends.
-            VStack(spacing: 0) {
-                LinearGradient(
-                    colors: [.black.opacity(0.55), .clear],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .frame(height: 30)
-                Spacer(minLength: 0)
-                LinearGradient(
-                    colors: [.clear, .black.opacity(0.55)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .frame(height: 30)
-            }
-            .allowsHitTesting(false)
-
-            // Selection window — clean tinted stroke + glow, no clipped chrome.
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(windowTint, lineWidth: 2.5)
-                .frame(height: tileHeight + 10)
-                .padding(.horizontal, 6)
-                .shadow(color: windowTint.opacity(phase == .landed ? 0.55 : 0.12), radius: 16)
-                .animation(.easeOut(duration: 0.25), value: phase)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(windowTint.opacity(landed == nil ? 0.22 : 0.9), lineWidth: landed == nil ? 1.5 : 2.5)
+                .frame(height: windowHeight)
+                .padding(.horizontal, 12)
+                .shadow(color: windowTint.opacity(landed == nil ? 0 : 0.5), radius: 14)
                 .allowsHitTesting(false)
+
+            rimBulbs
         }
         .frame(height: reelHeight)
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-        // Machine glow breathes accent at rest, flashes the payout color on
-        // landing — the whole cabinet celebrates, not just the window.
-        .shadow(color: windowTint.opacity(phase == .landed ? 0.45 : 0.18), radius: phase == .landed ? 36 : 24, y: 8)
+        .shadow(color: (landed == nil ? OB.accent : windowTint).opacity(landed == nil ? 0.18 : 0.45),
+                radius: landed == nil ? 24 : 36, y: 8)
         .animation(.easeOut(duration: 0.3), value: phase)
         .accessibilityLabel("Brain game picker")
-        .accessibilityValue(selectedGame?.title ?? "Ready to spin")
+        .accessibilityValue(accessibilityValue)
     }
 
-    private var statusLine: some View {
-        let isLanded = phase == .landed
-        return FocusUnlockStatusPill(
-            text: statusText,
-            isLanded: isLanded,
-            landedColor: windowTint
-        )
+    /// Marquee bulbs around the rim: they chase while spinning, blink on the
+    /// landing, and go solid gold for a FREE PASS.
+    private var rimBulbs: some View {
+        let shape = RoundedRectangle(cornerRadius: 20, style: .continuous)
+        return Group {
+            if isFreePass {
+                shape.stroke(
+                    LinearGradient(colors: [Color(red: 1, green: 0.9, blue: 0.6), OB.amber], startPoint: .top, endPoint: .bottom),
+                    lineWidth: 3
+                )
+            } else {
+                shape.stroke(OB.amber, style: StrokeStyle(lineWidth: 3, lineCap: .round, dash: [0.1, 12], dashPhase: bulbPhase))
+            }
+        }
+        .padding(5)
+        .opacity(bulbsDimmed ? 0.3 : 1)
+        .shadow(color: OB.amber.opacity(0.6), radius: 4)
+        .allowsHitTesting(false)
     }
+
+    private var accessibilityValue: String {
+        switch phase {
+        case .idle: "Ready to spin"
+        case .spinning: "Spinning"
+        case .landed(.game(let game)): game.title
+        case .landed(.freePass): "Free pass"
+        }
+    }
+
+    // MARK: Button
 
     private var spinButton: some View {
-        Button {
-            spin()
-        } label: {
-            Text(phase == .spinning ? "SPINNING" : "SPIN")
+        Button(action: buttonTapped) {
+            Text(buttonTitle)
                 .tracking(1.2)
+                .contentTransition(.numericText())
                 .gradientButton()
         }
-        .disabled(!canSpin)
-        .opacity(canSpin ? 1 : 0.55)
+        .disabled(phase == .spinning)
+        .opacity(phase == .spinning ? 0.55 : 1)
         .buttonStyle(.plain)
-        .accessibilityLabel("Spin")
-        .accessibilityHint("Chooses a random brain game and unlock window")
+        .accessibilityLabel(landed == nil ? "Spin" : "Play")
+        .accessibilityHint(landed == nil ? "Memo picks the game that unlocks your apps" : "Starts the game now")
+    }
+
+    private var buttonTitle: String {
+        switch phase {
+        case .idle: "SPIN"
+        case .spinning: "SPINNING"
+        case .landed: isResumedSpin ? "PLAY" : "PLAY · \(countdown)"
+        }
+    }
+
+    private func buttonTapped() {
+        switch phase {
+        case .idle: spin()
+        case .landed(let result): deliver(result)
+        case .spinning: break
+        }
+    }
+
+    // MARK: Reel geometry
+
+    private func offset(centering index: Int) -> CGFloat {
+        reelHeight / 2 - (CGFloat(index) + 0.5) * rowStride
     }
 
     private func rowDistance(for index: Int) -> CGFloat {
-        let tileCenter = reelOffset + CGFloat(index) * rowStride + tileHeight / 2
-        return (tileCenter - reelHeight / 2) / rowStride
+        (reelOffset + (CGFloat(index) + 0.5) * rowStride - reelHeight / 2) / rowStride
     }
 
-    private func setIdleReel() {
-        reelItems = Array(repeating: games, count: 3).flatMap { $0 }
-        let middleIndex = max(games.count, 0)
-        reelOffset = centerOffset - CGFloat(middleIndex) * rowStride
+    private func symbol(for result: SlotResult) -> SlotSymbol {
+        switch result {
+        case .game(let game): .game(game)
+        case .freePass: .freePass(usedToday: false)
+        }
+    }
+
+    /// Each game and FREE PASS equally dense on the strip.
+    private func randomSymbol() -> SlotSymbol {
+        let pick = Int.random(in: 0...UnlockGame.allCases.count)
+        return pick == UnlockGame.allCases.count ? .freePass(usedToday: freePassUsedToday) : .game(UnlockGame.allCases[pick])
+    }
+
+    private func setUp() {
+        guard strip.isEmpty else { return }
+        let center = pending.map(SlotSymbol.game) ?? .game(.visualMemory)
+        let others = UnlockGame.allCases.filter { SlotSymbol.game($0) != center }.map(SlotSymbol.game)
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            strip = [others[0], others[1], .freePass(usedToday: freePassUsedToday), center, others[2], others[3], others[4]]
+            reelOffset = offset(centering: idleCenter)
+            if mode == .live, let pending {
+                isResumedSpin = true
+                phase = .landed(.game(pending))
+            }
+        }
+        if mode == .live, let pending {
+            Analytics.unlockPendingSpinResumed(game: pending.rawValue)
+        }
     }
 
     // MARK: Spin
 
     private func spin() {
-        guard canSpin else { return }
+        guard phase == .idle else { return }
 
-        let winner: TrainingGame
+        let result: SlotResult
         if mode == .demo {
-            // Rigged: land Visual Memory — the strongest game to hand the
-            // user right after — following a near-miss past the jackpot.
-            winner = games.first { $0.type == .visualMemory } ?? games[0]
+            result = .game(.visualMemory)
         } else {
-            guard let chosen = FocusUnlockPayout.weightedRandomGame(from: games) else { return }
-            winner = chosen
+            var rng = SystemRandomNumberGenerator()
+            result = SlotOdds.pick(freePassAvailable: PendingSpinStore.shared.freePassAvailableToday, using: &rng)
         }
 
-        if mode == .live {
-            Analytics.focusUnlockSpinStarted()
-        }
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
-
-        selectedGame = nil
         phase = .spinning
 
+        var symbols = Array(strip.prefix(idleCenter + 1)) + (0..<22).map { _ in randomSymbol() }
+        let landIndex = symbols.count
+        if mode == .demo {
+            // Near-miss: a FREE PASS crawls through the window right before Visual Memory settles.
+            symbols[landIndex - 1] = .freePass(usedToday: false)
+        }
+        symbols.append(symbol(for: result))
+        symbols += (0..<3).map { _ in randomSymbol() }
+        strip = symbols
+
+        let finalOffset = offset(centering: landIndex)
+
         if reduceMotion {
-            reelItems = games
-            if let winnerIndex = games.firstIndex(where: { $0.type == winner.type }) {
-                withAnimation(.easeOut(duration: 0.5)) {
-                    reelOffset = centerOffset - CGFloat(winnerIndex) * rowStride
-                }
-            }
-            launchTask = Task { @MainActor in
+            withAnimation(.easeOut(duration: 0.5)) { reelOffset = finalOffset }
+            task = Task { @MainActor in
                 try? await Task.sleep(for: .seconds(0.5))
                 guard !Task.isCancelled else { return }
-                finishLanding(winner)
+                land(result)
             }
             return
         }
 
-        // Ceremony decays: first spin of the day gets the full ritual.
+        // Ceremony decays: the first spin of the day gets the full ritual.
         // Demo spins always run the full ceremony — it's the sales pitch.
         let fullCeremony = mode == .demo || isFirstSpinToday
         if mode == .live && fullCeremony { markFullSpinToday() }
-        let duration = fullCeremony ? 2.3 : 1.1
-        let loops = fullCeremony ? 4 : 2
+        let duration = fullCeremony ? 2.3 : 1.4
 
-        var spinItems = Array(repeating: games, count: loops).flatMap { $0 }
-        if mode == .demo {
-            // Near-miss: the jackpot tile crawls through the window right
-            // before the winner settles.
-            if let jackpotGame = games.first(where: { FocusUnlockPayout.tier(for: $0.type) == .jackpot }) {
-                spinItems.append(jackpotGame)
-            }
-        } else {
-            let winnerIndex = games.firstIndex(where: { $0.type == winner.type }) ?? 0
-            spinItems += Array(games.prefix(winnerIndex))
-        }
-        spinItems.append(winner)
-        let landIndex = spinItems.count - 1
-
-        // Rows below the winner so the window never sits at the end of the
-        // world — an empty row under the landed tile reads as a bug.
-        spinItems += games.filter { $0.type != winner.type }.prefix(2)
-
-        reelItems = spinItems
-        reelOffset = centerOffset
-        spinIntensity = 0
-
-        let finalOffset = centerOffset - CGFloat(landIndex) * rowStride
-
-        launchTask = Task { @MainActor in
+        task = Task { @MainActor in
             await animateSpin(to: finalOffset, duration: duration)
             guard !Task.isCancelled else { return }
-
             withAnimation(.spring(response: 0.26, dampingFraction: 0.56)) {
                 reelOffset = finalOffset
                 spinIntensity = 0
             }
-            playLockClunk()
-
-            try? await Task.sleep(for: .seconds(0.2))
-            guard !Task.isCancelled else { return }
-            finishLanding(winner)
+            land(result)
         }
     }
 
-    /// Frame-driven reel: ease-out-quart travel to an overshoot point, with
-    /// haptic + sound ticks fired on actual tile crossings so the cadence is
-    /// the physics (fast roll → sparse, punchy clicks at the end).
+    /// Frame-driven reel: ease-out-quart travel to an overshoot point, ticking
+    /// on real row crossings so the cadence is the physics.
     private func animateSpin(to finalOffset: CGFloat, duration: Double) async {
         let startOffset = reelOffset
-        let overshootTarget = finalOffset - 14
-        let distance = overshootTarget - startOffset
+        let distance = (finalOffset - 14) - startOffset
         let startedAt = Date()
-
-        let tick = UIImpactFeedbackGenerator(style: .rigid)
-        tick.prepare()
-        var lastCenteredIndex = Int.min
+        var lastCentered = Int.min
         var lastTickAt = Date.distantPast
 
         while !Task.isCancelled {
             let elapsed = Date().timeIntervalSince(startedAt)
             let t = min(elapsed / duration, 1)
-            let eased = 1 - pow(1 - t, 4)
-            reelOffset = startOffset + distance * CGFloat(eased)
+            reelOffset = startOffset + distance * CGFloat(1 - pow(1 - t, 4))
             spinIntensity = CGFloat(pow(1 - t, 2))
+            bulbPhase = CGFloat(-elapsed * 60)
 
-            let centered = Int(((centerOffset - reelOffset) / rowStride).rounded())
-            if centered != lastCenteredIndex {
-                lastCenteredIndex = centered
-                // Gate to ~14 ticks/sec max so the early blur doesn't saturate
-                // the Taptic Engine; late crossings all land individually.
-                if Date().timeIntervalSince(lastTickAt) > 0.07 {
+            let centered = Int(((reelHeight / 2 - reelOffset) / rowStride - 0.5).rounded())
+            if centered != lastCentered {
+                lastCentered = centered
+                if Date().timeIntervalSince(lastTickAt) >= 0.045 {
                     lastTickAt = Date()
-                    tick.impactOccurred(intensity: 0.55 + 0.45 * t)
-                    tick.prepare()
-                    SoundService.shared.playReelTick()
+                    HapticService.tap()
+                    if mode == .live { SlotSound.tick() }
                 }
             }
 
@@ -574,42 +520,61 @@ struct FocusUnlockSlotMachine: View {
         }
     }
 
-    private func playLockClunk() {
-        let rigid = UIImpactFeedbackGenerator(style: .rigid)
-        let heavy = UIImpactFeedbackGenerator(style: .heavy)
-        rigid.prepare()
-        heavy.prepare()
-        rigid.impactOccurred()
-        SoundService.shared.playReelLock()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.09) {
-            heavy.impactOccurred()
+    private func land(_ result: SlotResult) {
+        withAnimation(.spring(response: 0.32, dampingFraction: 0.78)) {
+            phase = .landed(result)
+        }
+        onLanded?(result)
+
+        if mode == .live {
+            let attempt = max(1, UserDefaults(suiteName: "group.com.memori.shared")?.integer(forKey: "focus_daily_attempt_count") ?? 0)
+            Analytics.unlockSpin(result: result.analyticsName, attempt: attempt)
+        }
+
+        switch result {
+        case .game:
+            if mode == .live { SlotSound.lock() }
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            task = Task { @MainActor in
+                await blinkBulbs()
+                guard mode == .live else { return }
+                for remaining in [2, 1] {
+                    try? await Task.sleep(for: .seconds(1))
+                    guard !Task.isCancelled else { return }
+                    withAnimation { countdown = remaining }
+                }
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled else { return }
+                deliver(result)
+            }
+        case .freePass:
+            if mode == .live { SlotSound.chime() }
+            HapticService.complete()
+            withAnimation(.spring(response: 0.22, dampingFraction: 0.45)) { dealerBounce = true }
+            task = Task { @MainActor in
+                try? await Task.sleep(for: .seconds(0.22))
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) { dealerBounce = false }
+                try? await Task.sleep(for: .seconds(1.18))
+                guard !Task.isCancelled, mode == .live else { return }
+                deliver(result)
+            }
         }
     }
 
-    private func finishLanding(_ winner: TrainingGame) {
-        selectedGame = winner
-        withAnimation(.spring(response: 0.32, dampingFraction: 0.78)) {
-            phase = .landed
+    private func blinkBulbs() async {
+        for _ in 0..<3 {
+            withAnimation(.easeInOut(duration: 0.1)) { bulbsDimmed = true }
+            try? await Task.sleep(for: .seconds(0.12))
+            withAnimation(.easeInOut(duration: 0.1)) { bulbsDimmed = false }
+            try? await Task.sleep(for: .seconds(0.12))
         }
+    }
 
-        let minutes = FocusUnlockPayout.minutes(for: winner.type)
-        UINotificationFeedbackGenerator().notificationOccurred(.success)
-        if FocusUnlockPayout.tier(for: winner.type) == .jackpot {
-            SoundService.shared.playJackpotSting()
-        }
-
-        if mode == .live {
-            Analytics.focusUnlockSpinLanded(gameType: winner.type.rawValue, payoutMinutes: minutes)
-        }
-        onLanded?(winner, minutes)
-
-        guard mode == .live, let onGameSelected else { return }
-        launchTask = Task { @MainActor in
-            // Hold long enough to read the landed line before the handoff.
-            try? await Task.sleep(for: .seconds(1.2))
-            guard !Task.isCancelled else { return }
-            onGameSelected(winner)
-        }
+    private func deliver(_ result: SlotResult) {
+        guard mode == .live, !resultSent else { return }
+        resultSent = true
+        task?.cancel()
+        onResult?(result)
     }
 
     // MARK: Ceremony decay
@@ -628,171 +593,158 @@ struct FocusUnlockSlotMachine: View {
     }
 }
 
-// MARK: - Atmosphere — a quiet midnight arcade wall behind Memo's Booth.
+// MARK: - Atmosphere — a dark room with one warm spotlight on the machine.
 
 struct FocusSlotAtmosphere: View {
     var body: some View {
         ZStack {
             OB.bg
-
-            FocusSlotBackdropTexture()
-
-            RoundedRectangle(cornerRadius: 58, style: .continuous)
-                .fill(OB.accent.opacity(0.035))
-                .frame(width: 430, height: 560)
-                .blur(radius: 34)
-                .offset(y: 170)
+            // Spotlight cone from above, pooling on the machine.
+            RadialGradient(
+                colors: [Color(red: 1, green: 0.76, blue: 0.28).opacity(0.13), .clear],
+                center: UnitPoint(x: 0.5, y: 0.62), startRadius: 0, endRadius: 360
+            )
+            LinearGradient(
+                colors: [Color(red: 1, green: 0.8, blue: 0.4).opacity(0.05), .clear],
+                startPoint: .top, endPoint: UnitPoint(x: 0.5, y: 0.55)
+            )
+            // Vignette so the edges of the room fall away.
+            RadialGradient(colors: [.clear, .black.opacity(0.55)], center: .center, startRadius: 220, endRadius: 620)
         }
         .ignoresSafeArea()
         .accessibilityHidden(true)
     }
 }
 
-private struct FocusSlotBackdropTexture: View {
-    private let flecks: [(x: CGFloat, y: CGFloat, size: CGFloat, color: Color)] = [
-        (0.08, 0.18, 4, OB.accent.opacity(0.55)),
-        (0.14, 0.43, 2, OB.memoPurple.opacity(0.42)),
-        (0.88, 0.24, 5, OB.accent.opacity(0.46)),
-        (0.82, 0.55, 2, OB.memoPurple.opacity(0.36)),
-        (0.11, 0.74, 3, OB.accent.opacity(0.34)),
-        (0.91, 0.82, 4, OB.memoPurple.opacity(0.30)),
-        (0.73, 0.12, 2, OB.accent.opacity(0.28)),
-        (0.29, 0.89, 2, OB.memoPurple.opacity(0.24))
-    ]
-
-    var body: some View {
-        Canvas { context, size in
-            for fleck in flecks {
-                let point = CGPoint(x: size.width * fleck.x, y: size.height * fleck.y)
-                let rect = CGRect(
-                    x: point.x - fleck.size / 2,
-                    y: point.y - fleck.size / 2,
-                    width: fleck.size,
-                    height: fleck.size
-                )
-                context.fill(Path(ellipseIn: rect), with: .color(fleck.color))
-            }
-        }
-    }
-}
-
 // MARK: - Fullscreen unlock view
 
 struct FocusUnlockSlotView: View {
-    let games: [TrainingGame]
-    let onGameSelected: (TrainingGame) -> Void
+    let pending: UnlockGame?
+    let onResult: (SlotResult) -> Void
+
+    init(pending: UnlockGame?, onResult: @escaping (SlotResult) -> Void) {
+        self.pending = pending
+        self.onResult = onResult
+    }
+
+    private var attempt: Int {
+        max(1, UserDefaults(suiteName: "group.com.memori.shared")?.integer(forKey: "focus_daily_attempt_count") ?? 0)
+    }
 
     var body: some View {
-        ZStack {
-            FocusSlotAtmosphere()
-
+        GeometryReader { geometry in
+            // SE-class screens get a smaller sign and dealer so the 5-row machine still fits.
+            let compact = geometry.size.height < 700
             VStack(spacing: 0) {
-                Spacer(minLength: 30)
+                VStack(spacing: compact ? 8 : 12) {
+                    BoothMarqueeSign(scale: compact ? 0.78 : 1)
 
-                VStack(spacing: 8) {
-                    FocusSlotMarquee(title: FocusUnlockSlotCopy.eyebrow)
-
-                    Text(FocusUnlockSlotCopy.headline)
-                        .font(.system(size: 34, weight: .black, design: .rounded))
+                    Text(pending == nil ? FocusUnlockSlotCopy.headline : FocusUnlockSlotCopy.pendingHeadline)
+                        .font(.system(size: compact ? 28 : 32, weight: .black, design: .rounded))
                         .foregroundStyle(OB.fg)
-                        .multilineTextAlignment(.center)
-                        .lineLimit(2)
-                        .minimumScaleFactor(0.78)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
                         .accessibilityAddTraits(.isHeader)
 
-                    Text(FocusUnlockSlotCopy.subhead)
-                        .font(.system(size: 15, weight: .bold, design: .rounded))
-                        .foregroundStyle(OB.fg2)
-                        .multilineTextAlignment(.center)
-                        .lineLimit(2)
-                        .minimumScaleFactor(0.82)
+                    HStack(spacing: 6) {
+                        BlockedAppIcon(size: 20)
+                        Text("attempt #\(attempt) today")
+                    }
+                    .font(.brand(size: 12, weight: .heavy))
+                    .foregroundStyle(OB.fg2)
                 }
+                .padding(.top, compact ? 8 : 20)
 
-                Spacer(minLength: 16)
+                Spacer(minLength: 8)
 
                 FocusUnlockSlotMachine(
-                    games: games,
                     mode: .live,
-                    onGameSelected: onGameSelected
+                    pending: pending,
+                    reelHeight: 300,
+                    dealerSize: compact ? 118 : 150,
+                    onResult: onResult
                 )
                 .frame(maxWidth: 360)
 
-                Spacer(minLength: 28)
+                Spacer(minLength: 12)
             }
             .padding(.horizontal, 24)
+            .frame(width: geometry.size.width, height: geometry.size.height)
         }
+        .background { FocusSlotAtmosphere() }
         .preferredColorScheme(.dark)
         .interactiveDismissDisabled(true)
     }
 }
 
-private struct FocusSlotMarquee: View {
-    let title: String
+/// MEMO'S BOOTH as a real lit sign: chunky two-line letters on a dark board,
+/// framed by chasing bulbs.
+private struct BoothMarqueeSign: View {
+    var scale: CGFloat = 1
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var chase: CGFloat = 0
 
-    var body: some View {
-        Text(title)
-            .font(.system(size: 11, weight: .heavy, design: .monospaced))
-            .tracking(1.5)
-            .foregroundStyle(OB.accent)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-            .background(OB.surface.opacity(0.86), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(OB.accent.opacity(0.30), lineWidth: 1)
-            )
-            .overlay(alignment: .leading) {
-                Circle()
-                    .fill(OB.amber.opacity(0.82))
-                    .frame(width: 4, height: 4)
-                    .padding(.leading, 6)
-            }
-            .overlay(alignment: .trailing) {
-                Circle()
-                    .fill(OB.amber.opacity(0.82))
-                    .frame(width: 4, height: 4)
-                    .padding(.trailing, 6)
-            }
+    private var letterFill: LinearGradient {
+        LinearGradient(colors: [Color(red: 1, green: 0.95, blue: 0.82), OB.amber], startPoint: .top, endPoint: .bottom)
     }
-}
-
-private struct FocusUnlockRewardTicket: View {
-    let minutes: Int
-    let color: Color
-    let isPreview: Bool
 
     var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "ticket.fill")
-                .font(.system(size: 17, weight: .bold))
-                .foregroundStyle(color)
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text(isPreview ? "IF YOU FINISH" : "TIME BACK")
-                    .font(.system(size: 9, weight: .heavy, design: .monospaced))
-                    .tracking(1.1)
-                    .foregroundStyle(OB.fg2)
-                Text("\(minutes) MINUTES")
-                    .font(.system(size: 20, weight: .black, design: .rounded))
-                    .foregroundStyle(OB.fg)
-                    .monospacedDigit()
-            }
+        let board = RoundedRectangle(cornerRadius: 16 * scale, style: .continuous)
+        VStack(spacing: -4 * scale) {
+            Text("MEMO'S")
+            Text("BOOTH")
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 10)
-        .background(color.opacity(0.16), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 13, style: .continuous)
-                .strokeBorder(color.opacity(0.7), style: StrokeStyle(lineWidth: 1.2, dash: [5, 3]))
+        .font(.system(size: 30 * scale, weight: .black, design: .rounded))
+        .tracking(4 * scale)
+        .foregroundStyle(letterFill)
+        .shadow(color: OB.amber.opacity(0.7), radius: 10 * scale)
+        .padding(.horizontal, 30 * scale)
+        .padding(.vertical, 14 * scale)
+        .background(
+            board.fill(LinearGradient(colors: [Color(red: 0.16, green: 0.07, blue: 0.1), Color(red: 0.08, green: 0.04, blue: 0.07)],
+                                      startPoint: .top, endPoint: .bottom))
         )
-        .shadow(color: color.opacity(0.20), radius: 12, y: 5)
-        .accessibilityLabel(isPreview
-            ? "\(minutes) minutes if you complete the game"
-            : "\(minutes) minutes back")
+        .overlay(
+            board.stroke(Color(red: 1, green: 0.85, blue: 0.5),
+                         style: StrokeStyle(lineWidth: 4 * scale, lineCap: .round, dash: [0.1, 11 * scale], dashPhase: chase))
+                .padding(5 * scale)
+                .shadow(color: OB.amber.opacity(0.9), radius: 4 * scale)
+        )
+        .overlay(board.strokeBorder(OB.amber.opacity(0.35), lineWidth: 1.5))
+        .shadow(color: OB.amber.opacity(0.25), radius: 24 * scale)
+        .onAppear {
+            guard !reduceMotion else { return }
+            withAnimation(.linear(duration: 2.4).repeatForever(autoreverses: false)) { chase = -22 * scale }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(FocusUnlockSlotCopy.eyebrow)
     }
 }
 
-// MARK: - Reel tile
+/// Pops out of the machine when the reel lands on FREE PASS.
+private struct FocusUnlockRewardTicket: View {
+    var body: some View {
+        VStack(spacing: 2) {
+            SignageText(text: "FREE PASS", colors: [Color(red: 1, green: 0.9, blue: 0.6), OB.amber], size: 40)
+            Text("\(UnlockRulebook.freePassMinutes) MINUTES BACK")
+                .font(.system(size: 11, weight: .heavy, design: .monospaced))
+                .tracking(1.1)
+                .foregroundStyle(OB.fg2)
+        }
+        .padding(.horizontal, 22)
+        .padding(.vertical, 10)
+        .background(OB.amber.opacity(0.14), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(OB.amber.opacity(0.7), style: StrokeStyle(lineWidth: 1.2, dash: [5, 3]))
+        )
+        .shadow(color: OB.amber.opacity(0.25), radius: 12, y: 5)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Free pass. \(UnlockRulebook.freePassMinutes) minutes back")
+    }
+}
+
+// MARK: - Reel row
 
 private struct FocusUnlockStatusPill: View {
     let text: String
@@ -819,129 +771,69 @@ private struct FocusUnlockStatusPill: View {
     }
 }
 
-private struct FocusUnlockReelTile: View {
-    let game: TrainingGame
-    let isSelected: Bool
-    let isLanded: Bool
-    let distanceFromCenter: CGFloat
-    let spinIntensity: CGFloat
+private struct FocusUnlockReelRow: View {
+    let symbol: SlotSymbol
+    let distance: CGFloat
+    let showsPassLine: Bool
+    let isDimmed: Bool
 
-    private var tier: FocusUnlockPayout.Tier {
-        FocusUnlockPayout.tier(for: game.type)
-    }
-
-    private var payoutColor: Color {
-        switch tier {
-        case .quick: return OB.fg2
-        case .solid: return OB.accent
-        case .jackpot: return OB.amber
-        }
-    }
-
-    private var normalizedDistance: CGFloat {
-        min(abs(distanceFromCenter), 2.4)
-    }
-
-    private var depthScale: CGFloat {
-        max(0.82, 1 - normalizedDistance * 0.09)
-    }
-
-    private var depthOpacity: Double {
-        if isLanded && !isSelected {
-            // The winner owns the landed frame — everything else recedes hard.
-            return max(0.12, 0.30 - Double(normalizedDistance) * 0.12)
-        }
-        return max(0.40, 1 - Double(normalizedDistance) * 0.26)
-    }
-
-    private var depthRotation: Double {
-        Double(distanceFromCenter) * -12
-    }
-
-    private var cylinderYOffset: CGFloat {
-        let clamped = max(-2.2, min(2.2, distanceFromCenter))
-        return CGFloat(sin(Double(clamped) * 0.62)) * 4
-    }
+    private var nearness: CGFloat { max(0, 1 - abs(distance)) }
 
     var body: some View {
-        HStack(spacing: 12) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(game.color.opacity(isSelected ? 0.45 : 0.30))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .stroke(game.color.opacity(0.65), lineWidth: 1)
-                    )
-                Image(systemName: game.icon)
-                    .font(.system(size: 18, weight: .bold))
-                    .foregroundStyle(isSelected ? .white : game.color)
+        content
+            // Rows swell toward the window: 52 pt at the edges, 62 pt centered.
+            .frame(height: 52 + 10 * nearness * nearness)
+            .opacity(isDimmed ? 0.3 : max(0.45, 1 - Double(abs(distance)) * 0.25))
+            .saturation(isDimmed ? 0.5 : 1)
+    }
+
+    @ViewBuilder private var content: some View {
+        switch symbol {
+        case .game(let game):
+            HStack(spacing: 12) {
+                GameGlyph(game: game, size: 40)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(game.title)
+                        .font(.brand(size: 15, weight: .black))
+                        .foregroundStyle(OB.fg)
+                        .lineLimit(1)
+                    if showsPassLine {
+                        Text(game.passLineText)
+                            .font(.brand(size: 10, weight: .heavy))
+                            .foregroundStyle(OB.fg2)
+                            .transition(.opacity)
+                    }
+                }
+                Spacer(minLength: 0)
             }
-            .frame(width: 46, height: 46)
-            .shadow(color: game.color.opacity(isSelected ? 0.65 : 0.30), radius: 9, y: 2)
-
-            Text(game.title)
-                .font(.system(size: 18, weight: .black, design: .rounded))
-                .foregroundStyle(OB.fg)
-                .lineLimit(1)
-                .minimumScaleFactor(0.55)
-
-            Spacer(minLength: 6)
-
-            VStack(alignment: .trailing, spacing: 3) {
-                Text("\(FocusUnlockPayout.minutes(for: game.type)) MIN")
-                    .font(.system(size: 13, weight: .black, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(isSelected ? OB.bg : payoutColor)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(payoutColor.opacity(isSelected ? 1.0 : 0.16), in: Capsule())
-                    .overlay(Capsule().stroke(payoutColor.opacity(isSelected ? 0 : 0.55), lineWidth: 1))
-                    .scaleEffect(isSelected ? 1.1 : 1)
-
-                if tier == .jackpot {
-                    Text("◆ RARE")
-                        .font(.system(size: 8.5, weight: .heavy, design: .monospaced))
-                        .tracking(1.0)
-                        .foregroundStyle(OB.amber.opacity(0.9))
+            .padding(.horizontal, 8)
+        case .freePass(let usedToday):
+            HStack(spacing: 12) {
+                Image(systemName: "ticket.fill")
+                    .font(.system(size: 20, weight: .black))
+                    .foregroundStyle(.black.opacity(0.8))
+                    .frame(width: 40, height: 40)
+                Text("FREE PASS")
+                    .font(.system(size: 16, weight: .black).italic())
+                    .foregroundStyle(.black)
+                Spacer(minLength: 0)
+                if usedToday {
+                    Text("USED TODAY")
+                        .font(.brand(size: 10, weight: .heavy))
+                        .foregroundStyle(.black.opacity(0.7))
                 }
             }
+            .padding(.horizontal, 8)
+            .frame(maxHeight: .infinity)
+            .background(
+                LinearGradient(colors: [Color(red: 1, green: 0.88, blue: 0.54), OB.amber], startPoint: .top, endPoint: .bottom),
+                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+            )
+            .opacity(usedToday ? 0.45 : 1)
         }
-        .padding(.horizontal, 14)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: isSelected
-                            ? [game.color.opacity(0.36), game.color.opacity(0.12)]
-                            : [game.color.opacity(0.14), game.color.opacity(0.04)],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(isSelected ? game.color.opacity(0.8) : game.color.opacity(0.26), lineWidth: isSelected ? 1.4 : 1)
-        )
-        .overlay(alignment: .leading) {
-            Capsule()
-                .fill(game.color.opacity(isSelected ? 1.0 : 0.85))
-                .frame(width: 4)
-                .padding(.vertical, 14)
-                .padding(.leading, 2)
-        }
-        .scaleEffect(isSelected ? 1.05 : depthScale)
-        .opacity(isSelected ? 1 : depthOpacity)
-        .offset(y: cylinderYOffset)
-        .rotation3DEffect(.degrees(depthRotation), axis: (x: 1, y: 0, z: 0), perspective: 0.8)
-        .shadow(color: isSelected ? payoutColor.opacity(0.45) : .clear, radius: 16, y: 4)
-        .saturation(isLanded && !isSelected ? 0.55 : 1.0)
-        .animation(.spring(response: 0.34, dampingFraction: 0.55), value: isSelected)
-        .animation(.easeInOut(duration: 0.18), value: isLanded)
     }
 }
 
 #Preview("Focus Unlock Slot") {
-    FocusUnlockSlotView(games: TrainingGameCatalog.focusUnlockGames) { _ in }
+    FocusUnlockSlotView(pending: nil) { _ in }
 }

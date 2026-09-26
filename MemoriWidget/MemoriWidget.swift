@@ -6,13 +6,7 @@ import WidgetKit
 struct MemoriWidgetEntry: TimelineEntry {
     let date: Date
     let streak: Int
-    let level: Int
-    let levelName: String
-    let totalXP: Int
-    let xpForNextLevel: Int
     let exercisesToday: Int
-    let dailyGoal: Int
-    let brainScore: Int
     let trainedToday: Bool
 }
 
@@ -21,18 +15,7 @@ struct MemoriWidgetEntry: TimelineEntry {
 struct MemoriTimelineProvider: TimelineProvider {
 
     func placeholder(in context: Context) -> MemoriWidgetEntry {
-        MemoriWidgetEntry(
-            date: .now,
-            streak: 7,
-            level: 3,
-            levelName: "Explorer",
-            totalXP: 1200,
-            xpForNextLevel: 2000,
-            exercisesToday: 2,
-            dailyGoal: 3,
-            brainScore: 720,
-            trainedToday: true
-        )
+        MemoriWidgetEntry(date: .now, streak: 7, exercisesToday: 2, trainedToday: true)
     }
 
     func getSnapshot(in context: Context, completion: @escaping (MemoriWidgetEntry) -> Void) {
@@ -47,27 +30,44 @@ struct MemoriTimelineProvider: TimelineProvider {
     }
 
     private func entry(from snap: WidgetDataService.Snapshot) -> MemoriWidgetEntry {
-        MemoriWidgetEntry(
-            date: .now,
-            streak: snap.streak,
-            level: snap.level,
-            levelName: snap.levelName,
-            totalXP: snap.totalXP,
-            xpForNextLevel: snap.xpForNextLevel,
-            exercisesToday: snap.exercisesToday,
-            dailyGoal: snap.dailyGoal,
-            brainScore: snap.brainScore,
-            trainedToday: snap.trainedToday
-        )
+        MemoriWidgetEntry(date: .now, streak: snap.streak, exercisesToday: snap.exercisesToday, trainedToday: snap.trainedToday)
     }
 }
 
 // MARK: - Widget Colors (standalone, no dependency on main app DesignSystem)
 
 private enum WidgetColors {
-    static let accent = Color(red: 0.22, green: 0.52, blue: 0.96)
-    static let teal   = Color(red: 0.0, green: 0.73, blue: 0.68)
-    static let flame  = Color(red: 1.0, green: 0.55, blue: 0.2)
+    static let bg = Color(red: 0.039, green: 0.039, blue: 0.059)
+    static let flameTop = Color(red: 1.0, green: 0.76, blue: 0.28)
+    static let flameBottom = Color(red: 0.98, green: 0.42, blue: 0.35)
+    static let success = Color(red: 0.0, green: 0.82, blue: 0.62)
+    static let muted = Color.white.opacity(0.45)
+}
+
+private struct StreakFlame: View {
+    let streak: Int
+    let size: CGFloat
+    var body: some View {
+        Image(systemName: streak > 0 ? "flame.fill" : "flame")
+            .font(.system(size: size, weight: .bold))
+            .foregroundStyle(
+                streak > 0
+                    ? LinearGradient(colors: [WidgetColors.flameTop, WidgetColors.flameBottom], startPoint: .top, endPoint: .bottom)
+                    : LinearGradient(colors: [WidgetColors.muted, WidgetColors.muted], startPoint: .top, endPoint: .bottom)
+            )
+    }
+}
+
+private struct TodayLine: View {
+    let entry: MemoriWidgetEntry
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: entry.trainedToday ? "checkmark.circle.fill" : "circle")
+            Text(entry.trainedToday ? "\(entry.exercisesToday) today" : "Train today")
+        }
+        .font(.system(size: 11, weight: .semibold, design: .rounded))
+        .foregroundStyle(entry.trainedToday ? WidgetColors.success : WidgetColors.muted)
+    }
 }
 
 // MARK: - Small Widget View
@@ -75,52 +75,22 @@ private enum WidgetColors {
 struct MemoriSmallWidgetView: View {
     let entry: MemoriWidgetEntry
 
-    private var scoreProgress: Double {
-        min(Double(entry.brainScore) / 1000.0, 1.0)
-    }
-
     var body: some View {
-        VStack(spacing: 6) {
-            // Brain Score Ring
-            ZStack {
-                Circle()
-                    .stroke(WidgetColors.accent.opacity(0.15), lineWidth: 6)
-                    .frame(width: 56, height: 56)
-                Circle()
-                    .trim(from: 0, to: scoreProgress)
-                    .stroke(WidgetColors.accent, style: StrokeStyle(lineWidth: 6, lineCap: .round))
-                    .frame(width: 56, height: 56)
-                    .rotationEffect(.degrees(-90))
-                Text("\(entry.brainScore)")
-                    .font(.system(size: 16, weight: .bold, design: .rounded))
-                    .foregroundStyle(.primary)
-            }
-
-            // Streak
-            HStack(spacing: 3) {
-                Image(systemName: entry.streak > 0 ? "flame.fill" : "flame")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(
-                        entry.streak > 0
-                            ? LinearGradient(colors: [WidgetColors.flame, .red], startPoint: .top, endPoint: .bottom)
-                            : LinearGradient(colors: [.gray, .gray], startPoint: .top, endPoint: .bottom)
-                    )
-                Text("\(entry.streak) day streak")
-                    .font(.system(size: 11, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.secondary)
-            }
-
-            if !entry.trainedToday {
-                Text("Train today!")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(WidgetColors.accent)
-            }
+        VStack(spacing: 4) {
+            StreakFlame(streak: entry.streak, size: 28)
+            Text("\(entry.streak)")
+                .font(.system(size: 40, weight: .black, design: .rounded))
+                .foregroundStyle(.white)
+                .minimumScaleFactor(0.6)
+            Text("day streak")
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .foregroundStyle(WidgetColors.muted)
+            TodayLine(entry: entry)
+                .padding(.top, 2)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .containerBackground(for: .widget) {
-            Color(.systemBackground)
-        }
-        .widgetURL(URL(string: "memo://train")!)
+        .containerBackground(WidgetColors.bg, for: .widget)
+        .widgetURL(URL(string: "memori://train")!)
     }
 }
 
@@ -129,108 +99,34 @@ struct MemoriSmallWidgetView: View {
 struct MemoriMediumWidgetView: View {
     let entry: MemoriWidgetEntry
 
-    private var xpProgress: Double {
-        guard entry.xpForNextLevel > 0 else { return 0 }
-        return min(Double(entry.totalXP) / Double(entry.xpForNextLevel), 1.0)
-    }
-
-    private var goalProgress: Double {
-        guard entry.dailyGoal > 0 else { return 0 }
-        return min(Double(entry.exercisesToday) / Double(entry.dailyGoal), 1.0)
-    }
-
     var body: some View {
-        HStack(spacing: 16) {
-            // Left: Brain Score + Streak
-            VStack(spacing: 8) {
-                // Brain Score
-                VStack(spacing: 2) {
-                    Text("Brain Score")
-                        .font(.system(size: 8, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                        .textCase(.uppercase)
-                    Text("\(entry.brainScore)")
-                        .font(.system(size: 22, weight: .bold, design: .rounded))
-                        .foregroundStyle(WidgetColors.accent)
-                }
-
-                // Streak
-                HStack(spacing: 3) {
-                    Image(systemName: entry.streak > 0 ? "flame.fill" : "flame")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(
-                            entry.streak > 0
-                                ? LinearGradient(colors: [WidgetColors.flame, .red], startPoint: .top, endPoint: .bottom)
-                                : LinearGradient(colors: [.gray, .gray], startPoint: .top, endPoint: .bottom)
-                        )
-                    Text("\(entry.streak)")
-                        .font(.system(size: 16, weight: .bold, design: .rounded))
-                }
-                Text("streak")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+        HStack(spacing: 18) {
+            VStack(spacing: 2) {
+                StreakFlame(streak: entry.streak, size: 34)
+                Text("\(entry.streak)")
+                    .font(.system(size: 44, weight: .black, design: .rounded))
+                    .foregroundStyle(.white)
+                    .minimumScaleFactor(0.6)
+                Text("day streak")
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(WidgetColors.muted)
             }
-            .frame(width: 70)
+            .frame(width: 104)
 
-            // Right: Stats
-            VStack(alignment: .leading, spacing: 8) {
-                // Level
-                HStack {
-                    Image(systemName: "star.fill")
-                        .font(.caption)
-                        .foregroundStyle(WidgetColors.accent)
-                    Text("Lv.\(entry.level) \(entry.levelName)")
-                        .font(.subheadline.weight(.semibold))
-                        .lineLimit(1)
-                }
-
-                // XP Progress
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("\(entry.totalXP) / \(entry.xpForNextLevel) XP")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                    GeometryReader { geo in
-                        ZStack(alignment: .leading) {
-                            Capsule()
-                                .fill(WidgetColors.accent.opacity(0.15))
-                            Capsule()
-                                .fill(
-                                    LinearGradient(
-                                        colors: [WidgetColors.accent, WidgetColors.teal],
-                                        startPoint: .leading,
-                                        endPoint: .trailing
-                                    )
-                                )
-                                .frame(width: geo.size.width * xpProgress)
-                        }
-                    }
-                    .frame(height: 6)
-                }
-
-                // Daily goal
-                HStack {
-                    Image(systemName: "target")
-                        .font(.caption)
-                        .foregroundStyle(WidgetColors.teal)
-                    Text("\(entry.exercisesToday)/\(entry.dailyGoal) exercises")
-                        .font(.caption.weight(.medium))
-
-                    Spacer()
-
-                    if !entry.trainedToday {
-                        Text("Train today!")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(WidgetColors.accent)
-                    }
-                }
+            VStack(alignment: .leading, spacing: 10) {
+                Text(entry.trainedToday ? "Brain trained today." : "No feed til you train.")
+                    .font(.system(size: 17, weight: .heavy, design: .rounded))
+                    .foregroundStyle(.white)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.8)
+                TodayLine(entry: entry)
             }
+            Spacer(minLength: 0)
         }
         .padding(.horizontal, 4)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .containerBackground(for: .widget) {
-            Color(.systemBackground)
-        }
-        .widgetURL(URL(string: "memo://train")!)
+        .containerBackground(WidgetColors.bg, for: .widget)
+        .widgetURL(URL(string: "memori://train")!)
     }
 }
 
@@ -260,7 +156,7 @@ struct MemoriWidget: Widget {
             MemoriWidgetEntryView(entry: entry)
         }
         .configurationDisplayName("Memo")
-        .description("Track your blocking streak and brain training progress.")
+        .description("Your streak and today's brain training.")
         .supportedFamilies([.systemSmall, .systemMedium])
     }
 }
@@ -270,24 +166,12 @@ struct MemoriWidget: Widget {
 #Preview("Small", as: .systemSmall) {
     MemoriWidget()
 } timeline: {
-    MemoriWidgetEntry(
-        date: .now, streak: 12, level: 5, levelName: "Scholar",
-        totalXP: 3400, xpForNextLevel: 5000,
-        exercisesToday: 2, dailyGoal: 3, brainScore: 720, trainedToday: true
-    )
-    MemoriWidgetEntry(
-        date: .now, streak: 0, level: 1, levelName: "Novice",
-        totalXP: 0, xpForNextLevel: 500,
-        exercisesToday: 0, dailyGoal: 3, brainScore: 0, trainedToday: false
-    )
+    MemoriWidgetEntry(date: .now, streak: 12, exercisesToday: 2, trainedToday: true)
+    MemoriWidgetEntry(date: .now, streak: 0, exercisesToday: 0, trainedToday: false)
 }
 
 #Preview("Medium", as: .systemMedium) {
     MemoriWidget()
 } timeline: {
-    MemoriWidgetEntry(
-        date: .now, streak: 12, level: 5, levelName: "Scholar",
-        totalXP: 3400, xpForNextLevel: 5000,
-        exercisesToday: 2, dailyGoal: 3, brainScore: 720, trainedToday: true
-    )
+    MemoriWidgetEntry(date: .now, streak: 12, exercisesToday: 2, trainedToday: true)
 }

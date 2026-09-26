@@ -6,7 +6,6 @@ struct ProfileView: View {
     @Environment(StoreService.self) private var storeService
     @Environment(GameCenterService.self) private var gameCenterService
     @Query private var users: [User]
-    @Query private var achievements: [Achievement]
 
     @State private var showingSettings = false
     @State private var globalRank: Int?
@@ -14,9 +13,6 @@ struct ProfileView: View {
     private var user: User? { users.first }
     private var isProUser: Bool { storeService.isProUser }
 
-    private var unlockedAchievements: [Achievement] {
-        achievements.sorted { $0.unlockedAt < $1.unlockedAt }
-    }
 
     private var profileMascotMood: MascotRiveMood {
         guard let lastSession = user?.lastSessionDate else { return .neutral }
@@ -39,14 +35,8 @@ struct ProfileView: View {
                     playerCard
                         .staggered(index: 1)
 
-                    xpProgress
-                        .staggered(index: 2)
-
-                    achievementsSection
-                        .staggered(index: 3)
-
                     settingsButton
-                        .staggered(index: 4)
+                        .staggered(index: 2)
                 }
                 .padding(.horizontal)
                 .padding(.top, 8)
@@ -68,14 +58,7 @@ struct ProfileView: View {
     // MARK: - Data Loading
 
     private func loadGlobalRank() async {
-        let result = await gameCenterService.loadLeaderboardEntries(
-            category: .brainScore,
-            timeFilter: .allTime,
-            range: NSRange(location: 1, length: 1)
-        )
-        if let local = result.localPlayerEntry {
-            globalRank = local.rank
-        }
+        globalRank = await gameCenterService.bestWeeklyRank()
     }
 
     // MARK: - Player Card
@@ -109,8 +92,8 @@ struct ProfileView: View {
             // Stat Pills
             HStack(spacing: 0) {
                 statPill(
-                    value: "\(user?.level ?? 1)",
-                    label: "LEVEL",
+                    value: "\(user?.resistedCount ?? 0)",
+                    label: "RESISTED",
                     color: .primary
                 )
 
@@ -128,7 +111,7 @@ struct ProfileView: View {
 
                 statPill(
                     value: globalRank != nil ? "#\(globalRank!)" : "--",
-                    label: "GLOBAL",
+                    label: "THIS WEEK",
                     color: AppColors.accent
                 )
             }
@@ -152,106 +135,10 @@ struct ProfileView: View {
 
     // MARK: - XP Progress
 
-    private var xpProgress: some View {
-        HStack(spacing: 12) {
-            Image("mascot-cool")
-                .renderingMode(.original)
-                .resizable()
-                .scaledToFit()
-            .frame(width: 36, height: 36)
-            .clipped()
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text(user?.levelName ?? "Beginner Brain")
-                    .font(.system(size: 15, weight: .bold))
-
-                ProgressView(value: user?.xpProgress ?? 0)
-                    .tint(AppColors.accent)
-            }
-
-            let currentLevelXP = UserLevel.xpRequired(for: user?.level ?? 1)
-            let xpInLevel = max(0, (user?.totalXP ?? 0) - currentLevelXP)
-            let nextLevel = (user?.level ?? 1) + 1
-            let nextName = UserLevel.name(for: nextLevel)
-
-            VStack(alignment: .trailing, spacing: 2) {
-                Text("\(xpInLevel) XP")
-                    .font(.system(size: 13, weight: .bold, design: .rounded))
-                Text("→ \(nextName)")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-        }
-        .padding(16)
-    }
 
     // MARK: - Achievements
 
-    private var achievementsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("ACHIEVEMENTS · \(achievements.count) / \(AchievementType.allCases.count)")
-                    .font(.system(size: 11, weight: .bold))
-                    .tracking(2)
-                    .foregroundStyle(.secondary)
 
-                Spacer()
-
-                NavigationLink(destination: AchievementsView()) {
-                    Text("All →")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(AppColors.accent)
-                }
-            }
-
-            if unlockedAchievements.isEmpty {
-                Text("Complete exercises to unlock achievements")
-                    .font(.system(size: 13))
-                    .foregroundStyle(.secondary)
-                    .padding(.vertical, 8)
-            } else {
-                VStack(spacing: 0) {
-                    ForEach(Array(unlockedAchievements.prefix(4).enumerated()), id: \.element.id) { index, achievement in
-                        achievementRow(index: index + 1, achievement: achievement)
-
-                        if index < min(3, unlockedAchievements.count - 1) {
-                            Divider()
-                                .padding(.leading, 36)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private func achievementRow(index: Int, achievement: Achievement) -> some View {
-        HStack(spacing: 12) {
-            Text(String(format: "%02d", index))
-                .font(.system(size: 14, weight: .medium, design: .monospaced))
-                .foregroundStyle(.secondary)
-                .frame(width: 24)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(achievement.displayName)
-                    .font(.system(size: 15, weight: .bold))
-                Text(achievement.requirementDescription)
-                    .font(.system(size: 12, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-
-            Spacer()
-
-            Text("UNLOCKED")
-                .font(.system(size: 9, weight: .black))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(AppColors.mint, in: Capsule())
-        }
-        .padding(.vertical, 10)
-    }
 
     // MARK: - Settings Button
 

@@ -696,6 +696,46 @@ enum Analytics {
         PostHogSDK.shared.capture("focus_mode_disabled")
     }
 
+    // MARK: - Unlock loop (2.1.6)
+
+    static func unlockSpin(result: String, attempt: Int) {
+        PostHogSDK.shared.capture("unlock.spin", properties: ["result": result, "attempt": attempt])
+    }
+
+    static func unlockRunStarted(game: String) {
+        PostHogSDK.shared.capture("unlock.run_started", properties: ["game": game])
+    }
+
+    static func unlockQualified(game: String, seconds: Int) {
+        PostHogSDK.shared.capture("unlock.qualified", properties: ["game": game, "seconds": seconds])
+    }
+
+    static func unlockChoice(game: String, keepGoing: Bool) {
+        PostHogSDK.shared.capture("unlock.choice", properties: ["game": game, "choice": keepGoing ? "keep_going" : "cash_out"])
+    }
+
+    static func unlockRunEnded(game: String, outcome: String, tier: Int, score: Int, minutes: Int, isPB: Bool) {
+        PostHogSDK.shared.capture("unlock.run_ended", properties: [
+            "game": game, "outcome": outcome, "tier": tier, "score": score, "minutes": minutes, "is_pb": isPB
+        ])
+    }
+
+    static func unlockDenied(game: String, distance: Int) {
+        PostHogSDK.shared.capture("unlock.denied", properties: ["game": game, "distance": distance])
+    }
+
+    static func unlockEscapeHatch() {
+        PostHogSDK.shared.capture("unlock.escape_hatch")
+    }
+
+    static func unlockFreePass() {
+        PostHogSDK.shared.capture("unlock.free_pass")
+    }
+
+    static func unlockPendingSpinResumed(game: String) {
+        PostHogSDK.shared.capture("unlock.pending_spin_resumed", properties: ["game": game])
+    }
+
     static func focusUnlockSlotShown() {
         PostHogSDK.shared.capture("focus_unlock_slot_shown")
     }

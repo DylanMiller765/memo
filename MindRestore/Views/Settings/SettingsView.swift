@@ -6,39 +6,20 @@ struct SettingsView: View {
     @Environment(StoreService.self) private var storeService
     @Environment(GameCenterService.self) private var gameCenterService
     @Query private var users: [User]
-    @Query(sort: \DailySession.date, order: .reverse) private var sessions: [DailySession]
-    @Query(sort: \BrainScoreResult.date, order: .reverse) private var brainScores: [BrainScoreResult]
-    @Query private var achievements: [Achievement]
 
     @State private var showingPaywall = false
     @State private var showingResetConfirmation = false
     @State private var showingScreenshotDataConfirmation = false
     @State private var screenshotDataLoaded = false
     @State private var debugTapCount = 0
-    @State private var showingDebugBrainAge = false
-    @State private var showingDebugAssessment = false
-    @State private var showingDebugGoodBrainAge = false
     @State private var showingDebugFocusSetup = false
-    @State private var showingDebugBadBrainAge = false
-    @State private var showingDebugOnboardingReveal = false
     @State private var editingName = false
     @State private var editedName = ""
     @State private var showingAgePicker = false
 
     private var user: User? { users.first }
     private var isProUser: Bool { storeService.isProUser }
-    private var latestScore: BrainScoreResult? { brainScores.first }
 
-    private var profileMascotMood: MascotRiveMood {
-        guard let lastSession = user?.lastSessionDate else { return .neutral }
-        if Calendar.current.isDateInToday(lastSession) {
-            return .happy
-        } else if Calendar.current.isDateInYesterday(lastSession) {
-            return .neutral
-        } else {
-            return .sad
-        }
-    }
 
     var body: some View {
         NavigationStack {
@@ -69,84 +50,6 @@ struct SettingsView: View {
             .sheet(isPresented: $showingPaywall) {
                 PaywallView()
             }
-            .fullScreenCover(isPresented: $showingDebugBrainAge) {
-                NavigationStack {
-                    debugBrainAgeReveal
-                        .toolbar {
-                            ToolbarItem(placement: .topBarLeading) {
-                                Button { showingDebugBrainAge = false } label: {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .font(.title3)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-                }
-            }
-            .fullScreenCover(isPresented: $showingDebugAssessment) {
-                NavigationStack {
-                    BrainAssessmentView()
-                        .toolbar {
-                            ToolbarItem(placement: .topBarLeading) {
-                                Button { showingDebugAssessment = false } label: {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .font(.title3)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-                }
-            }
-            .fullScreenCover(isPresented: $showingDebugGoodBrainAge) {
-                NavigationStack {
-                    debugGoodBrainAgeReveal
-                        .toolbar {
-                            ToolbarItem(placement: .topBarLeading) {
-                                Button { showingDebugGoodBrainAge = false } label: {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .font(.title3)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-                }
-            }
-            .fullScreenCover(isPresented: $showingDebugBadBrainAge) {
-                NavigationStack {
-                    debugBadBrainAgeReveal
-                        .toolbar {
-                            ToolbarItem(placement: .topBarLeading) {
-                                Button { showingDebugBadBrainAge = false } label: {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .font(.title3)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-                }
-            }
-            .fullScreenCover(isPresented: $showingDebugOnboardingReveal) {
-                ZStack {
-                    OnboardingBrainAgeReveal(
-                        brainAge: 35,
-                        userAge: user?.userAge ?? 25,
-                        onContinue: { showingDebugOnboardingReveal = false }
-                    )
-                    VStack {
-                        HStack {
-                            Button { showingDebugOnboardingReveal = false } label: {
-                                Image(systemName: "xmark.circle.fill")
-                                    .font(.title2)
-                                    .foregroundStyle(.white.opacity(0.6))
-                            }
-                            .padding(.leading, 16)
-                            .padding(.top, 16)
-                            Spacer()
-                        }
-                        Spacer()
-                    }
-                }
-            }
             .sheet(isPresented: $showingDebugFocusSetup) {
                 FocusModeSetupView()
             }
@@ -167,186 +70,16 @@ struct SettingsView: View {
 
     // MARK: - 1. Player Card Hero
 
-    private var playerCardHero: some View {
-        VStack(spacing: 8) {
-            // Compact mascot
-            RiveMascotView(
-                mood: profileMascotMood,
-                size: 100
-            )
-            .frame(height: 90)
-            .clipped()
-
-            // Name + level
-            VStack(spacing: 4) {
-                HStack(spacing: 8) {
-                    Text(user?.username.isEmpty == false ? user!.username : "Player")
-                        .font(.title2.weight(.bold))
-                    if isProUser {
-                        Text("PRO")
-                            .font(.system(size: 9, weight: .black))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(
-                                LinearGradient(colors: [AppColors.amber, AppColors.coral], startPoint: .leading, endPoint: .trailing),
-                                in: Capsule()
-                            )
-                    }
-                }
-                Text("Level \(user?.level ?? 1) · \(user?.levelName ?? "")")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-
-            // XP bar
-            VStack(spacing: 4) {
-                ProgressView(value: Double(user?.totalXP ?? 0) / Double(max(1, user?.xpForNextLevel ?? 100)))
-                    .tint(AppColors.accent)
-                Text("\(user?.totalXP ?? 0) / \(user?.xpForNextLevel ?? 100) XP")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-            }
-            .padding(.horizontal, 40)
-        }
-        .padding(.vertical, 20)
-        .frame(maxWidth: .infinity)
-        .appCard()
-    }
 
     // MARK: - 2. Stats Grid
 
-    private var statsGrid: some View {
-        HStack(spacing: 12) {
-            statCard(value: "\(user?.totalExercises ?? 0)", label: "Games", icon: "gamecontroller.fill", color: AppColors.accent)
-            statCard(value: formatTotalTime(), label: "Trained", icon: "clock.fill", color: AppColors.teal)
-            statCard(value: "\(achievements.count)", label: "Awards", icon: "trophy.fill", color: AppColors.amber)
-        }
-    }
 
-    private func statCard(value: String, label: String, icon: String, color: Color) -> some View {
-        VStack(spacing: 6) {
-            Image(systemName: icon)
-                .font(.system(size: 16))
-                .foregroundStyle(color)
-            Text(value)
-                .font(.system(size: 20, weight: .bold, design: .rounded))
-            Text(label)
-                .font(.caption2.weight(.medium))
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
-        .background(AppColors.cardSurface, in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(AppColors.cardBorder, lineWidth: 1))
-    }
 
-    private func formatTotalTime() -> String {
-        let totalSeconds = sessions.reduce(0) { $0 + $1.durationSeconds }
-        let totalMinutes = totalSeconds / 60
-        if totalMinutes < 60 { return "\(totalMinutes)m" }
-        let hours = totalMinutes / 60
-        return "\(hours)h"
-    }
 
-    // MARK: - 3. Achievements Preview
 
-    private var achievementsPreview: some View {
-        NavigationLink(destination: AchievementsView()) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Achievements")
-                        .font(.headline.weight(.bold))
-                    Text("\(achievements.count) of \(AchievementType.allCases.count) unlocked")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.tertiary)
-            }
-            .padding(16)
-            .background(AppColors.cardSurface, in: RoundedRectangle(cornerRadius: 14))
-            .overlay(RoundedRectangle(cornerRadius: 14).stroke(AppColors.cardBorder, lineWidth: 1))
-        }
-        .buttonStyle(.plain)
-    }
 
     // MARK: - 4. Pro Card
 
-    private var proCard: some View {
-        Group {
-            if isProUser {
-                HStack(spacing: 14) {
-                    Image(systemName: "star.fill")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(AppColors.amber)
-                        .frame(width: 40, height: 40)
-                        .background(AppColors.amber.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Memo Member")
-                            .font(.subheadline.weight(.semibold))
-                        Text("All features unlocked")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                }
-                .padding(16)
-                .background {
-                    RoundedRectangle(cornerRadius: 14)
-                        .fill(AppColors.cardSurface)
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 14)
-                                .stroke(
-                                    LinearGradient(
-                                        colors: [
-                                            AppColors.amber.opacity(0.5),
-                                            AppColors.amber.opacity(0.2),
-                                            AppColors.amber.opacity(0.5)
-                                        ],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    ),
-                                    lineWidth: 1.5
-                                )
-                        }
-                        .shadow(color: AppColors.amber.opacity(0.1), radius: 8, y: 2)
-                }
-            } else {
-                Button { showingPaywall = true } label: {
-                    HStack(spacing: 14) {
-                        Image(systemName: "sparkles")
-                            .font(.title2)
-                            .foregroundStyle(.white)
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Unlock Memo")
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(.white)
-                            Text("All exercises, detailed analytics")
-                                .font(.caption)
-                                .foregroundStyle(.white.opacity(0.8))
-                        }
-
-                        Spacer()
-
-                        Image(systemName: "chevron.right")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.white.opacity(0.6))
-                    }
-                    .padding(16)
-                    .background(
-                        AppColors.premiumGradient,
-                        in: RoundedRectangle(cornerRadius: 14)
-                    )
-                }
-                .buttonStyle(.plain)
-            }
-        }
-    }
 
     // MARK: - 5. Settings Section
 
@@ -728,31 +461,6 @@ struct SettingsView: View {
                 storeService.isProUser.toggle()
             }
 
-            // Jump to Brain Age Reveal
-            debugRow(icon: "brain.head.profile.fill", color: AppColors.violet, title: "Brain Age Reveal", subtitle: "Jump directly to score reveal screen") {
-                showingDebugBrainAge = true
-            }
-
-            // Good Brain Age (25)
-            debugRow(icon: "brain.head.profile.fill", color: AppColors.teal, title: "Good Brain Age (25)", subtitle: "Score 820 · Age 25 · 90th percentile") {
-                showingDebugGoodBrainAge = true
-            }
-
-            // Bad Brain Age (67)
-            debugRow(icon: "brain.head.profile.fill", color: AppColors.coral, title: "Bad Brain Age (67)", subtitle: "Score 180 · Age 67 · 12th percentile") {
-                showingDebugBadBrainAge = true
-            }
-
-            // Onboarding Brain Age Reveal (new component)
-            debugRow(icon: "sparkles", color: AppColors.accent, title: "Onboarding Reveal", subtitle: "New onboarding brain age reveal") {
-                showingDebugOnboardingReveal = true
-            }
-
-            // Jump to assessment
-            debugRow(icon: "list.clipboard.fill", color: AppColors.teal, title: "Start Assessment", subtitle: "Skip to brain assessment flow") {
-                showingDebugAssessment = true
-            }
-
             // Reset onboarding
             debugRow(icon: "arrow.counterclockwise.circle.fill", color: .orange, title: "Reset Onboarding", subtitle: "Re-show onboarding on next launch") {
                 if let user {
@@ -881,72 +589,6 @@ struct SettingsView: View {
         }
         .contentShape(Rectangle())
         .onTapGesture { action() }
-    }
-
-    // Debug Brain Age Reveal — skips assessment, shows reveal directly
-    private var debugBrainAgeReveal: some View {
-        let vm = BrainAssessmentViewModel()
-        let _ = {
-            vm.brainScore = 420
-            vm.brainAge = 35
-            vm.brainType = .balancedBrain
-            vm.percentile = 62
-            vm.digitScore = 55
-            vm.reactionScore = 48
-            vm.visualScore = 65
-        }()
-        return ScoreRevealView(
-            viewModel: vm,
-            previousScore: brainScores.first,
-            userAge: user?.userAge ?? 25,
-            onDone: { showingDebugBrainAge = false }
-        )
-    }
-
-    // Debug Good Brain Age Reveal — brain age 25, score 820
-    private var debugGoodBrainAgeReveal: some View {
-        let vm = BrainAssessmentViewModel()
-        let _ = {
-            vm.brainScore = 820
-            vm.brainAge = 25
-            vm.brainType = .balancedBrain
-            vm.percentile = 90
-            vm.digitScore = 85
-            vm.reactionScore = 78
-            vm.visualScore = 90
-            vm.digitMaxCorrect = 9
-            vm.avgReactionMs = 220
-            vm.visualMaxCorrect = 7
-        }()
-        return ScoreRevealView(
-            viewModel: vm,
-            previousScore: brainScores.first,
-            userAge: user?.userAge ?? 25,
-            onDone: { showingDebugGoodBrainAge = false }
-        )
-    }
-
-    // Debug Bad Brain Age Reveal — brain age 67, score 180
-    private var debugBadBrainAgeReveal: some View {
-        let vm = BrainAssessmentViewModel()
-        let _ = {
-            vm.brainScore = 180
-            vm.brainAge = 67
-            vm.brainType = .lightningReflex
-            vm.percentile = 12
-            vm.digitScore = 25
-            vm.reactionScore = 35
-            vm.visualScore = 20
-            vm.digitMaxCorrect = 5
-            vm.avgReactionMs = 380
-            vm.visualMaxCorrect = 3
-        }()
-        return ScoreRevealView(
-            viewModel: vm,
-            previousScore: brainScores.first,
-            userAge: user?.userAge ?? 25,
-            onDone: { showingDebugBadBrainAge = false }
-        )
     }
 
     private func loadScreenshotData() {

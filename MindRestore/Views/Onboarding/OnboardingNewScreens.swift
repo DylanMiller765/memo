@@ -1523,267 +1523,7 @@ private struct NotifMockupCard: View {
     }
 }
 
-// MARK: - Onboarding Brain Age Reveal (Spotify Wrapped style)
 
-struct OnboardingBrainAgeReveal: View {
-    let brainAge: Int
-    let userAge: Int
-    let onContinue: () -> Void
-    var skipAnimation: Bool = false
-
-    @State private var displayedBrainAge: Int
-    @State private var isCountingUp: Bool
-    @State private var countUpFinished: Bool
-    @State private var showLabel: Bool
-    @State private var showSubtitle: Bool
-    @State private var showShare: Bool
-    @State private var pulseGlow: Bool
-    @State private var countUpTimer: Timer?
-
-    init(brainAge: Int, userAge: Int, onContinue: @escaping () -> Void, skipAnimation: Bool = false) {
-        self.brainAge = brainAge
-        self.userAge = userAge
-        self.onContinue = onContinue
-        self.skipAnimation = skipAnimation
-        _displayedBrainAge = State(initialValue: skipAnimation ? brainAge : 18)
-        _isCountingUp = State(initialValue: skipAnimation)
-        _countUpFinished = State(initialValue: skipAnimation)
-        _showLabel = State(initialValue: skipAnimation)
-        _showSubtitle = State(initialValue: skipAnimation)
-        _showShare = State(initialValue: skipAnimation)
-        _pulseGlow = State(initialValue: skipAnimation)
-    }
-
-    private var ageColor: Color {
-        Self.brainAgeColor(for: countUpFinished ? brainAge : displayedBrainAge)
-    }
-
-    private var mascotMood: MascotRiveMood {
-        if brainAge <= 30 { return .happy }
-        if brainAge <= 50 { return .neutral }
-        return .sad
-    }
-
-    private var ageComparison: (text: String, color: Color)? {
-        guard userAge > 0 else { return nil }
-        let diff = userAge - brainAge
-        if diff > 0 {
-            return ("\(diff) years younger than you!", AppColors.teal)
-        }
-        if diff < 0 {
-            return ("\(abs(diff)) years older than your real age", AppColors.coral)
-        }
-        return ("Same as your real age!", AppColors.teal)
-    }
-
-    private var shareText: String {
-        "My Brain Age is \(brainAge)! Test yours with Memo"
-    }
-
-    var body: some View {
-        ZStack {
-            Self.revealGradient(for: brainAge).ignoresSafeArea()
-
-            if countUpFinished {
-                Circle()
-                    .fill(ageColor.opacity(0.18))
-                    .blur(radius: 100)
-                    .frame(width: 300, height: 300)
-                    .offset(x: -80, y: -120)
-
-                Circle()
-                    .fill(ageColor.opacity(pulseGlow ? 0.12 : 0.06))
-                    .blur(radius: 80)
-                    .frame(width: 200, height: 200)
-                    .offset(x: 100, y: 80)
-                    .animation(.easeInOut(duration: 3.0).repeatForever(autoreverses: true), value: pulseGlow)
-            }
-
-            VStack(spacing: 0) {
-                Spacer()
-
-                RiveMascotView(mood: mascotMood, size: 140)
-                    .frame(height: 120)
-                    .padding(.bottom, 8)
-                    .opacity(countUpFinished ? 1 : 0)
-                    .scaleEffect(countUpFinished ? 1 : 0.3)
-                    .animation(.spring(response: 0.5, dampingFraction: 0.7), value: countUpFinished)
-
-                Text("YOUR BRAIN AGE")
-                    .font(.system(size: 11, weight: .heavy))
-                    .foregroundStyle(.white.opacity(0.5))
-                    .tracking(6)
-                    .opacity(showLabel ? 1 : 0)
-                    .animation(.easeIn(duration: 0.4), value: showLabel)
-
-                Text("\(displayedBrainAge)")
-                    .font(.system(size: 140, weight: .black, design: .rounded))
-                    .foregroundStyle(.white)
-                    .shadow(color: ageColor.opacity(0.8), radius: 40, y: 0)
-                    .shadow(color: ageColor.opacity(0.4), radius: 80, y: 0)
-                    .contentTransition(.numericText(value: Double(displayedBrainAge)))
-                    .scaleEffect(countUpFinished ? 1.0 : 0.8)
-                    .animation(.spring(response: 0.3, dampingFraction: 0.5), value: countUpFinished)
-                    .minimumScaleFactor(0.5)
-                    .padding(.vertical, -16)
-                    .opacity(isCountingUp || countUpFinished ? 1 : 0)
-
-                VStack(spacing: 8) {
-                    Text(Self.brainAgeVerdict(brainAge))
-                        .font(.system(size: 24, weight: .black, design: .rounded))
-                        .foregroundStyle(.white)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 24)
-                        .padding(.top, 4)
-
-                    if let comp = ageComparison {
-                        Text(comp.text)
-                            .font(.system(size: 17, weight: .bold, design: .rounded))
-                            .foregroundStyle(comp.color)
-                    }
-                }
-                .opacity(showSubtitle ? 1 : 0)
-                .offset(y: showSubtitle ? 0 : 20)
-                .animation(.spring(response: 0.4, dampingFraction: 0.7), value: showSubtitle)
-
-                Spacer()
-
-                VStack(spacing: 14) {
-                    ShareLink(item: shareText) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "square.and.arrow.up")
-                                .font(.headline)
-                            Text("Share Your Brain Age")
-                                .font(.headline.weight(.bold))
-                        }
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(
-                            LinearGradient(
-                                colors: [ageColor, ageColor.opacity(0.7)],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                        .clipShape(Capsule())
-                        .shadow(color: ageColor.opacity(0.4), radius: 16, y: 6)
-                    }
-
-                    Button(action: onContinue) {
-                        Text("See what the feed costs →")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.white.opacity(0.55))
-                    }
-                }
-                .padding(.horizontal, 36)
-                .padding(.bottom, 28)
-                .opacity(showShare ? 1 : 0)
-                .offset(y: showShare ? 0 : 30)
-                .animation(.easeOut(duration: 0.4), value: showShare)
-            }
-        }
-        .ignoresSafeArea()
-        .onAppear {
-            Analytics.onboardingStep(step: "reveal")
-            if !skipAnimation { startSequence() }
-        }
-        .onDisappear {
-            countUpTimer?.invalidate()
-            countUpTimer = nil
-        }
-        .onChange(of: countUpFinished) { _, finished in if finished { pulseGlow = true } }
-    }
-
-    private func startSequence() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-            withAnimation(.easeIn(duration: 0.4)) { showLabel = true }
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-            startCountUp(target: brainAge)
-        }
-    }
-
-    private func startCountUp(target: Int) {
-        displayedBrainAge = 18
-        isCountingUp = true
-        let totalSteps = max(target - 18, 1)
-        let interval = 3.0 / Double(totalSteps)
-        let lightImpact = UIImpactFeedbackGenerator(style: .light)
-        let heavyImpact = UIImpactFeedbackGenerator(style: .heavy)
-        lightImpact.prepare()
-        heavyImpact.prepare()
-
-        countUpTimer?.invalidate()
-        countUpTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { timer in
-            Task { @MainActor in
-                if displayedBrainAge >= target {
-                    timer.invalidate()
-                    countUpTimer = nil
-                    displayedBrainAge = target
-                    heavyImpact.impactOccurred(intensity: 1.0)
-                    withAnimation(.easeOut(duration: 0.3)) { countUpFinished = true }
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.6).delay(0.4)) {
-                        showSubtitle = true
-                    }
-                    withAnimation(.easeOut(duration: 0.4).delay(1.2)) {
-                        showShare = true
-                    }
-                } else {
-                    displayedBrainAge += 1
-                    if (displayedBrainAge - 18) % 3 == 0 {
-                        lightImpact.impactOccurred(intensity: 0.3)
-                    }
-                }
-            }
-        }
-    }
-
-    // MARK: Helpers (mirror ScoreRevealView)
-
-    static func revealGradient(for age: Int) -> LinearGradient {
-        if age <= 25 {
-            return LinearGradient(colors: [
-                Color(red: 0.0, green: 0.15, blue: 0.35),
-                Color(red: 0.0, green: 0.25, blue: 0.45),
-                Color(red: 0.0, green: 0.15, blue: 0.30),
-            ], startPoint: .top, endPoint: .bottom)
-        } else if age <= 40 {
-            return LinearGradient(colors: [
-                Color(red: 0.12, green: 0.04, blue: 0.30),
-                Color(red: 0.22, green: 0.08, blue: 0.42),
-                Color(red: 0.12, green: 0.04, blue: 0.25),
-            ], startPoint: .top, endPoint: .bottom)
-        } else {
-            return LinearGradient(colors: [
-                Color(red: 0.35, green: 0.08, blue: 0.08),
-                Color(red: 0.45, green: 0.12, blue: 0.08),
-                Color(red: 0.28, green: 0.06, blue: 0.06),
-            ], startPoint: .top, endPoint: .bottom)
-        }
-    }
-
-    static func brainAgeColor(for age: Int) -> Color {
-        switch age {
-        case ...25: return Color(red: 0, green: 0.82, blue: 0.62)
-        case 26...40: return Color(red: 0.25, green: 0.61, blue: 0.98)
-        case 41...55: return Color(red: 1.0, green: 0.76, blue: 0.28)
-        default: return Color(red: 0.98, green: 0.42, blue: 0.35)
-        }
-    }
-
-    static func brainAgeVerdict(_ age: Int) -> String {
-        switch age {
-        case ...20: return "Your brain is actually built different"
-        case 21...25: return "OK you're sharp... for now"
-        case 26...30: return "Average. TikTok hasn't fully won yet"
-        case 31...35: return "Your attention span left the chat"
-        case 36...45: return "More screen time than brain time"
-        case 46...55: return "The doomscrolling is showing"
-        default: return "Your brain is rotting. Not a joke."
-        }
-    }
-}
 
 #Preview("Personal Solution — 3 goals") {
     OnboardingPersonalSolutionView(
@@ -1826,50 +1566,6 @@ struct OnboardingBrainAgeReveal: View {
     .preferredColorScheme(.dark)
 }
 
-// MARK: - Onboarding Finale Sequence (reveal → paywall in one cover)
-
-/// Wraps the brain-age reveal and the paywall into a single full-screen cover so
-/// onboarding never has to chain two `.fullScreenCover` presentations (which races
-/// — the second cover can silently fail to appear while the first is still dismissing).
-struct OnboardingFinaleSequence: View {
-    let brainAge: Int
-    let userAge: Int
-
-    private enum Step { case reveal, paywall }
-    @State private var step: Step = .reveal
-
-    var body: some View {
-        Group {
-            switch step {
-            case .reveal:
-                OnboardingBrainAgeReveal(
-                    brainAge: brainAge,
-                    userAge: userAge,
-                    onContinue: {
-                        withAnimation(.easeInOut(duration: 0.35)) { step = .paywall }
-                    }
-                )
-            case .paywall:
-                // PaywallView's @Environment(\.dismiss) closes the parent fullScreenCover,
-                // which fires its onDismiss → onboarding advances to personalSolution.
-                PaywallView(isHighIntent: true, triggerSource: "onboarding")
-            }
-        }
-        .transition(.opacity)
-    }
-}
-
-#Preview("Reveal — Good (25)") {
-    OnboardingBrainAgeReveal(brainAge: 25, userAge: 28, onContinue: {}, skipAnimation: true)
-}
-
-#Preview("Reveal — Mid (35)") {
-    OnboardingBrainAgeReveal(brainAge: 35, userAge: 28, onContinue: {}, skipAnimation: true)
-}
-
-#Preview("Reveal — Bad (55)") {
-    OnboardingBrainAgeReveal(brainAge: 55, userAge: 28, onContinue: {}, skipAnimation: true)
-}
 
 #if DEBUG
 private struct OnboardingTrapSelectionPreviewHost: View {
@@ -2674,10 +2370,10 @@ struct OnboardingPlayableLoopPage: View {
         _levelsCleared = State(initialValue: initial.rawValue >= Stage.unlock.rawValue ? 6 : 0)
     }
 
-    /// The demo reel always lands on Visual Memory, so the payout is that
-    /// game's real tier — never a hardcoded number.
+    /// The demo reel always lands on Visual Memory; the ticket shows the
+    /// Great tier (LV 7), the same payout the pre-2.1.6 demo showed.
     private var payoutMinutes: Int {
-        landedMinutes ?? FocusUnlockPayout.minutes(for: .visualMemory)
+        landedMinutes ?? UnlockRulebook.minutes(for: .great, isPersonalBest: false)
     }
 
     var body: some View {
@@ -2753,11 +2449,10 @@ struct OnboardingPlayableLoopPage: View {
                 // overflows narrow phones and drifts right of center.
                 let scale = min(1, area.size.width / 360, area.size.height / 560)
                 FocusUnlockSlotMachine(
-                    games: TrainingGameCatalog.focusUnlockGames,
                     mode: .demo,
-                    onLanded: { _, minutes in
+                    onLanded: { _ in
                         withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) {
-                            landedMinutes = minutes
+                            landedMinutes = UnlockRulebook.minutes(for: .great, isPersonalBest: false)
                         }
                     }
                 )
@@ -2954,6 +2649,11 @@ struct OnboardingTryItStepper: View {
 struct OnboardingUnlockMoment: View {
     let minutes: Int
     let compact: Bool
+    /// Live unlock (not the onboarding demo): the stub shows the app the user
+    /// actually blocked, and the copy never assumes it's TikTok.
+    var isLive = false
+    /// Replaces "You finished the game…" (a FREE PASS finishes no game).
+    var intro: String? = nil
     let onRevealed: () -> Void
 
     private enum Phase: Int, Comparable {
@@ -2965,7 +2665,6 @@ struct OnboardingUnlockMoment: View {
     @State private var phase: Phase = .hidden
     @State private var rolledMinutes = 0
     @State private var slam: CGFloat = 0
-    @State private var mascotHop = false
     @State private var ticketFaded = false
     @State private var startedAt: Date?
     @State private var sequence: Task<Void, Never>?
@@ -2974,7 +2673,6 @@ struct OnboardingUnlockMoment: View {
     private var ticketHeight: CGFloat { compact ? 108 : 126 }
     private var stubWidth: CGFloat { compact ? 96 : 112 }
     private var ringSize: CGFloat { compact ? 176 : 214 }
-    private var mascotSize: CGFloat { compact ? 92 : 112 }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -2983,8 +2681,8 @@ struct OnboardingUnlockMoment: View {
                     .contentTransition(.opacity)
                 OBBodyText(
                     text: phase >= .torn
-                        ? "TikTok opens for \(minutes) minutes. Then Memo locks it again."
-                        : "You finished the game, so your ticket pays out.",
+                        ? "\(appName) opens for \(minutes) minutes. Then Memo locks it again."
+                        : intro ?? "You finished the game, so your ticket pays out.",
                     size: compact ? 14 : 16,
                     alignment: .center
                 )
@@ -3039,15 +2737,6 @@ struct OnboardingUnlockMoment: View {
                 .offset(y: iconY)
                 .opacity(torn ? 1 : 0)
 
-            // Memo leans over the top edge, like the dealer on the slot.
-            RiveMascotView(mood: .happy, size: mascotSize, playbackPolicy: .continuous)
-                .offset(y: torn
-                        ? iconY - ringSize / 2 - mascotSize * 0.28
-                        : ticketY - ticketHeight / 2 - mascotSize * 0.3)
-                .offset(y: mascotHop ? -18 : 0)
-                .opacity(phase >= .shown ? 1 : 0)
-                .scaleEffect(phase >= .shown ? 1 : 0.5)
-                .accessibilityHidden(true)
 
             // Ticket body: promise → EARNED → rolled minutes. Falls away on tear.
             ticketBody(width: bodyWidth)
@@ -3067,7 +2756,7 @@ struct OnboardingUnlockMoment: View {
                 .rotationEffect(.degrees(torn ? -14 : 0))
                 .opacity(ticketFaded ? 0 : 1)
 
-            OnboardingAppIcon(asset: "logo-tiktok", size: compact ? 58 : 66)
+            stubIcon
                 .saturation(torn ? 1 : 0)
                 .opacity(torn ? 1 : 0.6)
                 .scaleEffect(torn ? (compact ? 1.9 : 1.95) : 1)
@@ -3078,7 +2767,17 @@ struct OnboardingUnlockMoment: View {
         .opacity(phase >= .shown ? 1 : 0)
         .offset(y: phase >= .shown ? 0 : 40)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(torn ? "Ticket cashed in. TikTok unlocked for \(minutes) minutes." : "Ticket for \(minutes) minutes if you finish")
+        .accessibilityLabel(torn ? "Ticket cashed in. \(appName) unlocked for \(minutes) minutes." : "Ticket for \(minutes) minutes if you finish")
+    }
+
+    private var appName: String { isLive ? "Your app" : "TikTok" }
+
+    @ViewBuilder private var stubIcon: some View {
+        if isLive {
+            BlockedAppIcon(size: compact ? 58 : 66, showLock: false)
+        } else {
+            OnboardingAppIcon(asset: "logo-tiktok", size: compact ? 58 : 66)
+        }
     }
 
     private var ticketTint: Color { phase >= .stamped ? OB.success : OB.accent }
@@ -3161,7 +2860,7 @@ struct OnboardingUnlockMoment: View {
                     .font(.system(size: compact ? 38 : 46, weight: .bold, design: .monospaced))
                     .foregroundStyle(OB.fg)
                     .contentTransition(.numericText(countsDown: true))
-                Text("LEFT ON TIKTOK · PREVIEW")
+                Text(isLive ? "LEFT TO SCROLL" : "LEFT ON TIKTOK · PREVIEW")
                     .font(.system(size: 11, weight: .bold, design: .rounded))
                     .tracking(0.9)
                     .foregroundStyle(OB.fg3)
@@ -3193,14 +2892,10 @@ struct OnboardingUnlockMoment: View {
             try? await Task.sleep(for: .milliseconds(150))
             withAnimation(.spring(response: 0.55, dampingFraction: 0.78)) { phase = .shown }
 
-            // 2 · Memo hops and slams the stamp.
-            try? await Task.sleep(for: .milliseconds(750))
-            guard !Task.isCancelled else { return }
-            withAnimation(.easeOut(duration: 0.14)) { mascotHop = true }
-            try? await Task.sleep(for: .milliseconds(140))
+            // 2 · The stamp slams down.
+            try? await Task.sleep(for: .milliseconds(890))
             guard !Task.isCancelled else { return }
             phase = .stamped
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) { mascotHop = false }
             withAnimation(.linear(duration: 0.18)) { slam += 1 }
             heavy.impactOccurred()
             SoundService.shared.playReelLock()
@@ -3821,9 +3516,8 @@ struct OnboardingRealSlotPage: View {
                 Spacer(minLength: 0)
 
                 FocusUnlockSlotMachine(
-                    games: TrainingGameCatalog.focusUnlockGames,
                     mode: .demo,
-                    onLanded: { _, _ in
+                    onLanded: { _ in
                         withAnimation(.easeOut(duration: 0.25)) { hasLanded = true }
                     }
                 )
@@ -5042,7 +4736,7 @@ struct OnboardingUnlockLoopDemoView: View {
 
             HStack(alignment: .center, spacing: -2) {
                 trainCoverPreview(title: "Memory", type: .visualMemory, tint: AppColors.indigo, scale: 0.70, rotation: -4, y: 7)
-                trainCoverPreview(title: "Speed", type: .speedMatch, tint: AppColors.sky, scale: 0.76, rotation: 0, y: 0)
+                trainCoverPreview(title: "Speed", type: .colorMatch, tint: AppColors.sky, scale: 0.76, rotation: 0, y: 0)
                     .zIndex(2)
                 trainCoverPreview(title: "Reaction", type: .reactionTime, tint: AppColors.coral, scale: 0.70, rotation: 4, y: 7)
             }
@@ -5058,14 +4752,8 @@ struct OnboardingUnlockLoopDemoView: View {
         rotation: Double,
         y: CGFloat
     ) -> some View {
-        GameCard(
-            title: title,
-            type: type,
-            color: tint,
-            isLocked: false,
-            lastPlayedText: nil
-        )
-        .frame(width: 130, height: 140)
+        TrainGameCard(game: UnlockGame(exerciseType: type) ?? .visualMemory, lastPlayedText: nil)
+        .frame(width: 140)
         .scaleEffect(scale)
         .rotationEffect(.degrees(rotation))
         .offset(y: y)
@@ -7042,9 +6730,8 @@ struct OnboardingMemoPlanView: View {
     private func machineBeat(compact: Bool) -> some View {
         VStack(spacing: 0) {
             FocusUnlockSlotMachine(
-                games: TrainingGameCatalog.focusUnlockGames,
                 mode: .demo,
-                onLanded: { _, _ in
+                onLanded: { _ in
                     withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
                         demoLanded = true
                     }
