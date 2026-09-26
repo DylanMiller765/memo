@@ -118,6 +118,8 @@ struct OnboardingClimbBackdrop: View {
                     startPoint: .top,
                     endPoint: .bottom
                 )
+                // Night darkens the whole scene, so the ground below the art too (no seam).
+                .overlay(Color.black.opacity(sky == .night ? 0.22 : 0))
                 .frame(height: max(1, geo.size.height + geo.safeAreaInsets.top + geo.safeAreaInsets.bottom - imageBottom))
                 .offset(y: imageBottom - 1)
 
