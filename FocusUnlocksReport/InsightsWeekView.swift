@@ -403,7 +403,7 @@ struct InsightsWeekView: View {
 
 // MARK: - Pieces
 
-/// Memo's face for a day state: happy (light day), neutral, sad (heavy day).
+/// Memo for a day state, rendered from the Rive poses: happy (light day), neutral, sad (heavy day).
 private struct MemoFaceImage: View {
     let state: FocusInsightsDayState
     /// The hero shows neutral for "no data"; the week strip shows the neutral face dimmed.
@@ -411,9 +411,9 @@ private struct MemoFaceImage: View {
 
     private var name: String {
         switch state {
-        case .low: return "focus-memo-happy"
-        case .high: return "focus-memo-sad"
-        case .normal, .noData: return "focus-memo-neutral"
+        case .low: return "insights-memo-happy"
+        case .high: return "insights-memo-sad"
+        case .normal, .noData: return "insights-memo-neutral"
         }
     }
 

@@ -70,6 +70,10 @@ struct ContentView: View {
     #if DEBUG
     @State private var didConfigureScreenshotMode = false
     @State private var showingScreenshotFocusSetup = false
+    #if DEBUG
+    /// `--screenshot-target memo-poses`: the three Rive poses on a green screen, for keying out art.
+    @State private var showingMemoPoseSheet = false
+    #endif
     @State private var showingScreenshotHardPaywall = false
     #endif
 
@@ -269,6 +273,17 @@ struct ContentView: View {
             }
         }
         #if DEBUG
+        .fullScreenCover(isPresented: $showingMemoPoseSheet) {
+            VStack(spacing: 0) {
+                ForEach([MascotRiveMood.happy, .neutral, .sad], id: \.self) { mood in
+                    RiveMascotView(mood: mood, size: 300, playbackPolicy: .continuous)
+                        .frame(width: 300, height: 300)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color(red: 0, green: 1, blue: 0))
+            .ignoresSafeArea()
+        }
         .fullScreenCover(isPresented: $showingScreenshotFocusSetup) {
             FocusModeSetupView(initialStep: 1) {
                 showingScreenshotFocusSetup = false
@@ -451,6 +466,8 @@ struct ContentView: View {
             switch screenshotTargetArgument {
             case "focus-setup":
                 showingScreenshotFocusSetup = true
+            case "memo-poses":
+                showingMemoPoseSheet = true
             case "paywall-hard", "paywall-concise":
                 showingScreenshotHardPaywall = true
             case "train":
