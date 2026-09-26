@@ -162,9 +162,30 @@ struct LeaderboardView: View {
     }
 
     private var headerSubtitle: String {
-        guard totalPlayerCount > 0 else { return selectedCategory.heroSubtitle }
-        return "\(totalPlayerCount.formatted()) player\(totalPlayerCount == 1 ? "" : "s") · \(periodPhrase)"
+        let rivals = rivalCount
+        guard totalPlayerCount > 0 || rivals > 0 else { return selectedCategory.heroSubtitle }
+        var text = "\(totalPlayerCount.formatted()) player\(totalPlayerCount == 1 ? "" : "s")"
+        // With rivals the line gets long; the Today/Week toggle already says the period.
+        if rivals > 0 { return text + " + \(rivals) rival\(rivals == 1 ? "" : "s")" }
+        return "\(text) · \(periodPhrase)"
     }
+
+    // MARK: - Rivals
+
+    /// Real entries plus labeled Memo rivals when the board is sparse (see LeagueRivals).
+    private var board: [LeaderboardEntryData] {
+        guard hasRenderedLeaderboardContent else { return entries }
+        let baseline = LeagueRivalMemory.baseline(
+            category: renderedCategory,
+            filter: renderedFilter,
+            userScore: entries.first(where: { $0.isCurrentUser })?.score,
+            now: .now,
+            defaults: .standard
+        )
+        return LeagueRivals.board(real: entries, category: renderedCategory, baseline: baseline, day: .now)
+    }
+
+    private var rivalCount: Int { board.filter(\.isRival).count }
 
     private var periodPhrase: String {
         switch renderedFilter {
@@ -264,7 +285,7 @@ struct LeaderboardView: View {
             phase = "loading"
         } else if entries.isEmpty && loadError != nil {
             phase = "error"
-        } else if entries.isEmpty {
+        } else if board.isEmpty {
             phase = "empty"
         } else {
             phase = "list"
@@ -307,7 +328,7 @@ struct LeaderboardView: View {
             } else if entries.isEmpty && loadError != nil {
                 errorLeaderboardView
                     .frame(minHeight: 420)
-            } else if entries.isEmpty {
+            } else if board.isEmpty {
                 emptyLeaderboardView
                     .frame(minHeight: 420)
             } else {
@@ -325,7 +346,7 @@ struct LeaderboardView: View {
         VStack(spacing: 0) {
             podiumView
 
-            if let userEntry = entries.first(where: { $0.isCurrentUser }) {
+            if let userEntry = board.first(where: { $0.isCurrentUser }) {
                 yourRankCard(userEntry)
                     .padding(.horizontal, 20)
                     .padding(.top, 10)
@@ -335,7 +356,7 @@ struct LeaderboardView: View {
                 .padding(.horizontal, 20)
                 .padding(.top, 16)
 
-            if entries.count > 3 {
+            if board.count > 3 {
                 restOfBoard
                     .padding(.horizontal, 20)
                     .padding(.top, 20)
@@ -454,7 +475,7 @@ struct LeaderboardView: View {
     // MARK: - Podium
 
     private var podiumView: some View {
-        let top = Array(entries.prefix(3))
+        let top = Array(board.prefix(3))
         return HStack(alignment: .bottom, spacing: 0) {
             podiumSlot(top, index: 1, lift: 14, delay: 0.3)
             podiumSlot(top, index: 0, lift: 44, delay: 0.5)
@@ -488,7 +509,7 @@ struct LeaderboardView: View {
         let name = entry.isCurrentUser ? "You" : entry.username
         return VStack(spacing: 4) {
             ZStack(alignment: .bottomTrailing) {
-                StickerAvatar(name: entry.username, size: size, floor: 5, paletteIndex: paletteIndex)
+                StickerAvatar(name: entry.username, size: size, floor: 5, paletteIndex: paletteIndex, isRival: entry.isRival)
                 MedalSticker(rank: rank, size: rank == 1 ? 38 : 34)
                     .offset(x: 12, y: 12)
             }
@@ -502,22 +523,37 @@ struct LeaderboardView: View {
             OutlinedText(text: formatPodiumScore(entry.score), size: rank == 1 ? 22 : 18)
                 .padding(.top, 12)
 
-            Text(name)
-                .font(.brand(size: 13, weight: .bold))
-                .foregroundStyle(.white.opacity(0.88))
-                .shadow(color: .black.opacity(0.4), radius: 4)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
+            HStack(spacing: 4) {
+                Text(name)
+                    .font(.brand(size: 13, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.88))
+                    .shadow(color: .black.opacity(0.4), radius: 4)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                if entry.isRival { botTag }
+            }
         }
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(rank == 1 ? "First" : rank == 2 ? "Second" : "Third") place, \(name), \(formatScoreCompact(entry.score))")
+        .accessibilityLabel("\(rank == 1 ? "First" : rank == 2 ? "Second" : "Third") place, \(name)\(entry.isRival ? ", Memo rival bot" : ""), \(formatScoreCompact(entry.score))")
+    }
+
+    /// Small "BOT" label so rivals are never mistaken for real players.
+    private var botTag: some View {
+        Text("BOT")
+            .font(.brand(size: 9, weight: .heavy))
+            .foregroundStyle(Self.ink)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
+            .background(Self.mint, in: Capsule())
+            .overlay(Capsule().strokeBorder(Self.ink, lineWidth: 1.2))
+            .accessibilityHidden(true)
     }
 
     // MARK: - Your Rank Card
 
     private func yourRankCard(_ entry: LeaderboardEntryData) -> some View {
-        let chase = LeagueChase.make(category: renderedCategory, entries: entries)
+        let chase = LeagueChase.make(category: renderedCategory, entries: board)
         return VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 12) {
                 OutlinedText(text: "#\(entry.rank)", size: 34)
@@ -528,7 +564,7 @@ struct LeaderboardView: View {
                         .foregroundStyle(.white)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
-                    if let percentile = percentileText(rank: entry.rank) {
+                    if rivalCount == 0, let percentile = percentileText(rank: entry.rank) {
                         Text("\(percentile) \(periodPhrase)")
                             .font(.brand(size: 12, weight: .bold))
                             .foregroundStyle(Self.mint)
@@ -607,7 +643,7 @@ struct LeaderboardView: View {
 
     private var restOfBoard: some View {
         VStack(spacing: 0) {
-            ForEach(Array(entries.dropFirst(3).enumerated()), id: \.element.id) { index, entry in
+            ForEach(Array(board.dropFirst(3).enumerated()), id: \.element.id) { index, entry in
                 if index > 0 {
                     Rectangle()
                         .fill(Color.white.opacity(0.06))
@@ -629,10 +665,11 @@ struct LeaderboardView: View {
                 .monospacedDigit()
                 .foregroundStyle(.white.opacity(0.7))
                 .frame(width: 30)
-            StickerAvatar(name: entry.username, size: 38)
+            StickerAvatar(name: entry.username, size: 38, isRival: entry.isRival)
             Text(entry.isCurrentUser ? "\(entry.username) (you)" : entry.username)
                 .font(.brand(size: 15, weight: .heavy))
                 .lineLimit(1)
+            if entry.isRival { botTag }
             Spacer(minLength: 8)
             Text(formatScoreCompact(entry.score))
                 .font(.brand(size: 15, weight: .heavy))
@@ -650,7 +687,7 @@ struct LeaderboardView: View {
             }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Rank \(entry.rank), \(entry.isCurrentUser ? "You" : entry.username), \(formatScore(entry.score))")
+        .accessibilityLabel("Rank \(entry.rank), \(entry.isCurrentUser ? "You" : entry.username)\(entry.isRival ? ", Memo rival bot" : ""), \(formatScore(entry.score))")
     }
 
     // MARK: - Helpers
@@ -942,6 +979,9 @@ struct LeaderboardView: View {
                 LeaderboardEntryData(rank: 6, username: "Zoe", score: 361, avatarEmoji: "Z", level: 11, isCurrentUser: false)
             ]
 
+            if ProcessInfo.processInfo.arguments.contains("--league-sparse") {
+                return CachedLeaderboardSnapshot(entries: [LeaderboardEntryData(rank: 1, username: user?.username ?? "Dylan", score: 142, avatarEmoji: "", level: 12, isCurrentUser: true)], totalPlayerCount: 1)
+            }
             return CachedLeaderboardSnapshot(entries: focusEntries, totalPlayerCount: 1_204)
         }
 
@@ -954,6 +994,15 @@ struct LeaderboardView: View {
             LeaderboardEntryData(rank: 6, username: "Zoe", score: 731, avatarEmoji: "Z", level: 11, isCurrentUser: false)
         ]
 
+        if ProcessInfo.processInfo.arguments.contains("--league-sparse") {
+            return CachedLeaderboardSnapshot(
+                entries: [
+                    LeaderboardEntryData(rank: 1, username: "Maya", score: 14, avatarEmoji: "", level: 16, isCurrentUser: false),
+                    LeaderboardEntryData(rank: 2, username: user?.username ?? "Dylan", score: 11, avatarEmoji: "", level: 12, isCurrentUser: true),
+                ],
+                totalPlayerCount: 2
+            )
+        }
         return CachedLeaderboardSnapshot(entries: baseEntries, totalPlayerCount: 128)
     }
     #else

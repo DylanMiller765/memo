@@ -154,6 +154,8 @@
 		314422FE7A92E8A7AE84DD7C /* LeagueChaseTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7870A7C23035C28FCAC55DE /* LeagueChaseTests.swift */; };
 		467439C27F746F4E1D31C389 /* LeagueChase.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1205D3B2DBA3FC584AAFA48 /* LeagueChase.swift */; };
 		E5DEFC3ABE373DE6171F50ED /* StickerAvatar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1675A3128AFEEE6237CB4A6B /* StickerAvatar.swift */; };
+		1DF7970D40803B0B546EF24E /* LeagueRivalsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 463B9BC2B1ED4305ACC63AE2 /* LeagueRivalsTests.swift */; };
+		99AF6C0138F729B59EA7A77F /* LeagueRivals.swift in Sources */ = {isa = PBXBuildFile; fileRef = 586F7FD19AF1E548EDA0BC55 /* LeagueRivals.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -378,6 +380,8 @@
 		F7870A7C23035C28FCAC55DE /* LeagueChaseTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LeagueChaseTests.swift; sourceTree = "<group>"; };
 		C1205D3B2DBA3FC584AAFA48 /* LeagueChase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LeagueChase.swift; sourceTree = "<group>"; };
 		1675A3128AFEEE6237CB4A6B /* StickerAvatar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StickerAvatar.swift; sourceTree = "<group>"; };
+		463B9BC2B1ED4305ACC63AE2 /* LeagueRivalsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LeagueRivalsTests.swift; sourceTree = "<group>"; };
+		586F7FD19AF1E548EDA0BC55 /* LeagueRivals.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LeagueRivals.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -641,6 +645,7 @@
 		3FB21F1A039F009995EF6AC7 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				586F7FD19AF1E548EDA0BC55 /* LeagueRivals.swift */,
 				C1205D3B2DBA3FC584AAFA48 /* LeagueChase.swift */,
 				9920CCAC74FDDC0026771A7E /* HomeCharge.swift */,
 				FF7DB18F5F89509C38CF4175 /* Unlock */,
@@ -849,6 +854,7 @@
 		TEST0003000000000000TS01 /* MindRestoreTests */ = {
 			isa = PBXGroup;
 			children = (
+				463B9BC2B1ED4305ACC63AE2 /* LeagueRivalsTests.swift */,
 				F7870A7C23035C28FCAC55DE /* LeagueChaseTests.swift */,
 				D83EE942BE949E847F3909C5 /* HomeChargeTests.swift */,
 				0BE4B8FEAC4965B2A42803B0 /* UnlockStatsStoreTests.swift */,
@@ -1193,6 +1199,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				99AF6C0138F729B59EA7A77F /* LeagueRivals.swift in Sources */,
 				E5DEFC3ABE373DE6171F50ED /* StickerAvatar.swift in Sources */,
 				467439C27F746F4E1D31C389 /* LeagueChase.swift in Sources */,
 				31B8A480C9C7A91D00CD3D2C /* HomeChargeMeter.swift in Sources */,
@@ -1335,6 +1342,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1DF7970D40803B0B546EF24E /* LeagueRivalsTests.swift in Sources */,
 				314422FE7A92E8A7AE84DD7C /* LeagueChaseTests.swift in Sources */,
 				D2349A7F7BD20782FA968D8D /* HomeChargeTests.swift in Sources */,
 				A5DAA2A0EF9BD059D93B0553 /* UnlockStatsStoreTests.swift in Sources */,

@@ -7,6 +7,8 @@ struct StickerAvatar: View {
     var floor: CGFloat = 0
     /// Palette slot to use instead of the name's own (the podium de-duplicates neighbours).
     var paletteIndex: Int? = nil
+    /// Memo rivals (bots) show a robot instead of an initial.
+    var isRival = false
 
     private static let ink = Color(red: 0.043, green: 0.106, blue: 0.133) // #0B1B22
     private static let palette: [Color] = [
@@ -44,11 +46,17 @@ struct StickerAvatar: View {
 
     var body: some View {
         let border = max(2, size * 0.06)
-        Text(initial)
-            .font(.brand(size: size * 0.42, weight: .heavy))
-            .foregroundStyle(Self.ink)
+        Group {
+            if isRival {
+                StickerIcon(kind: .robot, size: size * 0.72)
+            } else {
+                Text(initial)
+                    .font(.brand(size: size * 0.42, weight: .heavy))
+                    .foregroundStyle(Self.ink)
+            }
+        }
             .frame(width: size, height: size)
-            .background(Self.palette[(paletteIndex ?? Self.paletteIndex(for: name)) % Self.palette.count], in: Circle())
+            .background(isRival ? Color(red: 0.2, green: 0.26, blue: 0.3) : Self.palette[(paletteIndex ?? Self.paletteIndex(for: name)) % Self.palette.count], in: Circle())
             .overlay(Circle().strokeBorder(Self.ink, lineWidth: border))
             .background(Circle().fill(Self.ink).offset(y: floor))
             .accessibilityHidden(true)

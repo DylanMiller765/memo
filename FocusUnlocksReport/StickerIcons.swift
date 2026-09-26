@@ -13,6 +13,8 @@ enum StickerKind: String, CaseIterable {
     case clock, phone, padlock, padlockOpen, flame, house, dumbbell, trophy, chart, person, hourglass
     // League categories + podium
     case grid, paw, palette, hash, math, bolt, crown
+    // League rivals (bots)
+    case robot
 }
 
 struct StickerIcon: View {
@@ -109,6 +111,7 @@ private enum StickerArt {
         case .math: return math
         case .bolt: return bolt
         case .crown: return crown
+        case .robot: return robot
         }
     }
 
@@ -369,6 +372,25 @@ private enum StickerArt {
             StickerLayer(path: crown, fill: 0xFFD36B),
             StickerLayer(path: rect(7, 27.5, 26, 5.5, r: 2), fill: 0xE39A1F, stroke: 2.4),
             StickerLayer(path: circle(20, 21, 2.5), fill: 0xFF7A59, stroke: 1.4),
+        ]
+    }
+
+    static var robot: [StickerLayer] {
+        let antenna = Path { p in
+            p.move(to: CGPoint(x: 20, y: 7)); p.addLine(to: CGPoint(x: 20, y: 11))
+        }
+        let mouth = Path { p in
+            p.move(to: CGPoint(x: 15, y: 25.5)); p.addLine(to: CGPoint(x: 25, y: 25.5))
+        }
+        return [
+            StickerLayer(path: antenna, stroke: 2.4),
+            StickerLayer(path: circle(20, 5.5, 2.8), fill: 0xFF7A59, stroke: 2),
+            StickerLayer(path: rect(4.5, 16, 4, 9, r: 1.5), fill: 0x8FB0FF, stroke: 2),
+            StickerLayer(path: rect(31.5, 16, 4, 9, r: 1.5), fill: 0x8FB0FF, stroke: 2),
+            StickerLayer(path: rect(8, 11, 24, 21, r: 6), fill: 0xD5DDE4),
+            StickerLayer(path: circle(15, 19.5, 3.2), fill: 0x7BE3C6, stroke: 1.8),
+            StickerLayer(path: circle(25, 19.5, 3.2), fill: 0x7BE3C6, stroke: 1.8),
+            StickerLayer(path: mouth, stroke: 2.2),
         ]
     }
 

@@ -63,4 +63,6 @@ struct LeaderboardEntryData: Identifiable, Sendable {
     let avatarEmoji: String
     let level: Int
     let isCurrentUser: Bool
+    /// A labeled Memo rival (a bot), shown only on sparse boards. Never counted as a player.
+    var isRival: Bool = false
 }
