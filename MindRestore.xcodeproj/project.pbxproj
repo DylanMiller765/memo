@@ -145,6 +145,12 @@
 		67D5D3434F4F7BD38985B0A3 /* UnlockEndScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F868B72EAF022F12EC52513 /* UnlockEndScreens.swift */; };
 		A5DAA2A0EF9BD059D93B0553 /* UnlockStatsStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BE4B8FEAC4965B2A42803B0 /* UnlockStatsStoreTests.swift */; };
 		D570741D501858426875899F /* UnlockStatsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BC0C99F9FA8D9AC2F144054 /* UnlockStatsStore.swift */; };
+		D2349A7F7BD20782FA968D8D /* HomeChargeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D83EE942BE949E847F3909C5 /* HomeChargeTests.swift */; };
+		B085FF3E6AE74B9D5182E5BC /* HomeCharge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9920CCAC74FDDC0026771A7E /* HomeCharge.swift */; };
+		5820C520B6EFF4572135EE33 /* ChunkyButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 072AAB21E68ECE4AE2A41824 /* ChunkyButton.swift */; };
+		8C34E92A031E76C340CEFE52 /* StickerIcons.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51FDA86E1494CC14E7A3A439 /* StickerIcons.swift */; };
+		A23A69530E726249982C0DE9 /* HomeHillScene.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F327834723D0573FC356AF7 /* HomeHillScene.swift */; };
+		31B8A480C9C7A91D00CD3D2C /* HomeChargeMeter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FDDA0097A1737B7EFD8B3D6 /* HomeChargeMeter.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -360,6 +366,12 @@
 		5F868B72EAF022F12EC52513 /* UnlockEndScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnlockEndScreens.swift; sourceTree = "<group>"; };
 		0BE4B8FEAC4965B2A42803B0 /* UnlockStatsStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnlockStatsStoreTests.swift; sourceTree = "<group>"; };
 		3BC0C99F9FA8D9AC2F144054 /* UnlockStatsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnlockStatsStore.swift; sourceTree = "<group>"; };
+		D83EE942BE949E847F3909C5 /* HomeChargeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeChargeTests.swift; sourceTree = "<group>"; };
+		9920CCAC74FDDC0026771A7E /* HomeCharge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeCharge.swift; sourceTree = "<group>"; };
+		072AAB21E68ECE4AE2A41824 /* ChunkyButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChunkyButton.swift; sourceTree = "<group>"; };
+		51FDA86E1494CC14E7A3A439 /* StickerIcons.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StickerIcons.swift; sourceTree = "<group>"; };
+		1F327834723D0573FC356AF7 /* HomeHillScene.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeHillScene.swift; sourceTree = "<group>"; };
+		7FDDA0097A1737B7EFD8B3D6 /* HomeChargeMeter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeChargeMeter.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -557,6 +569,7 @@
 		1881667C61D769D739783D9F = {
 			isa = PBXGroup;
 			children = (
+				4DD45F68FB74973E35AEEA28 /* FocusUnlocksReport */,
 				717597B12F5ABD18000007CD /* MemoriWidgetExtension.entitlements */,
 				0285AB95C99394B065850C8E /* MindRestore */,
 				TEST0003000000000000TS01 /* MindRestoreTests */,
@@ -612,6 +625,8 @@
 		3E828668D791FAF13F66963D /* Home */ = {
 			isa = PBXGroup;
 			children = (
+				7FDDA0097A1737B7EFD8B3D6 /* HomeChargeMeter.swift */,
+				1F327834723D0573FC356AF7 /* HomeHillScene.swift */,
 				2DC8E99CC02B442CECAD45D0 /* HomeView.swift */,
 			);
 			path = Home;
@@ -620,6 +635,7 @@
 		3FB21F1A039F009995EF6AC7 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				9920CCAC74FDDC0026771A7E /* HomeCharge.swift */,
 				FF7DB18F5F89509C38CF4175 /* Unlock */,
 				34BC3145A53C182ADE0A1315 /* GameResultRecorder.swift */,
 				711F761B2F620B8B005ABF8A /* AnalyticsService.swift */,
@@ -702,6 +718,7 @@
 		B57CC3DB666874F9DD66355F /* Components */ = {
 			isa = PBXGroup;
 			children = (
+				072AAB21E68ECE4AE2A41824 /* ChunkyButton.swift */,
 				7DD4F43975842F6CBE6D7E7E /* StreakFreezeToast.swift */,
 				71D9D0C12F87CC5B001C0433 /* RiveMascotView.swift */,
 				69BA16CD97233B209118C979 /* ConfettiView.swift */,
@@ -824,6 +841,7 @@
 		TEST0003000000000000TS01 /* MindRestoreTests */ = {
 			isa = PBXGroup;
 			children = (
+				D83EE942BE949E847F3909C5 /* HomeChargeTests.swift */,
 				0BE4B8FEAC4965B2A42803B0 /* UnlockStatsStoreTests.swift */,
 				A845CBE019A63093ED20C1B1 /* UnlockRunTests.swift */,
 				19719AD30F616BAB2946D5A1 /* PendingSpinStoreTests.swift */,
@@ -878,6 +896,14 @@
 				70D6EDBF7EE65C79D9F21E51 /* slot-tick.caf */,
 			);
 			path = Resources;
+			sourceTree = "<group>";
+		};
+		4DD45F68FB74973E35AEEA28 /* FocusUnlocksReport */ = {
+			isa = PBXGroup;
+			children = (
+				51FDA86E1494CC14E7A3A439 /* StickerIcons.swift */,
+			);
+			path = FocusUnlocksReport;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -1158,6 +1184,11 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				31B8A480C9C7A91D00CD3D2C /* HomeChargeMeter.swift in Sources */,
+				A23A69530E726249982C0DE9 /* HomeHillScene.swift in Sources */,
+				8C34E92A031E76C340CEFE52 /* StickerIcons.swift in Sources */,
+				5820C520B6EFF4572135EE33 /* ChunkyButton.swift in Sources */,
+				B085FF3E6AE74B9D5182E5BC /* HomeCharge.swift in Sources */,
 				D570741D501858426875899F /* UnlockStatsStore.swift in Sources */,
 				67D5D3434F4F7BD38985B0A3 /* UnlockEndScreens.swift in Sources */,
 				68093D0B7E69513A5ACE8B57 /* FocusUnlockFlowView.swift in Sources */,
@@ -1293,6 +1324,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D2349A7F7BD20782FA968D8D /* HomeChargeTests.swift in Sources */,
 				A5DAA2A0EF9BD059D93B0553 /* UnlockStatsStoreTests.swift in Sources */,
 				D903EDADEE474D7F013EED79 /* UnlockRunTests.swift in Sources */,
 				E9EC0AC6A53284DAE9C83A29 /* PendingSpinStoreTests.swift in Sources */,

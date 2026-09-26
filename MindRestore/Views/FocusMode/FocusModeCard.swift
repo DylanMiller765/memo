@@ -10,6 +10,15 @@ extension DeviceActivityReport.Context {
     static let focusHomeDashboard = Self("Focus Home Dashboard")
     static let focusInsightsReceipt = Self("Focus Insights Receipt")
     static let focusInsightsInteractive = Self("Focus Insights Interactive")
+    static let homeStats = Self("Home Stats")
+    static let homeTopOffenders = Self("Home Top Offenders")
+}
+
+/// `.standard` is the full Focus card (onboarding). `.hill` is Home's compact
+/// "On the hill" version: a chunky CTA plus the blocked apps / top offenders list.
+enum FocusModeCardLayout: Equatable {
+    case standard
+    case hill(isRaining: Bool)
 }
 
 // MARK: - Design tokens (matches Claude Design spec for Focus Mode)
@@ -40,6 +49,7 @@ private enum FM {
 
 struct FocusModeCard: View {
     var previewUnlockMinutes: Int? = nil
+    var layout: FocusModeCardLayout = .standard
 
     @Environment(FocusModeService.self) private var focusModeService
     @Environment(DeepLinkRouter.self) private var deepLinkRouter
@@ -81,6 +91,9 @@ struct FocusModeCard: View {
         // transitions take effect when their deadlines pass (Date.now isn't observable on its own).
         TimelineView(.periodic(from: .now, by: 1)) { _ in
             Group {
+                if case .hill(let isRaining) = layout {
+                    hillSection(isRaining: isRaining)
+                } else {
                 switch cardState {
                 case .notSetUp:  notSetUpCard
                 case .idle:      idleCard
@@ -88,6 +101,7 @@ struct FocusModeCard: View {
                 case .cooldown:  cooldownCard
                 case .unlocked:  unlockedCard
                 case .scheduled: scheduledCard
+                }
                 }
             }
         }
@@ -142,6 +156,225 @@ struct FocusModeCard: View {
         }
     }
 
+    // MARK: - Hill layout (Home)
+
+    private static let hillInk = Color(red: 0.043, green: 0.106, blue: 0.133)         // #0B1B22
+    private static let hillMint = Color(red: 0.482, green: 0.89, blue: 0.776)         // #7BE3C6
+    private static let hillTileFill = Color(red: 0, green: 0.086, blue: 0.11).opacity(0.42)
+    private static let hillTileShape = RoundedRectangle(cornerRadius: 20, style: .continuous)
+
+    /// Card state for the hill layout; DEBUG screenshots can force a blocking demo.
+    private var hillState: CardState {
+        #if DEBUG
+        if Self.hillDemoBlocking { return .active }
+        #endif
+        return cardState
+    }
+
+    #if DEBUG
+    /// `--screenshot-mode --home-demo-blocking`: show a blocking state with stand-in apps
+    /// (the simulator has no Screen Time tokens).
+    private static var hillDemoBlocking: Bool {
+        let args = ProcessInfo.processInfo.arguments
+        return args.contains("--screenshot-mode") && args.contains("--home-demo-blocking")
+    }
+    #endif
+
+    private func hillSection(isRaining: Bool) -> some View {
+        let state = hillState
+        return VStack(alignment: .leading, spacing: 22) {
+            hillCTA(state: state, isRaining: isRaining)
+            hillList(state: state)
+        }
+    }
+
+    @ViewBuilder
+    private func hillCTA(state: CardState, isRaining: Bool) -> some View {
+        // In rain, anything that already leads to a game becomes "Cheer Memo up".
+        let cheer = isRaining && (state == .active || state == .cooldown || state == .unlocked)
+        VStack(spacing: 12) {
+            switch state {
+            case .notSetUp:
+                ChunkyButton(title: "Pick apps to block", systemImage: "plus") { showingAppPicker = true }
+            case .idle:
+                ChunkyButton(title: "Start blocking", systemImage: "lock.fill", action: startBlocking)
+            case .active, .cooldown:
+                ChunkyButton(title: cheer ? "Cheer Memo up" : trainForPassTitle, style: cheer ? .amber : .white) {
+                    deepLinkRouter.pendingDestination = .focusUnlock
+                }
+            case .unlocked:
+                ChunkyButton(title: cheer ? "Cheer Memo up" : "Train for more time", style: cheer ? .amber : .white) {
+                    deepLinkRouter.pendingDestination = .focusUnlock
+                }
+                hillTextButton("Lock early") { focusModeService.cancelTemporaryUnlock() }
+            case .scheduled:
+                ChunkyButton(title: "Block now", systemImage: "lock.fill") { focusModeService.blockNowUntilNextSchedule() }
+                hillTextButton("Edit schedule") { showingSettings = true }
+            }
+        }
+    }
+
+    private func hillTextButton(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.brand(size: 14, weight: .bold))
+                .foregroundStyle(.white.opacity(0.7))
+                .frame(maxWidth: .infinity)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private func hillList(state: CardState) -> some View {
+        switch state {
+        case .active, .cooldown, .unlocked, .scheduled:
+            VStack(alignment: .leading, spacing: 10) {
+                hillListHeader("Blocked apps") {
+                    Button {
+                        if storeService.isProUser { showingAppPicker = true } else { showingProPaywall = true }
+                    } label: {
+                        Text(state == .scheduled ? "Scheduled · Edit" : "On · Edit")
+                            .font(.brand(size: 13, weight: .bold))
+                            .foregroundStyle(Self.hillMint)
+                    }
+                    .buttonStyle(.plain)
+                }
+                hillBlockedCard(state: state)
+            }
+        case .idle, .notSetUp:
+            if focusModeService.authorizationStatus == .approved {
+                VStack(alignment: .leading, spacing: 10) {
+                    hillListHeader("Top offenders") {
+                        if state == .idle {
+                            Button(action: startBlocking) {
+                                Text("Blocking off · Turn on")
+                                    .font(.brand(size: 13, weight: .bold))
+                                    .foregroundStyle(.white.opacity(0.55))
+                            }
+                            .buttonStyle(.plain)
+                        } else {
+                            Text("Not blocking yet")
+                                .font(.brand(size: 13, weight: .bold))
+                                .foregroundStyle(.white.opacity(0.55))
+                        }
+                    }
+                    DeviceActivityReport(.homeTopOffenders, filter: todayFilter)
+                        .frame(height: 196)
+                }
+            }
+        }
+    }
+
+    private func hillListHeader<Trailing: View>(_ title: String, @ViewBuilder trailing: () -> Trailing) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(title)
+                .font(.brand(size: 19, weight: .heavy))
+                .foregroundStyle(.white)
+            Spacer(minLength: 8)
+            trailing()
+        }
+    }
+
+    private func hillBlockedCard(state: CardState) -> some View {
+        let subtitle = hillSubtitle(for: state)
+        let lock: StickerKind = state == .unlocked ? .padlockOpen : .padlock
+        var rows: [AnyView] = targetRows.prefix(3).map { row in
+            AnyView(hillRowIcon(row.content))
+        }
+        var names: [AnyView] = targetRows.prefix(3).map { row in
+            AnyView(hillRowName(row.content))
+        }
+        var extra = max(0, focusModeService.blockedAppCount - 3)
+        #if DEBUG
+        if Self.hillDemoBlocking {
+            let demo = [("logo-tiktok", "TikTok"), ("logo-instagram", "Instagram"), ("logo-youtube", "YouTube")]
+            rows = demo.map { AnyView(Image($0.0).resizable().scaledToFill()) }
+            names = demo.map { AnyView(Text($0.1)) }
+            extra = 2
+        }
+        #endif
+        return VStack(spacing: 0) {
+            ForEach(rows.indices, id: \.self) { index in
+                if index > 0 {
+                    Rectangle().fill(Color.white.opacity(0.06)).frame(height: 1).padding(.leading, 64)
+                }
+                HStack(spacing: 12) {
+                    rows[index]
+                        .frame(width: 38, height: 38)
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    VStack(alignment: .leading, spacing: 2) {
+                        names[index]
+                            .font(.brand(size: 15, weight: .bold))
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                        Text(subtitle)
+                            .font(.brand(size: 12, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.55))
+                            .lineLimit(1)
+                            .monospacedDigit()
+                    }
+                    Spacer(minLength: 8)
+                    StickerIcon(kind: lock, size: 22)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+            }
+            if extra > 0 {
+                Text("+\(extra) more")
+                    .font(.brand(size: 13, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.45))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.leading, 64)
+                    .padding(.bottom, 12)
+            }
+        }
+        .background(Self.hillTileFill, in: Self.hillTileShape)
+        .overlay(Self.hillTileShape.strokeBorder(Color.white.opacity(0.07), lineWidth: 1))
+    }
+
+    private func hillSubtitle(for state: CardState) -> String {
+        switch state {
+        case .active:
+            return "Locked"
+        case .cooldown:
+            let remaining = max(0, Int(focusModeService.cooldownUntil?.timeIntervalSinceNow ?? 0))
+            return "Resetting · \(fmtMMSS(remaining))"
+        case .unlocked:
+            let remaining = max(0, Int(focusModeService.unlockUntil?.timeIntervalSinceNow ?? 0))
+            return "Pass open · \(fmtMMSS(remaining)) left"
+        case .scheduled:
+            let resume = focusModeService.nextScheduleStart(after: .now) ?? Date.now
+            return "Blocks at \(formatClockTime(resume))"
+        case .idle, .notSetUp:
+            return ""
+        }
+    }
+
+    @ViewBuilder
+    private func hillRowIcon(_ content: TargetRowContent) -> some View {
+        switch content {
+        case .application(let index):
+            let tokens = Array(focusModeService.activitySelection.applicationTokens)
+            if tokens.indices.contains(index) { Label(tokens[index]).labelStyle(.iconOnly) }
+        case .category(let index):
+            let tokens = Array(focusModeService.activitySelection.categoryTokens)
+            if tokens.indices.contains(index) { Label(tokens[index]).labelStyle(.iconOnly) }
+        }
+    }
+
+    @ViewBuilder
+    private func hillRowName(_ content: TargetRowContent) -> some View {
+        switch content {
+        case .application(let index):
+            let tokens = Array(focusModeService.activitySelection.applicationTokens)
+            if tokens.indices.contains(index) { Label(tokens[index]).labelStyle(.titleOnly) }
+        case .category(let index):
+            let tokens = Array(focusModeService.activitySelection.categoryTokens)
+            if tokens.indices.contains(index) { Label(tokens[index]).labelStyle(.titleOnly) }
+        }
+    }
+
     // MARK: - 00 · Not Set Up
 
     private var notSetUpCard: some View {
@@ -174,21 +407,23 @@ struct FocusModeCard: View {
             rightValue: "5–20 min",
             targetMode: .unlocked,
             ctaTitle: "Start blocking",
-            ctaAction: {
-                if !storeService.isProUser && currentSelectionExceedsFreeLimit {
-                    showingProPaywall = true
-                } else {
-                    Task { @MainActor in
-                        if focusModeService.authorizationStatus != .approved {
-                            await focusModeService.requestAuthorization()
-                        }
-                        if focusModeService.authorizationStatus == .approved {
-                            focusModeService.enable()
-                        }
-                    }
+            ctaAction: startBlocking
+        )
+    }
+
+    private func startBlocking() {
+        if !storeService.isProUser && currentSelectionExceedsFreeLimit {
+            showingProPaywall = true
+        } else {
+            Task { @MainActor in
+                if focusModeService.authorizationStatus != .approved {
+                    await focusModeService.requestAuthorization()
+                }
+                if focusModeService.authorizationStatus == .approved {
+                    focusModeService.enable()
                 }
             }
-        )
+        }
     }
 
     /// DeviceActivity filter for yesterday's data.

@@ -188,12 +188,22 @@ struct ContentView: View {
         }
     }
 
+    /// Sticker tab icons: full color when selected, grey when not.
+    private func stickerTabLabel(_ title: String, _ kind: StickerKind, tab: MainTab) -> some View {
+        Label {
+            Text(title)
+        } icon: {
+            Image(uiImage: StickerIconRenderer.image(kind, size: 26, muted: selectedTab != tab))
+                .renderingMode(.original)
+        }
+    }
+
     private var mainTabView: some View {
         ZStack {
             TabView(selection: $selectedTab) {
                 HomeView(selectedTab: selectedTabIndex)
                     .tabItem {
-                        Label("Home", systemImage: "brain.head.profile")
+                        stickerTabLabel("Home", .house, tab: .home)
                     }
                     .tag(MainTab.home)
                     .accessibilityLabel("Home tab")
@@ -203,28 +213,28 @@ struct ContentView: View {
                     externalExerciseAutoStart: $focusUnlockExerciseAutoStart
                 )
                     .tabItem {
-                        Label("Train", systemImage: "dumbbell.fill")
+                        stickerTabLabel("Train", .dumbbell, tab: .train)
                     }
                     .tag(MainTab.train)
                     .accessibilityLabel("Train tab")
 
                 LeaderboardView()
                     .tabItem {
-                        Label("Compete", systemImage: "trophy.fill")
+                        stickerTabLabel("Compete", .trophy, tab: .compete)
                     }
                     .tag(MainTab.compete)
                     .accessibilityLabel("Compete tab")
 
                 ProgressDashboardView()
                     .tabItem {
-                        Label("Insights", systemImage: "chart.bar.xaxis.ascending")
+                        stickerTabLabel("Insights", .chart, tab: .insights)
                     }
                     .tag(MainTab.insights)
                     .accessibilityLabel("Insights tab")
 
                 ProfileView()
                     .tabItem {
-                        Label("Profile", systemImage: "person.circle.fill")
+                        stickerTabLabel("Profile", .person, tab: .profile)
                     }
                     .tag(MainTab.profile)
                     .accessibilityLabel("Profile tab")

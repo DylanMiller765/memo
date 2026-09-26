@@ -28,6 +28,12 @@ struct FocusUnlocksReport: DeviceActivityReportExtension {
         FocusHomeDashboardReport { configuration in
             FocusHomeDashboardView(configuration: configuration)
         }
+        HomeStatsReport { configuration in
+            HomeStatsTilesView(configuration: configuration)
+        }
+        HomeTopOffendersReport { configuration in
+            HomeTopOffendersView(configuration: configuration)
+        }
         FocusInsightsInteractiveReport { configuration in
             FocusInsightsReportView(configuration: configuration)
         }

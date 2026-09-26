@@ -24,6 +24,10 @@ extension DeviceActivityReport.Context {
     static let focusHomeDashboard = Self("Focus Home Dashboard")
     /// Interactive Focus Insights report with real Screen Time drilldowns.
     static let focusInsightsInteractive = Self("Focus Insights Interactive")
+    /// Home hill: Screen time + Pickups tiles for today.
+    static let homeStats = Self("Home Stats")
+    /// Home hill: today's top 3 apps (shown while blocking is off).
+    static let homeTopOffenders = Self("Home Top Offenders")
 }
 
 enum FocusInsightsDayState: Hashable {
@@ -210,12 +214,9 @@ struct OnboardingWeeklyScreenTimeReport: DeviceActivityReportScene {
     }
 }
 
-/// Compact real Screen Time receipt shown on Home above the Memo control state.
-struct FocusHomeDashboardReport: DeviceActivityReportScene {
-    let context: DeviceActivityReport.Context = .focusHomeDashboard
-    let content: (FocusHomeDashboardConfiguration) -> FocusHomeDashboardView
-
-    func makeConfiguration(representing data: DeviceActivityResults<DeviceActivityData>) async -> FocusHomeDashboardConfiguration {
+/// Today's totals and every offender, sorted by time. Shared by the Home scenes.
+enum HomeDayActivity {
+    static func collect(_ data: DeviceActivityResults<DeviceActivityData>) async -> FocusHomeDashboardConfiguration {
         var totalSeconds: TimeInterval = 0
         var pickups = 0
         var offenders: [String: FocusInsightsOffenderAccumulator] = [:]
@@ -274,10 +275,46 @@ struct FocusHomeDashboardReport: DeviceActivityReportScene {
         .filter { $0.seconds > 0 }
         .sorted { $0.seconds > $1.seconds }
 
+        return FocusHomeDashboardConfiguration(totalSeconds: totalSeconds, pickups: pickups, offenders: sorted)
+    }
+}
+
+/// Compact real Screen Time receipt shown on Home above the Memo control state.
+struct FocusHomeDashboardReport: DeviceActivityReportScene {
+    let context: DeviceActivityReport.Context = .focusHomeDashboard
+    let content: (FocusHomeDashboardConfiguration) -> FocusHomeDashboardView
+
+    func makeConfiguration(representing data: DeviceActivityResults<DeviceActivityData>) async -> FocusHomeDashboardConfiguration {
+        let all = await HomeDayActivity.collect(data)
         return FocusHomeDashboardConfiguration(
-            totalSeconds: totalSeconds,
-            pickups: pickups,
-            offenders: Array(sorted.prefix(3))
+            totalSeconds: all.totalSeconds,
+            pickups: all.pickups,
+            offenders: Array(all.offenders.prefix(3))
+        )
+    }
+}
+
+/// Home hill: the Screen time + Pickups tiles.
+struct HomeStatsReport: DeviceActivityReportScene {
+    let context: DeviceActivityReport.Context = .homeStats
+    let content: (FocusHomeDashboardConfiguration) -> HomeStatsTilesView
+
+    func makeConfiguration(representing data: DeviceActivityResults<DeviceActivityData>) async -> FocusHomeDashboardConfiguration {
+        await HomeDayActivity.collect(data)
+    }
+}
+
+/// Home hill: today's top 3 apps while blocking is off.
+struct HomeTopOffendersReport: DeviceActivityReportScene {
+    let context: DeviceActivityReport.Context = .homeTopOffenders
+    let content: (FocusHomeDashboardConfiguration) -> HomeTopOffendersView
+
+    func makeConfiguration(representing data: DeviceActivityResults<DeviceActivityData>) async -> FocusHomeDashboardConfiguration {
+        let all = await HomeDayActivity.collect(data)
+        return FocusHomeDashboardConfiguration(
+            totalSeconds: all.totalSeconds,
+            pickups: all.pickups,
+            offenders: Array(all.offenders.prefix(3))
         )
     }
 }
