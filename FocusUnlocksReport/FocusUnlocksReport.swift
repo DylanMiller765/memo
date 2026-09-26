@@ -35,7 +35,7 @@ struct FocusUnlocksReport: DeviceActivityReportExtension {
             HomeTopOffendersView(configuration: configuration)
         }
         FocusInsightsInteractiveReport { configuration in
-            FocusInsightsReportView(configuration: configuration)
+            InsightsWeekView(configuration: configuration)
         }
     }
 }

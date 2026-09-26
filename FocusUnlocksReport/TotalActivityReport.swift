@@ -30,60 +30,6 @@ extension DeviceActivityReport.Context {
     static let homeTopOffenders = Self("Home Top Offenders")
 }
 
-enum FocusInsightsDayState: Hashable {
-    case low
-    case normal
-    case high
-    case noData
-}
-
-enum FocusInsightsOffenderIcon: Hashable {
-    case application(ApplicationToken)
-    case category(ActivityCategoryToken)
-    case webDomain(WebDomainToken)
-    case fallback
-}
-
-struct FocusInsightsDay: Identifiable, Hashable {
-    let id: Int
-    let date: Date
-    let seconds: TimeInterval
-    let pickups: Int
-    let hourlySeconds: [TimeInterval]
-    let state: FocusInsightsDayState
-}
-
-struct FocusInsightsOffender: Identifiable, Hashable {
-    let id: String
-    let name: String
-    let seconds: TimeInterval
-    let icon: FocusInsightsOffenderIcon
-}
-
-struct FocusInsightsConfiguration: Hashable {
-    let days: [FocusInsightsDay]
-    let weeklyOffenders: [FocusInsightsOffender]
-    let dailyOffenders: [[FocusInsightsOffender]]
-    let generatedAt: Date
-
-    var totalSeconds: TimeInterval {
-        days.reduce(0) { $0 + $1.seconds }
-    }
-
-    var averageSeconds: TimeInterval {
-        guard !days.isEmpty else { return 0 }
-        return totalSeconds / Double(days.count)
-    }
-
-    var totalPickups: Int {
-        days.reduce(0) { $0 + $1.pickups }
-    }
-
-    var peakDay: FocusInsightsDay? {
-        days.max { $0.seconds < $1.seconds }
-    }
-}
-
 struct FocusHomeDashboardConfiguration: Hashable {
     let totalSeconds: TimeInterval
     let pickups: Int
@@ -323,7 +269,7 @@ struct HomeTopOffendersReport: DeviceActivityReportScene {
 /// app names/icons are rendered from Screen Time data instead of exported.
 struct FocusInsightsInteractiveReport: DeviceActivityReportScene {
     let context: DeviceActivityReport.Context = .focusInsightsInteractive
-    let content: (FocusInsightsConfiguration) -> FocusInsightsReportView
+    let content: (FocusInsightsConfiguration) -> InsightsWeekView
 
     func makeConfiguration(representing data: DeviceActivityResults<DeviceActivityData>) async -> FocusInsightsConfiguration {
         let calendar = Calendar.current
