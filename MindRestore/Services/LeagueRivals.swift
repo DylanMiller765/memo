@@ -96,3 +96,23 @@ enum LeagueRivalMemory {
         return userScore
     }
 }
+
+/// The onboarding demo's board when Game Center can't give one: Memo's labeled
+/// practice rivals placed around the level the user just reached, so the climb
+/// always passes a few of them and there's always one left to chase.
+enum OnboardingRivals {
+    private static let seats: [(name: String, offset: Int)] = [("Byte", 2), ("Turbo", -1), ("Pixel", -2), ("Nova", -3)]
+
+    static func entries(level: Int) -> [LeaderboardEntryData] {
+        guard level > 0 else { return [] }
+        return seats
+            .map { (name: $0.name, score: level + $0.offset) }
+            .filter { $0.score >= 1 }
+            .enumerated()
+            .map { index, seat in
+                var entry = LeaderboardEntryData(rank: index + 1, username: seat.name, score: seat.score, avatarEmoji: "", level: seat.score, isCurrentUser: false)
+                entry.isRival = true
+                return entry
+            }
+    }
+}

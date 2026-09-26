@@ -2137,7 +2137,8 @@ struct OBActionBar: View {
     var isEnabled: Bool = true
     var reassurance: String? = nil
     var footnote: String? = nil
-    var backdrop: Color = OB.bg
+    /// Pages sit on Memo's hill, so the bar is see-through by default.
+    var backdrop: Color = .clear
     let action: () -> Void
 
     var body: some View {
@@ -2145,13 +2146,13 @@ struct OBActionBar: View {
             if let reassurance {
                 OBReassurance(text: reassurance)
             }
-            OBContinueButton(title: title, action: action)
+            ChunkyButton(title: title, systemImage: nil, action: action)
                 .disabled(!isEnabled)
-                .opacity(isEnabled ? 1 : 0.45)
+                .opacity(isEnabled ? 1 : 0.55)
             if let footnote {
                 Text(footnote)
                     .font(.system(size: 12, weight: .medium, design: .rounded))
-                    .foregroundStyle(OB.fg3)
+                    .foregroundStyle(.white.opacity(0.6))
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -2180,44 +2181,50 @@ struct OnboardingIntroPage: View {
     var body: some View {
         GeometryReader { proxy in
             let compact = proxy.size.height < OBLayout.compactHeight
+            // The phone stands on the hill; Memo leans on it.
+            let phoneWidth = min(proxy.size.width * 0.5, compact ? 150 : 200, (proxy.size.height - (compact ? 190 : 250)) * 450 / 920)
+            let phoneHeight = phoneWidth * 920 / 450
             VStack(spacing: 0) {
-                VStack(spacing: compact ? 8 : 12) {
-                    OBEyebrow(text: "MEMO")
-                    OBHeadline(
-                        text: "The app blocker\nyou play to unlock.",
-                        size: compact ? 30 : 36,
-                        alignment: .center
-                    )
+                VStack(spacing: compact ? 6 : 10) {
+                    Text("MEMO")
+                        .font(.system(size: 11, weight: .heavy, design: .monospaced))
+                        .tracking(2.2)
+                        .foregroundStyle(ClimbColor.mint)
+                    ClimbHeadline(text: "The app blocker\nyou play to unlock.", size: compact ? 28 : 33)
                 }
-                .padding(.top, compact ? 2 : 10)
+                .padding(.top, compact ? 2 : 8)
 
-                ZStack {
-                    // A blurred disc fades out well inside the column, so
-                    // narrow phones don't show the glow's clipped edges.
-                    Circle()
-                        .fill(OB.accent.opacity(0.30))
-                        .frame(width: 220, height: 220)
-                        .blur(radius: 70)
+                Spacer(minLength: compact ? 8 : 14)
+
+                WelcomeDemoBezel(
+                    isActive: isActive,
+                    widthFraction: 1,
+                    maxWidth: phoneWidth,
+                    verticalOffset: 0,
+                    rotationDegrees: 0
+                )
+                .frame(width: phoneWidth, height: phoneHeight)
+                .overlay(alignment: .bottomTrailing) {
+                    RiveMascotView(mood: .happy, size: phoneWidth * 0.72, playbackPolicy: .continuous)
+                        .scaleEffect(x: -1, y: 1)
+                        .rotationEffect(.degrees(-4))
+                        .frame(width: phoneWidth * 0.72, height: phoneWidth * 0.66)
+                        .offset(x: phoneWidth * 0.46, y: phoneWidth * 0.02)
                         .accessibilityHidden(true)
-
-                    WelcomeDemoBezel(
-                        isActive: isActive,
-                        widthFraction: 0.8,
-                        maxWidth: 272,
-                        verticalOffset: 0,
-                        rotationDegrees: 0
-                    )
-                    .accessibilityLabel("Memo demo: a blocked app opens a brain game")
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(.vertical, compact ? 12 : 22)
+                // The crest sits a little above the phone's base so it stands in the grass.
+                .padding(.bottom, -phoneWidth * 0.05)
+                .climbCrest()
+                .padding(.bottom, phoneWidth * 0.05)
+                .accessibilityLabel("Memo demo: a blocked app opens a brain game")
                 .scaleEffect(appeared ? 1 : 0.95)
                 .opacity(appeared ? 1 : 0)
 
-                OBBodyText(
+                Spacer(minLength: compact ? 14 : 24)
+
+                ClimbBodyText(
                     text: "Memo locks the apps you pick. Finish a quick brain game to open one for a few minutes.",
-                    size: compact ? 15 : 16,
-                    alignment: .center
+                    size: compact ? 14 : 15
                 )
                 .padding(.bottom, compact ? 2 : 8)
             }
@@ -2225,7 +2232,6 @@ struct OnboardingIntroPage: View {
             .frame(maxWidth: OBLayout.contentMaxWidth + OBLayout.gutter * 2)
             .frame(maxWidth: .infinity)
         }
-        .background(OB.bg.ignoresSafeArea())
         .obBottomBar {
             OBActionBar(title: "Get started", action: onContinue)
         }
@@ -2256,30 +2262,29 @@ struct OnboardingMotivationBridgePage: View {
                 OnboardingLockedAppFan(compact: compact, appeared: appeared)
                     .accessibilityHidden(true)
 
-                VStack(spacing: compact ? 12 : 16) {
-                    OBHeadline(
+                ClimbMemo(mood: .neutral, size: compact ? 108 : 140)
+                    .padding(.top, compact ? 6 : 14)
+
+                VStack(spacing: compact ? 10 : 14) {
+                    ClimbHeadline(
                         text: "You're here because your phone takes more than you want to give.",
-                        size: compact ? 27 : 32,
-                        alignment: .center
+                        size: compact ? 25 : 29
                     )
-                    OBBodyText(
+                    ClimbBodyText(
                         text: "That's not a willpower problem. These apps are built to keep you scrolling. Memo puts one quick game in the way.",
-                        size: compact ? 15 : 17,
-                        alignment: .center
+                        size: compact ? 14 : 16
                     )
                 }
-                .padding(.top, compact ? 28 : 44)
+                .padding(.top, compact ? 16 : 28)
                 .opacity(appeared ? 1 : 0)
                 .offset(y: appeared ? 0 : 10)
 
-                Spacer(minLength: 0)
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, OBLayout.gutter)
             .frame(maxWidth: OBLayout.contentMaxWidth + OBLayout.gutter * 2)
             .frame(maxWidth: .infinity)
         }
-        .background(OB.bg.ignoresSafeArea())
         .obBottomBar {
             OBActionBar(title: "See how Memo works", action: onContinue)
         }
@@ -2292,54 +2297,37 @@ struct OnboardingMotivationBridgePage: View {
     }
 }
 
-/// Three familiar feeds, fanned out and padlocked — what Memo actually does.
+/// Three familiar feeds as padlocked stickers — what Memo actually does.
 struct OnboardingLockedAppFan: View {
     let compact: Bool
     let appeared: Bool
 
     private let apps: [(asset: String, angle: Double, x: CGFloat, y: CGFloat)] = [
-        ("logo-instagram", -11, -78, 14),
-        ("logo-tiktok", 0, 0, 0),
-        ("logo-youtube", 11, 78, 14)
+        ("logo-instagram", -12, -96, 22),
+        ("logo-tiktok", 4, 0, 0),
+        ("logo-youtube", 12, 96, 26)
     ]
 
     var body: some View {
-        let tile: CGFloat = compact ? 70 : 84
+        let tile: CGFloat = compact ? 70 : 88
         ZStack {
             ForEach(Array(apps.enumerated()), id: \.offset) { index, app in
-                ZStack(alignment: .bottomTrailing) {
-                    RoundedRectangle(cornerRadius: tile * 0.26, style: .continuous)
-                        .fill(OB.surface)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: tile * 0.26, style: .continuous)
-                                .stroke(Color.white.opacity(0.10), lineWidth: 1)
-                        )
-                        .overlay(
-                            Image(app.asset)
-                                .renderingMode(.original)
-                                .resizable()
-                                .scaledToFit()
-                                .padding(tile * 0.2)
-                                .saturation(0.35)
-                                .opacity(0.72)
-                        )
-                        .frame(width: tile, height: tile)
-
-                    Image(systemName: "lock.fill")
-                        .font(.system(size: tile * 0.17, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: tile * 0.36, height: tile * 0.36)
-                        .background(Circle().fill(OB.accent))
-                        .overlay(Circle().stroke(OB.bg, lineWidth: 3))
-                        .offset(x: tile * 0.1, y: tile * 0.1)
-                }
-                .rotationEffect(.degrees(appeared ? app.angle : 0))
-                .offset(x: appeared ? app.x * (tile / 84) : 0, y: app.y)
-                .zIndex(index == 1 ? 1 : 0)
-                .shadow(color: .black.opacity(0.45), radius: 16, y: 10)
+                OnboardingAppIcon(asset: app.asset, size: tile)
+                    .stickerOutline(3)
+                    .overlay(alignment: .bottomTrailing) {
+                        StickerIcon(kind: .padlock, size: tile * 0.3)
+                            .frame(width: tile * 0.42, height: tile * 0.42)
+                            .background(Circle().fill(.white))
+                            .overlay(Circle().strokeBorder(ClimbColor.ink, lineWidth: 2.5))
+                            .offset(x: tile * 0.14, y: tile * 0.14)
+                    }
+                    .rotationEffect(.degrees(appeared ? app.angle : 0))
+                    .offset(x: appeared ? app.x * (tile / 88) : 0, y: app.y)
+                    .zIndex(index == 1 ? 1 : 0)
+                    .shadow(color: .black.opacity(0.35), radius: 14, y: 10)
             }
         }
-        .frame(height: tile + 30)
+        .frame(height: tile + 40)
     }
 }
 
@@ -2380,10 +2368,9 @@ struct OnboardingPlayableLoopPage: View {
         GeometryReader { proxy in
             let compact = proxy.size.height < OBLayout.compactHeight
             VStack(spacing: 0) {
-                OnboardingTryItStepper(current: stage.rawValue, compact: compact)
+                ClimbTrail(current: stage.rawValue, compact: compact)
                     .padding(.horizontal, OBLayout.gutter)
-                    .padding(.top, compact ? 0 : 6)
-                    .padding(.bottom, compact ? 14 : 20)
+                    .padding(.bottom, compact ? 6 : 12)
 
                 switch stage {
                 case .slot:
@@ -2396,6 +2383,7 @@ struct OnboardingPlayableLoopPage: View {
                     OnboardingUnlockMoment(
                         minutes: payoutMinutes,
                         compact: compact,
+                        climb: true,
                         onRevealed: { unlockRevealed = true }
                     )
                     .padding(.horizontal, OBLayout.gutter)
@@ -2415,15 +2403,8 @@ struct OnboardingPlayableLoopPage: View {
             .frame(maxWidth: .infinity)
         }
         .obBottomBar { bottomBar }
-        .background {
-            // Behind the pinned bar too, so the slot's glow doesn't stop at
-            // a visible seam above the CTA.
-            if stage == .slot {
-                FocusSlotAtmosphere()
-            } else {
-                OB.bg.ignoresSafeArea()
-            }
-        }
+        // The summit: the sky starts to warm when the board comes up.
+        .climbSky(stage == .rank ? .predawn : nil)
         .preferredColorScheme(.dark)
         // Load the board while the unlock plays so the climb starts instantly.
         .task(id: stage.rawValue >= Stage.unlock.rawValue) {
@@ -2435,11 +2416,11 @@ struct OnboardingPlayableLoopPage: View {
     // MARK: Stages
 
     private func slotStage(compact: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            OBHeadline(text: "Say you open TikTok.", size: compact ? 27 : 32)
-            OBBodyText(
+        VStack(spacing: 0) {
+            ClimbHeadline(text: "Say you open TikTok.", size: compact ? 26 : 31)
+            ClimbBodyText(
                 text: "Memo steps in first. Spin to see which game stands between you and the feed.",
-                size: compact ? 14 : 16
+                size: compact ? 14 : 15
             )
             .padding(.top, 6)
 
@@ -2450,6 +2431,7 @@ struct OnboardingPlayableLoopPage: View {
                 let scale = min(1, area.size.width / 360, area.size.height / 560)
                 FocusUnlockSlotMachine(
                     mode: .demo,
+                    onHill: true,
                     onLanded: { _ in
                         withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) {
                             landedMinutes = UnlockRulebook.minutes(for: .great, isPersonalBest: false)
@@ -2459,6 +2441,10 @@ struct OnboardingPlayableLoopPage: View {
                 .frame(width: 360, height: 560)
                 .scaleEffect(scale)
                 .frame(width: area.size.width, height: area.size.height)
+                // The booth stands on the hill: the crest runs behind its middle.
+                .background(alignment: .top) {
+                    Color.clear.frame(height: area.size.height * 0.62).climbCrest()
+                }
             }
             .padding(.top, compact ? 4 : 12)
         }
@@ -2468,26 +2454,27 @@ struct OnboardingPlayableLoopPage: View {
     private func gameStage(compact: Bool) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 5) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text("Visual Memory")
-                        .font(.brand(size: compact ? 24 : 28, weight: .heavy))
-                        .foregroundStyle(OB.fg)
-                        .accessibilityAddTraits(.isHeader)
+                HStack(alignment: .center) {
+                    ClimbHeadline(text: "Visual Memory", size: compact ? 24 : 28, alignment: .leading)
                     Spacer(minLength: 8)
                     Text("\(payoutMinutes) MIN")
-                        .font(.system(size: 12, weight: .bold, design: .monospaced))
-                        .foregroundStyle(OB.accent)
+                        .font(.system(size: 12, weight: .heavy, design: .monospaced))
+                        .foregroundStyle(ClimbColor.ink)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 5)
-                        .background(Capsule().fill(OB.accent.opacity(0.14)))
+                        .background(Capsule().fill(ClimbColor.mint))
+                        .overlay(Capsule().strokeBorder(ClimbColor.ink, lineWidth: 2))
                         .accessibilityLabel("Worth \(payoutMinutes) minutes")
                 }
-                OBBodyText(
+                ClimbBodyText(
                     text: "Memorize the lit squares, then tap them. The grid keeps growing until you miss.",
-                    size: compact ? 13 : 15
+                    size: compact ? 13 : 15,
+                    alignment: .leading
                 )
             }
             .padding(.horizontal, OBLayout.gutter)
+            // Keep the crest high so the grid plays over the grass.
+            .climbCrest()
 
             VisualMemoryView(
                 autoStart: true,
@@ -2568,7 +2555,7 @@ struct OnboardingPlayableLoopPage: View {
         }
         #endif
         guard gameCenterService.isAuthenticated else {
-            board = .unavailable
+            board = .practice
             return
         }
         if case .loaded = board { return }
@@ -2578,10 +2565,10 @@ struct OnboardingPlayableLoopPage: View {
             timeFilter: .thisWeek,
             range: NSRange(location: 1, length: 50)
         )
-        if result.error != nil {
-            board = .unavailable
+        let others = result.entries.filter { !$0.isCurrentUser }.sorted { $0.rank < $1.rank }
+        if result.error != nil || others.isEmpty {
+            board = .practice
         } else {
-            let others = result.entries.filter { !$0.isCurrentUser }.sorted { $0.rank < $1.rank }
             board = .loaded(entries: others, totalPlayers: result.totalPlayerCount)
         }
     }
@@ -2591,6 +2578,9 @@ enum OnboardingBoardState {
     case loading
     case loaded(entries: [LeaderboardEntryData], totalPlayers: Int)
     case unavailable
+    /// No real board to show (signed out, error, empty week): Memo's labeled
+    /// practice rivals, placed around whatever level the user reaches.
+    case practice
 }
 
 /// Spin → Play → Unlock → Rank, so the user always knows where they are.
@@ -2654,6 +2644,8 @@ struct OnboardingUnlockMoment: View {
     var isLive = false
     /// Replaces "You finished the game…" (a FREE PASS finishes no game).
     var intro: String? = nil
+    /// Onboarding's hill: outlined type, and the crest under the countdown.
+    var climb = false
     let onRevealed: () -> Void
 
     private enum Phase: Int, Comparable {
@@ -2677,16 +2669,15 @@ struct OnboardingUnlockMoment: View {
     var body: some View {
         VStack(spacing: 0) {
             VStack(spacing: 8) {
-                OBHeadline(text: phase >= .torn ? "Unlocked." : "Cash it in.", size: compact ? 32 : 38, alignment: .center)
-                    .contentTransition(.opacity)
-                OBBodyText(
-                    text: phase >= .torn
-                        ? "\(appName) opens for \(minutes) minutes. Then Memo locks it again."
-                        : intro ?? "You finished the game, so your ticket pays out.",
-                    size: compact ? 14 : 16,
-                    alignment: .center
-                )
-                .contentTransition(.opacity)
+                if climb {
+                    ClimbHeadline(text: phase >= .torn ? "Unlocked." : "Cash it in.", size: compact ? 32 : 38)
+                    ClimbBodyText(text: introText, size: compact ? 14 : 15)
+                } else {
+                    OBHeadline(text: phase >= .torn ? "Unlocked." : "Cash it in.", size: compact ? 32 : 38, alignment: .center)
+                        .contentTransition(.opacity)
+                    OBBodyText(text: introText, size: compact ? 14 : 16, alignment: .center)
+                        .contentTransition(.opacity)
+                }
             }
             .animation(.easeInOut(duration: 0.3), value: phase)
 
@@ -2699,6 +2690,7 @@ struct OnboardingUnlockMoment: View {
             .frame(height: heroHeight)
 
             countdown
+                .climbCrestIf(climb)
                 .opacity(phase >= .torn ? 1 : 0)
                 .offset(y: phase >= .torn ? 0 : 10)
                 .animation(.spring(response: 0.5, dampingFraction: 0.8).delay(0.15), value: phase)
@@ -2771,6 +2763,12 @@ struct OnboardingUnlockMoment: View {
     }
 
     private var appName: String { isLive ? "Your app" : "TikTok" }
+
+    private var introText: String {
+        phase >= .torn
+            ? "\(appName) opens for \(minutes) minutes. Then Memo locks it again."
+            : intro ?? "You finished the game, so your ticket pays out."
+    }
 
     @ViewBuilder private var stubIcon: some View {
         if isLive {
@@ -2856,14 +2854,18 @@ struct OnboardingUnlockMoment: View {
             let elapsed = startedAt.map { max(0, Int(context.date.timeIntervalSince($0))) } ?? 0
             let remaining = max(0, total - elapsed)
             VStack(spacing: 2) {
-                Text(OnboardingUnlockMoment.clock(remaining))
-                    .font(.system(size: compact ? 38 : 46, weight: .bold, design: .monospaced))
-                    .foregroundStyle(OB.fg)
-                    .contentTransition(.numericText(countsDown: true))
+                if climb {
+                    OutlinedText(text: OnboardingUnlockMoment.clock(remaining), size: compact ? 38 : 56, outline: 3)
+                } else {
+                    Text(OnboardingUnlockMoment.clock(remaining))
+                        .font(.system(size: compact ? 38 : 46, weight: .bold, design: .monospaced))
+                        .foregroundStyle(OB.fg)
+                        .contentTransition(.numericText(countsDown: true))
+                }
                 Text(isLive ? "LEFT TO SCROLL" : "LEFT ON TIKTOK · PREVIEW")
                     .font(.system(size: 11, weight: .bold, design: .rounded))
                     .tracking(0.9)
-                    .foregroundStyle(OB.fg3)
+                    .foregroundStyle(climb ? Color.white.opacity(0.75) : OB.fg3)
             }
         }
     }
@@ -3095,7 +3097,7 @@ struct OnboardingLeaderboardClimb: View {
     @State private var landed = false
     @State private var climb: Task<Void, Never>?
 
-    private var rowHeight: CGFloat { compact ? 48 : 56 }
+    private var rowHeight: CGFloat { compact ? 42 : 56 }
 
     /// Rows shown around the landing spot, plus where the user lands.
     private struct Window {
@@ -3107,8 +3109,22 @@ struct OnboardingLeaderboardClimb: View {
         let cutoff: Int?
     }
 
+    /// The practice board is built from the level, so it's resolved here.
+    private var resolved: OnboardingBoardState {
+        if case .practice = board {
+            let rivals = OnboardingRivals.entries(level: level)
+            return .loaded(entries: rivals, totalPlayers: rivals.count)
+        }
+        return board
+    }
+
+    private var isPractice: Bool {
+        if case .practice = board { return true }
+        return false
+    }
+
     private var window: Window? {
-        guard case .loaded(let entries, let totalPlayers) = board, level > 0 else { return nil }
+        guard case .loaded(let entries, let totalPlayers) = resolved, level > 0 else { return nil }
         let beatenIndex = entries.firstIndex { $0.score < level } ?? entries.count
         // Only claim a rank that the loaded slice of the board can prove.
         let placementKnown = beatenIndex < entries.count || totalPlayers <= entries.count
@@ -3141,9 +3157,21 @@ struct OnboardingLeaderboardClimb: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-                .padding(.bottom, compact ? 16 : 24)
+                .padding(.bottom, compact ? 12 : 44)
+                // The summit: the board sits on the crest.
+                .climbCrest()
 
             boardCard
+
+            if isPractice, level > 0 {
+                Text("Byte, Turbo, Pixel and Nova are Memo's practice rivals. Real players show up once you're on Game Center.")
+                    .font(.system(size: compact ? 11 : 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.62))
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 14)
+                    .padding(.horizontal, 8)
+            }
 
             Spacer(minLength: 8)
 
@@ -3166,6 +3194,7 @@ struct OnboardingLeaderboardClimb: View {
         switch board {
         case .loading: return "loading"
         case .unavailable: return "unavailable"
+        case .practice: return "practice-\(level)"
         case .loaded(let entries, _): return "loaded-\(entries.count)"
         }
     }
@@ -3173,38 +3202,15 @@ struct OnboardingLeaderboardClimb: View {
     // MARK: Header
 
     private var header: some View {
-        let mascotSize: CGFloat = compact ? 84 : 120
-        return VStack(spacing: compact ? 4 : 8) {
-            ZStack {
-                if landed, let placement = window?.placement, placement <= 3 {
-                    Image("mascot-crown")
-                        .resizable()
-                        .scaledToFit()
-                        .transition(.scale.combined(with: .opacity))
-                } else if landed || level == 0 || !isLoaded {
-                    RiveMascotView(mood: level == 0 ? .neutral : .happy, size: mascotSize, playbackPolicy: .continuous)
-                } else {
-                    Image("mascot-lookout")
-                        .resizable()
-                        .scaledToFit()
-                }
-            }
-            .frame(width: mascotSize, height: mascotSize)
-            .scaleEffect(landed ? 1 : 0.92)
-            .accessibilityHidden(true)
-
-            Text(headline)
-                .font(.brand(size: compact ? 28 : 36, weight: .heavy))
-                .foregroundStyle(OB.fg)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
+        VStack(spacing: compact ? 4 : 8) {
+            ClimbHeadline(text: headline, size: compact ? 28 : 34)
                 .contentTransition(.numericText())
-                .accessibilityAddTraits(.isHeader)
             Text(subline)
-                .font(.system(size: compact ? 14 : 16, weight: .semibold, design: .rounded))
-                .foregroundStyle(landed && percentileText != nil ? OB.success : OB.fg2)
+                .font(.system(size: compact ? 14 : 15, weight: .bold, design: .rounded))
+                .foregroundStyle(landed ? ClimbColor.mint : Color.white.opacity(0.85))
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
+                .shadow(color: .black.opacity(0.5), radius: 4)
         }
         .frame(maxWidth: .infinity)
         .animation(.spring(response: 0.4, dampingFraction: 0.7), value: landed)
@@ -3212,7 +3218,7 @@ struct OnboardingLeaderboardClimb: View {
     }
 
     private var isLoaded: Bool {
-        if case .loaded = board { return true }
+        if case .loaded = resolved { return true }
         return false
     }
 
@@ -3223,9 +3229,10 @@ struct OnboardingLeaderboardClimb: View {
 
     private var headline: String {
         if level == 0 { return "One level gets you on the board." }
-        switch board {
+        switch resolved {
         case .loading: return "Checking this week's board…"
         case .unavailable: return "See where you'd place."
+        case .practice: return "See where you'd place."
         case .loaded(let entries, _):
             if entries.isEmpty { return "You'd be #1 this week." }
             guard let window else { return "Checking this week's board…" }
@@ -3236,7 +3243,7 @@ struct OnboardingLeaderboardClimb: View {
     }
 
     private var percentileText: String? {
-        guard case .loaded(_, let totalPlayers) = board,
+        guard !isPractice, case .loaded(_, let totalPlayers) = resolved,
               let placement = window?.placement,
               totalPlayers >= placement, totalPlayers > 1 else { return nil }
         let percent = max(1, Int((Double(placement) / Double(totalPlayers) * 100).rounded(.up)))
@@ -3246,9 +3253,10 @@ struct OnboardingLeaderboardClimb: View {
 
     private var subline: String {
         if level == 0 { return "Clear level 1 and your score counts." }
-        switch board {
+        if isPractice { return "Level \(level) · Visual Memory · vs Memo's rivals" }
+        switch resolved {
         case .loading: return "Visual Memory · this week"
-        case .unavailable: return "Sign in to Game Center to compare with this week's players."
+        case .unavailable, .practice: return "Sign in to Game Center to compare with this week's players."
         case .loaded(let entries, _):
             if entries.isEmpty { return "Nobody has posted a Visual Memory score yet." }
             guard landed else { return "Level \(level) · Visual Memory · this week" }
@@ -3266,11 +3274,11 @@ struct OnboardingLeaderboardClimb: View {
                 // Nothing to place yet, so don't tease a spot.
                 userRow(rank: nil)
             } else {
-            switch board {
+            switch resolved {
             case .loading:
                 ForEach(0..<4, id: \.self) { _ in skeletonRow }
                     .redacted(reason: .placeholder)
-            case .unavailable:
+            case .unavailable, .practice:
                 lockedBoard
             case .loaded(let entries, _):
                 if entries.isEmpty || level == 0 {
@@ -3282,10 +3290,12 @@ struct OnboardingLeaderboardClimb: View {
             }
             }
         }
-        .padding(compact ? 12 : 14)
+        .padding(compact ? 10 : 12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(OB.surface, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(OB.border, lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Color(red: 0.024, green: 0.118, blue: 0.149).opacity(0.9)))
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(ClimbColor.ink, lineWidth: 2.5))
+        .background(RoundedRectangle(cornerRadius: 23.5, style: .continuous).strokeBorder(.white.opacity(0.9), lineWidth: 2).padding(-2))
+        .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(ClimbColor.ink).offset(y: 5))
     }
 
     private func climbingRows(_ window: Window) -> some View {
@@ -3307,40 +3317,42 @@ struct OnboardingLeaderboardClimb: View {
     }
 
     private func playerRow(_ entry: LeaderboardEntryData, passed: Bool) -> some View {
-        let hues: [Color] = [OB.memoPurple, OB.coral, OB.amber, OB.success, Color(red: 0.35, green: 0.75, blue: 0.95)]
-        let hue = hues[entry.username.unicodeScalars.reduce(0) { $0 + Int($1.value) } % hues.count]
-        return HStack(spacing: 12) {
+        HStack(spacing: 10) {
             // Once the user passes a player, that player drops one spot.
             rankBadge(passed ? entry.rank + 1 : entry.rank, highlighted: false)
                 .contentTransition(.numericText())
-            Text(String(entry.username.prefix(1)).uppercased())
-                .font(.system(size: 14, weight: .heavy, design: .rounded))
-                .foregroundStyle(hue)
-                .frame(width: 32, height: 32)
-                .background(Circle().fill(hue.opacity(0.18)))
+            StickerAvatar(name: entry.username, size: 32, isRival: entry.isRival)
             Text(entry.username)
-                .font(.system(size: 15, weight: .semibold, design: .rounded))
-                .foregroundStyle(OB.fg)
+                .font(.system(size: 15, weight: .bold, design: .rounded))
+                .foregroundStyle(.white)
                 .lineLimit(1)
+            if entry.isRival {
+                Text("BOT")
+                    .font(.system(size: 9, weight: .heavy, design: .monospaced))
+                    .foregroundStyle(ClimbColor.ink)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(RoundedRectangle(cornerRadius: 5).fill(ClimbColor.mint))
+            }
             Spacer(minLength: 8)
             Text("Lv \(entry.score)")
-                .font(.system(size: 13, weight: .bold, design: .monospaced))
-                .foregroundStyle(OB.fg2)
+                .font(.system(size: 13, weight: .heavy, design: .rounded))
+                .foregroundStyle(.white.opacity(0.8))
         }
-        .padding(.horizontal, 10)
+        .padding(.horizontal, 8)
         .opacity(passed ? 0.55 : 1)
         .accessibilityElement(children: .combine)
     }
 
     private func userRow(rank: Int?) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             if let rank {
                 rankBadge(rank, highlighted: true)
                     .contentTransition(.numericText())
             } else {
                 Image(systemName: "person.fill")
                     .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(ClimbColor.ink)
                     .frame(width: 40, height: 28)
             }
             Image("app-icon")
@@ -3348,34 +3360,30 @@ struct OnboardingLeaderboardClimb: View {
                 .scaledToFit()
                 .frame(width: 32, height: 32)
                 .clipShape(Circle())
+                .overlay(Circle().strokeBorder(ClimbColor.ink, lineWidth: 2))
             Text("You")
                 .font(.system(size: 16, weight: .heavy, design: .rounded))
-                .foregroundStyle(.white)
             Spacer(minLength: 8)
             Text("Lv \(level)")
-                .font(.system(size: 14, weight: .heavy, design: .monospaced))
-                .foregroundStyle(.white)
+                .font(.system(size: 14, weight: .heavy, design: .rounded))
         }
-        .padding(.horizontal, 10)
+        .foregroundStyle(ClimbColor.ink)
+        .padding(.horizontal, 8)
         .frame(height: rowHeight - 6)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(OB.accent)
-                .shadow(color: OB.accent.opacity(landed ? 0.7 : 0.35), radius: landed ? 18 : 10)
-        )
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(ClimbColor.mint))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(ClimbColor.ink, lineWidth: 2.5))
+        .shadow(color: ClimbColor.mint.opacity(landed ? 0.7 : 0.3), radius: landed ? 16 : 8)
         .scaleEffect(landed ? 1.03 : 1)
         .accessibilityElement(children: .combine)
     }
 
     private func rankBadge(_ rank: Int, highlighted: Bool) -> some View {
-        let medal: Color? = rank == 1 ? OB.amber : rank == 2 ? Color(white: 0.78) : rank == 3 ? Color(red: 0.80, green: 0.52, blue: 0.32) : nil
+        let medal: Color? = rank == 1 ? ClimbColor.amber : rank == 2 ? Color(white: 0.84) : rank == 3 ? Color(red: 0.88, green: 0.57, blue: 0.35) : nil
         return Text("#\(rank)")
-            .font(.system(size: 13, weight: .heavy, design: .monospaced))
-            .foregroundStyle(highlighted ? .white : (medal.map { _ in OB.bg } ?? OB.fg2))
+            .font(.system(size: 13, weight: .heavy, design: .rounded))
+            .foregroundStyle(highlighted || medal != nil ? ClimbColor.ink : .white.opacity(0.8))
             .frame(width: 40, height: 26)
-            .background(
-                Capsule().fill(highlighted ? Color.white.opacity(0.2) : (medal ?? Color.white.opacity(0.06)))
-            )
+            .background(Capsule().fill(highlighted ? Color.white.opacity(0.7) : (medal ?? Color.white.opacity(0.1))))
     }
 
     private func hookLine(_ window: Window) -> some View {
@@ -3391,8 +3399,8 @@ struct OnboardingLeaderboardClimb: View {
                     Text("Nobody's above you. Now defend it.")
                 }
             }
-            .font(.system(size: 14, weight: .semibold, design: .rounded))
-            .foregroundStyle(OB.fg)
+            .font(.system(size: 14, weight: .bold, design: .rounded))
+            .foregroundStyle(.white)
             .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.top, 4)
@@ -3444,7 +3452,7 @@ struct OnboardingLeaderboardClimb: View {
 
     private func startClimbIfReady() {
         guard climb == nil else { return }
-        guard case .loaded(let entries, _) = board else {
+        guard case .loaded(let entries, _) = resolved else {
             if case .unavailable = board { landed = true }
             return
         }
@@ -4092,7 +4100,6 @@ struct OnboardingTrialReminderView: View {
     let onContinue: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Namespace private var switchSpace
     @State private var bannerShown = false
     @State private var bannerDrop = 0
     @State private var appeared = false
@@ -4144,20 +4151,18 @@ struct OnboardingTrialReminderView: View {
 
                 Spacer(minLength: compact ? 10 : 20)
 
-                RiveMascotView(mood: .happy, size: compact ? 104 : 150, playbackPolicy: .continuous)
-                    .scaleEffect(appeared ? 1 : 0.6)
+                ClimbMemo(mood: .neutral, size: compact ? 104 : 140)
+                    .scaleEffect(appeared ? 1 : 0.6, anchor: .bottom)
                     .opacity(appeared ? 1 : 0)
-                    .accessibilityHidden(true)
 
                 VStack(spacing: compact ? 6 : 10) {
-                    OBHeadline(
+                    ClimbHeadline(
                         text: "We'll remind you before your trial ends.",
-                        size: compact ? 26 : 32,
-                        alignment: .center
+                        size: compact ? 25 : 29
                     )
-                    OBBodyText(text: "Pick when you want the heads-up.", size: compact ? 15 : 16, alignment: .center)
+                    ClimbBodyText(text: "Pick when you want the heads-up.", size: compact ? 14 : 15)
                 }
-                .padding(.top, compact ? 4 : 10)
+                .padding(.top, compact ? 16 : 26)
 
                 reminderSwitch(compact: compact)
                     .padding(.top, compact ? 18 : 28)
@@ -4177,16 +4182,6 @@ struct OnboardingTrialReminderView: View {
                 action: onContinue
             )
         }
-        // Glow sits behind the pinned bar too, so it never ends in a seam.
-        .background(alignment: .top) {
-            Circle()
-                .fill(OB.accent.opacity(0.22))
-                .frame(width: 320, height: 320)
-                .blur(radius: 90)
-                .offset(y: 120)
-                .allowsHitTesting(false)
-        }
-        .background(OB.bg.ignoresSafeArea())
         .preferredColorScheme(.dark)
         .onAppear {
             guard !appeared else { return }
@@ -4207,32 +4202,28 @@ struct OnboardingTrialReminderView: View {
     /// One capsule, two choices, a thumb that slides between them. The date
     /// lives in the banner above, so the choice itself stays simple.
     private func reminderSwitch(compact: Bool) -> some View {
-        HStack(spacing: 0) {
+        HStack(spacing: 10) {
             ForEach([1, 2], id: \.self) { days in
                 let isSelected = selectedDaysBefore == days
+                let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
                 Button { select(days) } label: {
                     Text("\(days) \(days == 1 ? "day" : "days") before")
-                        .font(.system(size: compact ? 16 : 17, weight: .bold, design: .rounded))
-                        .foregroundStyle(isSelected ? Color.white : OB.fg2)
-                        .frame(maxWidth: .infinity, minHeight: compact ? 50 : 56)
-                        .background {
-                            if isSelected {
-                                Capsule()
-                                    .fill(OB.accent)
-                                    .shadow(color: OB.accent.opacity(0.5), radius: 14, y: 6)
-                                    .matchedGeometryEffect(id: "reminder-thumb", in: switchSpace)
-                            }
-                        }
-                        .contentShape(Capsule())
+                        .font(.system(size: compact ? 16 : 17, weight: .heavy, design: .rounded))
+                        .foregroundStyle(isSelected ? ClimbColor.ink : Color.white.opacity(0.85))
+                        .frame(maxWidth: .infinity, minHeight: compact ? 48 : 54)
+                        .background(shape.fill(isSelected ? ClimbColor.mint : Color(red: 0.024, green: 0.118, blue: 0.149).opacity(0.8)))
+                        .overlay(shape.strokeBorder(ClimbColor.ink, lineWidth: 2.5))
+                        .background(shape.strokeBorder(isSelected ? Color.white : Color.white.opacity(0.35), lineWidth: 2).padding(-2))
+                        .offset(y: isSelected ? 2 : 0)
+                        .background(shape.fill(ClimbColor.ink).offset(y: 4))
+                        .contentShape(shape)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Remind me \(days) \(days == 1 ? "day" : "days") before my trial ends")
                 .accessibilityAddTraits(isSelected ? [.isSelected] : [])
             }
         }
-        .padding(5)
-        .background(Capsule().fill(OB.surface))
-        .overlay(Capsule().stroke(Color.white.opacity(0.1), lineWidth: 1))
+        .padding(.bottom, 4)
     }
 
     private func notificationBanner(compact: Bool) -> some View {
@@ -4282,6 +4273,8 @@ struct OnboardingTrialReminderView: View {
 /// usable trial never see trial language.
 struct OnboardingTrialOfferView: View {
     let hasTrial: Bool
+    /// "7 days" etc., from the App Store offer; nil while loading.
+    var trialLabel: String? = nil
     let isLoadingOffer: Bool
     let loadFailed: Bool
     let onRetry: () -> Void
@@ -4289,7 +4282,6 @@ struct OnboardingTrialOfferView: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var appeared = false
-    @State private var glow = false
 
     private var title: String {
         if isLoadingOffer || loadFailed || hasTrial { return "We want you to try Memo for free." }
@@ -4298,8 +4290,16 @@ struct OnboardingTrialOfferView: View {
 
     private var detail: String {
         if loadFailed { return "Couldn't reach the App Store." }
-        if isLoadingOffer || hasTrial { return "Full access. Every game, every block, every leaderboard." }
+        if isLoadingOffer || hasTrial { return "Full access, nothing held back." }
         return "Pick a plan on the next screen."
+    }
+
+    /// The dealer hands over a golden pass whenever there's a trial to offer.
+    private var showsPass: Bool { hasTrial || isLoadingOffer }
+
+    private var passTitle: String {
+        guard let trialLabel else { return "FREE TRIAL" }
+        return "\(trialLabel.uppercased()) FREE"
     }
 
     // Keyed so the pinned bar re-renders when the offer finishes loading.
@@ -4308,53 +4308,62 @@ struct OnboardingTrialOfferView: View {
     var body: some View {
         GeometryReader { proxy in
             let compact = proxy.size.height < OBLayout.compactHeight
+            let passWidth: CGFloat = compact ? 216 : 256
             VStack(spacing: 0) {
                 Spacer(minLength: 0)
 
-                ZStack {
-                    Circle()
-                        .fill(OB.accent.opacity(0.34))
-                        .frame(width: compact ? 200 : 260, height: compact ? 200 : 260)
-                        .blur(radius: 70)
-                        .scaleEffect(glow ? 1.08 : 0.92)
-                    Circle()
-                        .fill(OB.memoPurple.opacity(0.22))
-                        .frame(width: compact ? 140 : 180, height: compact ? 140 : 180)
-                        .blur(radius: 50)
-                        .offset(x: 50, y: 30)
-                        .scaleEffect(glow ? 0.94 : 1.06)
-
-                    RiveMascotView(mood: .happy, size: compact ? 170 : 230, playbackPolicy: .continuous)
-                        .accessibilityHidden(true)
+                Group {
+                    if showsPass {
+                        // Memo the dealer leans over the pass, like he does over the booth.
+                        VStack(spacing: -passWidth * 0.16) {
+                            Image("memo-dealer")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: passWidth * 0.66)
+                            ClimbPassSticker(title: passTitle, width: passWidth)
+                                .rotationEffect(.degrees(-5))
+                                .climbCrest()
+                        }
+                    } else {
+                        ClimbMemo(mood: .neutral, size: compact ? 150 : 190)
+                    }
                 }
-                .scaleEffect(appeared ? 1 : 0.7)
+                .accessibilityHidden(true)
+                .scaleEffect(appeared ? 1 : 0.8)
                 .opacity(appeared ? 1 : 0)
 
-                VStack(spacing: compact ? 10 : 14) {
-                    OBHeadline(text: title, size: compact ? 32 : 40, alignment: .center)
-                    OBBodyText(text: detail, size: compact ? 15 : 17, alignment: .center)
+                VStack(spacing: compact ? 10 : 12) {
+                    ClimbHeadline(text: title, size: compact ? 29 : 33)
+                    ClimbBodyText(text: detail, size: compact ? 14 : 15)
                     if loadFailed {
                         Button("Try again", action: onRetry)
                             .font(.system(size: 16, weight: .bold, design: .rounded))
-                            .foregroundStyle(OB.accent)
+                            .foregroundStyle(ClimbColor.mint)
                             .buttonStyle(.plain)
                             .frame(minHeight: 44)
                     } else if isLoadingOffer {
-                        ProgressView().tint(OB.fg2).frame(height: 44)
+                        ProgressView().tint(.white).frame(height: 44)
+                    } else if hasTrial {
+                        VStack(spacing: 8) {
+                            HStack(spacing: 8) {
+                                ClimbChip(icon: .grid, text: "Every game")
+                                ClimbChip(icon: .padlock, text: "Every block")
+                            }
+                            ClimbChip(icon: .trophy, text: "Every leaderboard")
+                        }
+                        .padding(.top, 4)
                     }
                 }
-                .padding(.top, compact ? 12 : 24)
+                .padding(.top, compact ? 22 : 34)
                 .opacity(appeared ? 1 : 0)
                 .offset(y: appeared ? 0 : 14)
 
-                Spacer(minLength: 0)
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, OBLayout.gutter)
             .frame(maxWidth: OBLayout.contentMaxWidth + OBLayout.gutter * 2)
             .frame(maxWidth: .infinity)
         }
-        .background(OB.bg.ignoresSafeArea())
         .obBottomBar {
             OBActionBar(
                 title: isLoadingOffer ? "Checking offer…" : "Continue",
@@ -4371,7 +4380,6 @@ struct OnboardingTrialOfferView: View {
                 return
             }
             withAnimation(.spring(response: 0.7, dampingFraction: 0.72).delay(0.08)) { appeared = true }
-            withAnimation(.easeInOut(duration: 3.2).repeatForever(autoreverses: true)) { glow = true }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
                 UIImpactFeedbackGenerator(style: .soft).impactOccurred()
             }

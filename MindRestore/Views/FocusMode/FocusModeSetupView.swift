@@ -40,6 +40,8 @@ struct FocusModeSetupView: View {
     @State private var scheduleDays: Set<Int> = [1, 2, 3, 4, 5, 6, 7] // 1=Sun, 7=Sat
     @State private var showingProPaywall = false
     @State private var showingAppPicker = false
+    /// Where Memo stands on step 1, so the hill's crest meets his feet.
+    @State private var climbCrestY: CGFloat?
 
     private let dayLabels = ["S", "M", "T", "W", "T", "F", "S"]
     private let dayIndices = [1, 2, 3, 4, 5, 6, 7] // Sunday=1 through Saturday=7
@@ -47,6 +49,9 @@ struct FocusModeSetupView: View {
     /// True when this view is being shown as part of OnboardingView — hides the inner page dots
     /// because the outer onboarding flow renders its own progress indicator.
     private var isEmbeddedInOnboarding: Bool { onComplete != nil }
+
+    /// iPhone SE and friends: smaller headline and Memo so the actions stay on screen.
+    private var isCompactHeight: Bool { UIScreen.main.bounds.height < 700 }
 
     private var currentSelectionExceedsFreeLimit: Bool {
         focusModeService.activitySelection.applicationTokens.count > 1 ||
@@ -64,7 +69,8 @@ struct FocusModeSetupView: View {
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            AppColors.pageBgDark.ignoresSafeArea()
+            // Memo's hill, the same world as Home.
+            OnboardingClimbBackdrop(sky: .twilight, crestY: climbCrestY)
 
             VStack(spacing: 0) {
                 TabView(selection: $currentStep) {
@@ -94,6 +100,8 @@ struct FocusModeSetupView: View {
                 }
             }
         }
+        .coordinateSpace(name: ClimbReporter.space)
+        .environment(\.climbReporter, ClimbReporter(crest: { y in if climbCrestY != y { climbCrestY = y } }))
         .preferredColorScheme(.dark)
         .environment(\.colorScheme, .dark)
     }
@@ -103,25 +111,13 @@ struct FocusModeSetupView: View {
     private var pickAppsStep: some View {
         let totalSelected = totalSelectedCount
 
-        return VStack(spacing: 20) {
-            Spacer().frame(height: 26)
+        return VStack(spacing: isCompactHeight ? 12 : 20) {
+            Spacer().frame(height: isCompactHeight ? 8 : 26)
 
             VStack(alignment: .leading, spacing: 8) {
-                Text("Pick what\nMemo bounces.")
-                    .font(.brand(size: 38, weight: .heavy))
-                    .multilineTextAlignment(.leading)
-                    .foregroundStyle(AppColors.textPrimary)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.72)
-                    // Without this the height-squeezed parent collapses the
-                    // headline to one line and drops "Memo bounces." entirely.
-                    .fixedSize(horizontal: false, vertical: true)
+                ClimbHeadline(text: "Pick what\nMemo bounces.", size: isCompactHeight ? 30 : 36, alignment: .leading)
 
-                Text("Put your worst apps behind the rope.")
-                    .font(.brand(size: 18, weight: .semibold))
-                    .foregroundStyle(AppColors.textSecondary)
-                    .lineSpacing(2)
-                    .fixedSize(horizontal: false, vertical: true)
+                ClimbBodyText(text: "Put your worst apps behind the rope.", size: 16, alignment: .leading)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 32)
@@ -167,29 +163,20 @@ struct FocusModeSetupView: View {
             showingAppPicker = true
         } label: {
             VStack(spacing: 12) {
-                ZStack(alignment: .bottomTrailing) {
-                    hitListSurface(totalSelected: totalSelected)
+                hitListSurface(totalSelected: totalSelected)
 
-                    Image("mascot-detective")
-                        .renderingMode(.original)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(height: 88)
-                        .shadow(color: AppColors.accent.opacity(0.22), radius: 16, y: 7)
-                        .offset(x: 4, y: 18)
-                        .accessibilityHidden(true)
-                }
-                .frame(maxWidth: .infinity, minHeight: 300)
+                // Memo stands guard on the hill below his list.
+                ClimbMemo(mood: .neutral, size: isCompactHeight ? 84 : 118)
+                    .padding(.top, isCompactHeight ? 0 : 6)
 
                 HStack(spacing: 8) {
-                    Image(systemName: "crown.fill")
-                        .font(.system(size: 11, weight: .heavy))
+                    StickerIcon(kind: .crown, size: 18)
                     Text(storeService.isProUser ? "Memo guards the whole feed" : "Starter access guards 1 app")
-                        .font(.brand(size: 12, weight: .bold))
+                        .font(.brand(size: 13, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.9))
                         .lineLimit(1)
                         .minimumScaleFactor(0.78)
                 }
-                .foregroundStyle(AppColors.amber)
                 .frame(maxWidth: .infinity, alignment: .center)
             }
             .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
@@ -204,13 +191,13 @@ struct FocusModeSetupView: View {
                 Text("MEMO'S HIT LIST")
                     .font(.system(size: 12, weight: .black, design: .monospaced))
                     .tracking(1.4)
-                    .foregroundStyle(AppColors.accent)
+                    .foregroundStyle(ClimbColor.mint)
 
                 Spacer()
 
                 Image(systemName: "chevron.right")
                     .font(.system(size: 18, weight: .black))
-                    .foregroundStyle(AppColors.accent.opacity(0.72))
+                    .foregroundStyle(ClimbColor.mint.opacity(0.8))
             }
 
             VStack(alignment: .leading, spacing: 5) {
@@ -246,19 +233,14 @@ struct FocusModeSetupView: View {
                         .transition(.scale(scale: 1.08).combined(with: .opacity))
                 }
             }
-            .frame(maxWidth: .infinity, minHeight: 134, alignment: .leading)
+            .frame(maxWidth: .infinity, minHeight: 96, alignment: .leading)
         }
         .padding(20)
-        .frame(maxWidth: .infinity, minHeight: 286, alignment: .topLeading)
-        .background {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(AppColors.cardSurface.opacity(0.72))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .stroke(AppColors.cardBorder.opacity(0.82), lineWidth: 1)
-                }
-                .shadow(color: AppColors.accent.opacity(0.08), radius: 24, y: 12)
-        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Color(red: 0.024, green: 0.118, blue: 0.149).opacity(0.88)))
+        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(ClimbColor.ink, lineWidth: 2.5))
+        .background(RoundedRectangle(cornerRadius: 25.5, style: .continuous).strokeBorder(.white.opacity(0.9), lineWidth: 2).padding(-2))
+        .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(ClimbColor.ink).offset(y: 5))
     }
 
     private func hitListEvidenceGrid(totalSelected: Int) -> some View {
@@ -333,7 +315,10 @@ struct FocusModeSetupView: View {
 
     private func setupBottomActions(totalSelected: Int) -> some View {
         VStack(spacing: 12) {
-            Button {
+            ChunkyButton(
+                title: totalSelected > 0 ? "Bounce these apps" : "Pick apps",
+                systemImage: totalSelected > 0 ? nil : "plus"
+            ) {
                 guard totalSelected > 0 else {
                     showingAppPicker = true
                     return
@@ -344,9 +329,6 @@ struct FocusModeSetupView: View {
                 } else {
                     currentStep = 2
                 }
-            } label: {
-                Text(totalSelected > 0 ? "Bounce these apps" : "Pick apps")
-                    .gradientButton()
             }
 
             if let onSkip {
@@ -354,8 +336,8 @@ struct FocusModeSetupView: View {
                     onSkip()
                 } label: {
                     Text("Set up later")
-                        .font(.system(size: 15, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.8))
                         .frame(minHeight: 28)
                 }
                 .buttonStyle(.plain)
@@ -911,13 +893,10 @@ struct FocusModeSetupView: View {
     // MARK: - Helpers
 
     private func continueButton(_ title: String = "Continue", disabled: Bool = false, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title)
-                .gradientButton()
-                .opacity(disabled ? 0.45 : 1.0)
-        }
-        .disabled(disabled)
-        .padding(.horizontal, 32)
+        ChunkyButton(title: title, systemImage: nil, action: action)
+            .opacity(disabled ? 0.55 : 1.0)
+            .disabled(disabled)
+            .padding(.horizontal, 32)
     }
 
     private func scheduleOptionRow(

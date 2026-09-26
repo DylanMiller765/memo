@@ -386,7 +386,13 @@ struct OnboardingView: View {
             // directly so light-mode iPhones don't bleed cream pageBg through
             // the chrome around the TabView. Quick Assessment keeps its
             // dynamic bg color (the assessment animates color shifts).
-            OB.bg.ignoresSafeArea()
+            // The concise flow walks up Memo's hill instead: each page marks
+            // where the crest goes with `.climbCrest()`.
+            if onboardingVariant == .concise {
+                OnboardingClimbBackdrop(sky: climbSky, crestY: climbCrestY)
+            } else {
+                OB.bg.ignoresSafeArea()
+            }
 
             // Page-specific atmosphere lifted out of individual pages so
             // blurs/glows extend behind the progress bar instead of clipping
@@ -411,6 +417,7 @@ struct OnboardingView: View {
                     .id(currentPage)
                     .transition(onboardingPageTransition)
                     .onChange(of: currentPage) { oldPage, newPage in
+                        climbSkyOverride = nil
                         trackOnboardingStepViewed(from: oldPage, to: newPage)
                         // Animate keyboard dismiss smoothly
                         UIView.animate(withDuration: 0.3, delay: 0, options: .curveEaseOut) {
@@ -473,6 +480,11 @@ struct OnboardingView: View {
             }
             #endif
         }
+        .coordinateSpace(name: ClimbReporter.space)
+        .environment(\.climbReporter, ClimbReporter(
+            crest: { y in if climbCrestY != y { climbCrestY = y } },
+            sky: { sky in if climbSkyOverride != sky { climbSkyOverride = sky } }
+        ))
         .preferredColorScheme(.dark)
         .environment(\.colorScheme, .dark)
         .onAppear {
@@ -529,6 +541,21 @@ struct OnboardingView: View {
     }
 
     @State private var lastDismissedCover: OnboardingCover?
+    /// A page can brighten the sky mid-page (the demo's Rank beat).
+    @State private var climbSkyOverride: ClimbSky?
+    /// Where the current page wants the hill's crest (points from the safe-area top).
+    @State private var climbCrestY: CGFloat?
+
+    /// How far up the hill each concise page sits: night → sunrise.
+    private var climbSky: ClimbSky {
+        if let climbSkyOverride { return climbSkyOverride }
+        switch OnboardingPage(rawValue: currentPage) {
+        case .welcome, .motivationBridge: return .night
+        case .goals: return .twilight
+        case .trialTrustBridge, .trialReminderBridge: return .sunrise
+        default: return .twilight
+        }
+    }
 
     private func handleCoverDismiss() {
         // Route based on which cover just closed.
@@ -952,7 +979,7 @@ struct OnboardingView: View {
                 HStack(spacing: 5) {
                     ForEach(routePages.indices, id: \.self) { index in
                         Capsule()
-                            .fill(index <= currentRouteIndex ? OB.accent : Color.white.opacity(0.14))
+                            .fill(index <= currentRouteIndex ? Color.white : Color.white.opacity(0.28))
                             .frame(width: index == currentRouteIndex ? 26 : 16, height: 5)
                     }
                 }
@@ -1652,6 +1679,7 @@ struct OnboardingView: View {
               let index = arguments.firstIndex(of: "--screenshot-target"),
               arguments.indices.contains(index + 1) else { return nil }
         switch arguments[index + 1] {
+        case "onboarding-game": return 1
         case "onboarding-game-reward": return 2
         case "onboarding-rank": return 3
         default: return nil
@@ -1868,6 +1896,7 @@ struct OnboardingView: View {
     private var trialTrustBridgePage: some View {
         OnboardingTrialOfferView(
             hasTrial: storeService.annualFreeTrialLabel != nil,
+            trialLabel: storeService.annualFreeTrialLabel,
             isLoadingOffer: storeService.isLoading ||
                 (storeService.products.isEmpty && storeService.purchaseError == nil),
             loadFailed: !storeService.isLoading &&

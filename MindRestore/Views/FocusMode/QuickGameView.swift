@@ -144,6 +144,9 @@ struct DeblockConfirmSheet: View {
 
 struct FocusUnlockSlotMachine: View {
     var mode: FocusUnlockSlotMode = .live
+    /// Onboarding's hill: the dealer is a real cut-out (no blend over a dark
+    /// backdrop) and SPIN is the chunky amber button.
+    var onHill = false
     /// A spin taken in the last 30 minutes: show it centered, never re-roll.
     var pending: UnlockGame? = nil
     var reelHeight: CGFloat = 300
@@ -252,7 +255,11 @@ struct FocusUnlockSlotMachine: View {
     @ViewBuilder private var dealer: some View {
         // The mp4 has a black background — .lighten keys it out over the dark
         // backdrop, and the machine's top edge hides the bottom strip.
-        if Bundle.main.url(forResource: "mascot-dealer", withExtension: "mp4") != nil {
+        if onHill, Bundle.main.url(forResource: "mascot-dealer-alpha", withExtension: "mov") != nil {
+            // HEVC with alpha, keyed from mascot-dealer.mp4, so the sky shows through cleanly.
+            OnboardingLoopingVideo(videoName: "mascot-dealer-alpha", videoExt: "mov")
+                .frame(width: dealerSize, height: dealerSize)
+        } else if Bundle.main.url(forResource: "mascot-dealer", withExtension: "mp4") != nil {
             OnboardingLoopingVideo(videoName: "mascot-dealer", videoExt: "mp4")
                 .blendMode(.lighten)
                 .frame(width: dealerSize, height: dealerSize)
@@ -362,7 +369,19 @@ struct FocusUnlockSlotMachine: View {
 
     // MARK: Button
 
+    @ViewBuilder
     private var spinButton: some View {
+        if onHill {
+            ChunkyButton(title: buttonTitle, systemImage: nil, style: .amber, action: buttonTapped)
+                .disabled(phase == .spinning)
+                .opacity(phase == .spinning ? 0.6 : 1)
+                .accessibilityLabel(landed == nil ? "Spin" : "Play")
+        } else {
+            classicSpinButton
+        }
+    }
+
+    private var classicSpinButton: some View {
         Button(action: buttonTapped) {
             Text(buttonTitle)
                 .tracking(1.2)

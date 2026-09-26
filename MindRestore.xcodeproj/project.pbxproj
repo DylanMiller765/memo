@@ -103,6 +103,7 @@
 		MEMB0001000000000000MV01 /* memo-building.mov in Resources */ = {isa = PBXBuildFile; fileRef = MEMB0002000000000000MV01 /* memo-building.mov */; };
 		MEMP0001000000000000MV01 /* memo-presenting.mov in Resources */ = {isa = PBXBuildFile; fileRef = MEMP0002000000000000MV01 /* memo-presenting.mov */; };
 		MEMD0001000000000000MP01 /* mascot-dealer.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = MEMD0002000000000000MP01 /* mascot-dealer.mp4 */; };
+		MEMD0001000000000000MA01 /* mascot-dealer-alpha.mov in Resources */ = {isa = PBXBuildFile; fileRef = MEMD0002000000000000MA01 /* mascot-dealer-alpha.mov */; };
 		ONBD0001000000000000MP01 /* onboarding_demo.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = ONBD0002000000000000MP01 /* onboarding_demo.mp4 */; };
 		PROF0001000000000000PF01 /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = PROF0002000000000000PF01 /* ProfileView.swift */; };
 		QGVW0001000000000000QG01 /* QuickGameView.swift in Sources */ = {isa = PBXBuildFile; fileRef = QGVW0002000000000000QG01 /* QuickGameView.swift */; };
@@ -161,6 +162,8 @@
 		D0B900A5EF06583F9890A400 /* InsightsWeekView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46282479EBB34295EE3F672E /* InsightsWeekView.swift */; };
 		6613BC32B97108EBBDECDFFF /* TrainUpNextTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F7754704398E8954D7B39F3 /* TrainUpNextTests.swift */; };
 		1FB7D88B33803824376CA53A /* TrainUpNext.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59798F2DEF0DEFA761CD6140 /* TrainUpNext.swift */; };
+		9043BAFAB71621DD45E7DBCE /* OnboardingClimb.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E6D6FCFA616824C10BBE030 /* OnboardingClimb.swift */; };
+		AAAECFEFF4CF9E529EE25AF1 /* OnboardingRivalsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EF51150B70EA17D7A68F138 /* OnboardingRivalsTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -333,6 +336,7 @@
 		MEMB0002000000000000MV01 /* memo-building.mov */ = {isa = PBXFileReference; lastKnownFileType = file; name = "memo-building.mov"; path = "Resources/memo-building.mov"; sourceTree = "<group>"; };
 		MEMP0002000000000000MV01 /* memo-presenting.mov */ = {isa = PBXFileReference; lastKnownFileType = file; name = "memo-presenting.mov"; path = "Resources/memo-presenting.mov"; sourceTree = "<group>"; };
 		MEMD0002000000000000MP01 /* mascot-dealer.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; name = "mascot-dealer.mp4"; path = "Resources/mascot-dealer.mp4"; sourceTree = "<group>"; };
+		MEMD0002000000000000MA01 /* mascot-dealer-alpha.mov */ = {isa = PBXFileReference; lastKnownFileType = file; name = "mascot-dealer-alpha.mov"; path = "Resources/mascot-dealer-alpha.mov"; sourceTree = "<group>"; };
 		ONBD0002000000000000MP01 /* onboarding_demo.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; name = "onboarding_demo.mp4"; path = "Resources/onboarding_demo.mp4"; sourceTree = "<group>"; };
 		PROF0002000000000000PF01 /* ProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
 		QGVW0002000000000000QG01 /* QuickGameView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickGameView.swift; sourceTree = "<group>"; };
@@ -392,6 +396,8 @@
 		46282479EBB34295EE3F672E /* InsightsWeekView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InsightsWeekView.swift; sourceTree = "<group>"; };
 		8F7754704398E8954D7B39F3 /* TrainUpNextTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainUpNextTests.swift; sourceTree = "<group>"; };
 		59798F2DEF0DEFA761CD6140 /* TrainUpNext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainUpNext.swift; sourceTree = "<group>"; };
+		4E6D6FCFA616824C10BBE030 /* OnboardingClimb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingClimb.swift; sourceTree = "<group>"; };
+		8EF51150B70EA17D7A68F138 /* OnboardingRivalsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingRivalsTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -532,6 +538,7 @@
 				MEMB0002000000000000MV01 /* memo-building.mov */,
 				MEMP0002000000000000MV01 /* memo-presenting.mov */,
 				MEMD0002000000000000MP01 /* mascot-dealer.mp4 */,
+				MEMD0002000000000000MA01 /* mascot-dealer-alpha.mov */,
 				ONBD0002000000000000MP01 /* onboarding_demo.mp4 */,
 					D300030000000000D3000001 /* iphone17pro.png */,
 					0C755FB45F2C7F2138DB6779 /* Assets.xcassets */,
@@ -800,6 +807,7 @@
 		DAC9DD5A3195858D3E23B420 /* Onboarding */ = {
 			isa = PBXGroup;
 			children = (
+				4E6D6FCFA616824C10BBE030 /* OnboardingClimb.swift */,
 				71A70D542F9C30C7009C563D /* FocusOnboardingPages.swift */,
 				BB000002000000000000BB04 /* OnboardingPaywallView.swift */,
 				ONNS0002000000000000ON01 /* OnboardingNewScreens.swift */,
@@ -865,6 +873,7 @@
 		TEST0003000000000000TS01 /* MindRestoreTests */ = {
 			isa = PBXGroup;
 			children = (
+				8EF51150B70EA17D7A68F138 /* OnboardingRivalsTests.swift */,
 				8F7754704398E8954D7B39F3 /* TrainUpNextTests.swift */,
 				2B5A458148C1F5A2A0F7D387 /* InsightsWeekSummaryTests.swift */,
 				463B9BC2B1ED4305ACC63AE2 /* LeagueRivalsTests.swift */,
@@ -1187,6 +1196,7 @@
 					MEMB0001000000000000MV01 /* memo-building.mov in Resources */,
 					MEMP0001000000000000MV01 /* memo-presenting.mov in Resources */,
 					MEMD0001000000000000MP01 /* mascot-dealer.mp4 in Resources */,
+					MEMD0001000000000000MA01 /* mascot-dealer-alpha.mov in Resources */,
 					ONBD0001000000000000MP01 /* onboarding_demo.mp4 in Resources */,
 					D300040000000000D3000001 /* iphone17pro.png in Resources */,
 					098E2511FF7DBAEEE39E8706 /* Assets.xcassets in Resources */,
@@ -1214,6 +1224,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				9043BAFAB71621DD45E7DBCE /* OnboardingClimb.swift in Sources */,
 				1FB7D88B33803824376CA53A /* TrainUpNext.swift in Sources */,
 				D0B900A5EF06583F9890A400 /* InsightsWeekView.swift in Sources */,
 				53FCCDB842BA08B9EE1728AB /* InsightsModels.swift in Sources */,
@@ -1360,6 +1371,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AAAECFEFF4CF9E529EE25AF1 /* OnboardingRivalsTests.swift in Sources */,
 				6613BC32B97108EBBDECDFFF /* TrainUpNextTests.swift in Sources */,
 				2BF34BA8A2FCE23B06851D0A /* InsightsWeekSummaryTests.swift in Sources */,
 				1DF7970D40803B0B546EF24E /* LeagueRivalsTests.swift in Sources */,

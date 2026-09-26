@@ -285,7 +285,7 @@ struct ContentView: View {
             .ignoresSafeArea()
         }
         .fullScreenCover(isPresented: $showingScreenshotFocusSetup) {
-            FocusModeSetupView(initialStep: 1) {
+            FocusModeSetupView(initialStep: screenshotFocusSetupStep) {
                 showingScreenshotFocusSetup = false
             } onSkip: {
                 showingScreenshotFocusSetup = false
@@ -435,6 +435,14 @@ struct ContentView: View {
         default:
             return nil
         }
+    }
+
+    /// `--focus-setup-step N` opens the Focus setup screenshot at step N (1–3).
+    private var screenshotFocusSetupStep: Int {
+        let args = ProcessInfo.processInfo.arguments
+        guard let i = args.firstIndex(of: "--focus-setup-step"), args.indices.contains(i + 1),
+              let step = Int(args[i + 1]), (1...3).contains(step) else { return 1 }
+        return step
     }
 
     @MainActor

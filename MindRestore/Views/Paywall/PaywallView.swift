@@ -229,38 +229,32 @@ private struct PaywallUnlockHero: View {
         let scale: CGFloat = compact ? 0.74 : 1
         let tile: CGFloat = 62 * scale
         ZStack(alignment: .bottom) {
-            Circle()
-                .fill(OB.accent.opacity(0.28))
-                .frame(width: 220 * scale, height: 220 * scale)
-                .blur(radius: 60)
-                .offset(y: -30 * scale)
-
             ForEach(apps.indices, id: \.self) { index in
                 let app = apps[index]
-                ZStack(alignment: .bottomTrailing) {
-                    OnboardingAppIcon(asset: app.asset, size: tile)
-
-                    Image(systemName: "lock.fill")
-                        .font(.system(size: tile * 0.17, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: tile * 0.38, height: tile * 0.38)
-                        .background(Circle().fill(OB.coral))
-                        .overlay(Circle().stroke(PW.bg, lineWidth: 3))
-                        .offset(x: tile * 0.12, y: tile * 0.12)
-                }
-                .rotationEffect(.degrees(app.angle))
-                .offset(x: app.x * scale, y: app.y * scale - (appeared ? 0 : 12))
-                .opacity(appeared ? 1 : 0)
-                .shadow(color: .black.opacity(0.45), radius: 12, y: 8)
+                OnboardingAppIcon(asset: app.asset, size: tile)
+                    .stickerOutline(2.5)
+                    .overlay(alignment: .bottomTrailing) {
+                        StickerIcon(kind: .padlock, size: tile * 0.28)
+                            .frame(width: tile * 0.4, height: tile * 0.4)
+                            .background(Circle().fill(.white))
+                            .overlay(Circle().strokeBorder(ClimbColor.ink, lineWidth: 2.5))
+                            .offset(x: tile * 0.14, y: tile * 0.14)
+                    }
+                    .rotationEffect(.degrees(app.angle))
+                    .offset(x: app.x * scale, y: app.y * scale - (appeared ? 0 : 12))
+                    .opacity(appeared ? 1 : 0)
+                    .shadow(color: .black.opacity(0.35), radius: 12, y: 8)
             }
 
             // Feet on the headline: nudged below the hero's frame so Memo
             // stands on the title instead of covering the TikTok icon.
-            RiveMascotView(mood: .happy, size: 112 * scale, playbackPolicy: .continuous)
+            RiveMascotView(mood: .neutral, size: 112 * scale, playbackPolicy: .continuous)
                 .offset(y: 26 * scale)
                 .accessibilityHidden(true)
         }
         .frame(height: 162 * scale, alignment: .bottom)
+        // Memo stands on the hill's crest.
+        .climbCrest(below: 21 * scale)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Instagram, TikTok and YouTube, locked by Memo")
         .onAppear(perform: play)
@@ -304,8 +298,10 @@ private struct PaywallFeatureTile: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, compact ? 10 : 14)
         .padding(.horizontal, 6)
-        .background(Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color.white.opacity(0.08), lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color(red: 0.024, green: 0.118, blue: 0.149).opacity(0.86)))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(ClimbColor.ink, lineWidth: 2.5))
+        .background(RoundedRectangle(cornerRadius: 19.5, style: .continuous).strokeBorder(.white.opacity(0.85), lineWidth: 2).padding(-2))
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(ClimbColor.ink).offset(y: 4))
         .accessibilityElement(children: .combine)
     }
 
@@ -344,9 +340,11 @@ private struct PaywallFeatureTile: View {
                 .background(RoundedRectangle(cornerRadius: 10 * unit, style: .continuous).fill(OB.surface))
             }
         case .rank:
-            Image("mascot-podium")
-                .resizable()
-                .scaledToFit()
+            ZStack {
+                StickerIcon(kind: .trophy, size: 40 * unit)
+                MedalSticker(rank: 1, size: 20 * unit)
+                    .offset(x: 16 * unit, y: 14 * unit)
+            }
         }
     }
 
@@ -372,6 +370,7 @@ private struct PaywallSaveTab: View {
                     LinearGradient(colors: [OB.amber, Color(red: 1.0, green: 0.62, blue: 0.2)], startPoint: .top, endPoint: .bottom)
                 )
             )
+            .overlay(Capsule().strokeBorder(ClimbColor.ink, lineWidth: 2))
             .shadow(color: OB.amber.opacity(0.55), radius: 10, y: 3)
             .rotationEffect(.degrees(-3))
             .scaleEffect(popped ? 1 : 0.4)
@@ -406,6 +405,8 @@ struct PaywallView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var selectedPlan: PaywallPlan = .annual
+    /// Onboarding paywall: where Memo stands, so the hill's crest meets his feet.
+    @State private var climbCrestY: CGFloat?
     @State private var showCodeRedemption = false
     /// Set when the offer-code sheet opens; cleared once a redemption lands.
     @State private var awaitingOfferCode = false
@@ -560,7 +561,8 @@ struct PaywallView: View {
     private var atmosphere: some View {
         ZStack {
             if triggerSource == "onboarding_concise" {
-                PW.bg.ignoresSafeArea()
+                // The top of the climb: sunrise on Memo's hill.
+                OnboardingClimbBackdrop(sky: .sunrise, crestY: climbCrestY)
             } else {
                 Image("paywall-twilight-hill-bg")
                     .renderingMode(.original)
@@ -689,15 +691,9 @@ struct PaywallView: View {
                             .padding(.top, compact ? 0 : 8)
                             .zIndex(1)
 
-                        Text(conciseHeadline)
-                            .font(.brand(size: compact ? 26 : 33, weight: .heavy))
-                            .tracking(-0.5)
-                            .foregroundStyle(.white)
-                            .multilineTextAlignment(.center)
-                            .fixedSize(horizontal: false, vertical: true)
+                        ClimbHeadline(text: conciseHeadline, size: compact ? 26 : 32)
                             .frame(maxWidth: .infinity)
-                            .padding(.top, compact ? 6 : 12)
-                            .accessibilityAddTraits(.isHeader)
+                            .padding(.top, compact ? 10 : 18)
                             .animation(nil, value: selectedPlan)
 
                         // Short phones keep the hero and plans on one screen; the
@@ -753,17 +749,12 @@ struct PaywallView: View {
                     .multilineTextAlignment(.center)
                     .contentTransition(.opacity)
 
-                Button {
+                ChunkyButton(
+                    title: storeService.isLoading && !storeService.products.isEmpty ? "Opening App Store…" : conciseCTATitle,
+                    systemImage: nil
+                ) {
                     Task { await purchaseSelectedPlan() }
-                } label: {
-                    Text(storeService.isLoading && !storeService.products.isEmpty ? "Opening App Store…" : conciseCTATitle)
-                        .font(.system(size: 17, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity, minHeight: compact ? 52 : 56)
-                        .background(OB.accent, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
-                .buttonStyle(.plain)
                 .disabled(storeService.isLoading || !conciseSelectedProductAvailable)
                 .opacity(storeService.isLoading || !conciseSelectedProductAvailable ? 0.5 : 1)
 
@@ -810,13 +801,20 @@ struct PaywallView: View {
             .frame(maxWidth: 500)
             .frame(maxWidth: .infinity)
             .background(
-                PW.bg
-                    .shadow(color: .black.opacity(0.5), radius: 12, y: -6)
-                    .ignoresSafeArea(edges: .bottom)
+                // The grass darkens under the purchase controls instead of a hard panel.
+                LinearGradient(
+                    colors: [Color(red: 0, green: 0.133, blue: 0.165).opacity(0), Color(red: 0, green: 0.133, blue: 0.165).opacity(0.92), Color(red: 0, green: 0.133, blue: 0.165)],
+                    startPoint: .top,
+                    endPoint: UnitPoint(x: 0.5, y: 0.35)
+                )
+                .padding(.top, -24)
+                .ignoresSafeArea(edges: .bottom)
             )
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .animation(.easeInOut(duration: 0.2), value: selectedPlan)
+        .coordinateSpace(name: ClimbReporter.space)
+        .environment(\.climbReporter, ClimbReporter(crest: { y in if climbCrestY != y { climbCrestY = y } }))
     }
 
     private func annualPlanCard(compact: Bool) -> some View {
@@ -862,9 +860,13 @@ struct PaywallView: View {
             HStack(spacing: 14) {
                 ZStack {
                     Circle()
-                        .stroke(selected ? OB.accent : Color.white.opacity(0.3), lineWidth: 2)
+                        .fill(selected ? ClimbColor.mint : .clear)
+                    Circle()
+                        .strokeBorder(selected ? ClimbColor.ink : Color.white.opacity(0.4), lineWidth: 2)
                     if selected {
-                        Circle().fill(OB.accent).padding(5)
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 11, weight: .heavy))
+                            .foregroundStyle(ClimbColor.ink)
                             .transition(.scale)
                     }
                 }
@@ -872,21 +874,21 @@ struct PaywallView: View {
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title)
-                        .font(.system(size: 18, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white)
+                        .font(.system(size: 18, weight: .heavy, design: .rounded))
+                        .foregroundStyle(selected ? ClimbColor.ink : .white)
                     if let highlight {
                         Text(highlight)
                             .font(.system(size: 13, weight: .heavy, design: .rounded))
-                            .foregroundStyle(OB.success)
+                            .foregroundStyle(selected ? Color(red: 0.05, green: 0.52, blue: 0.4) : ClimbColor.mint)
                     }
                     HStack(spacing: 5) {
                         if let strikePrice {
                             Text(strikePrice)
                                 .strikethrough(true, color: OB.coral)
-                                .foregroundStyle(PW.fgMuted.opacity(0.8))
+                                .foregroundStyle(selected ? ClimbColor.ink.opacity(0.5) : PW.fgMuted.opacity(0.8))
                         }
                         Text(subtitle)
-                            .foregroundStyle(PW.fgMuted)
+                            .foregroundStyle(selected ? ClimbColor.ink.opacity(0.65) : PW.fgMuted)
                     }
                     .font(.system(size: 12, weight: .medium, design: .rounded))
                     .lineLimit(1)
@@ -899,7 +901,7 @@ struct PaywallView: View {
                     if let bigPrice {
                         Text(bigPrice)
                             .font(.system(size: compact ? 22 : 24, weight: .heavy, design: .rounded))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(selected ? ClimbColor.ink : .white)
                             .monospacedDigit()
                     } else {
                         RoundedRectangle(cornerRadius: 6)
@@ -909,7 +911,7 @@ struct PaywallView: View {
                     }
                     Text("per week")
                         .font(.system(size: 11, weight: .semibold, design: .rounded))
-                        .foregroundStyle(PW.fgMuted)
+                        .foregroundStyle(selected ? ClimbColor.ink.opacity(0.6) : PW.fgMuted)
                 }
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
@@ -920,19 +922,25 @@ struct PaywallView: View {
             .frame(maxWidth: .infinity, minHeight: compact ? 66 : 78)
             .background(
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(selected ? OB.accent.opacity(0.16) : Color.white.opacity(0.05))
+                    .fill(selected ? Color.white : Color(red: 0.024, green: 0.118, blue: 0.149).opacity(0.86))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .stroke(selected ? OB.accent : Color.white.opacity(0.12), lineWidth: selected ? 2 : 1)
+                    .strokeBorder(ClimbColor.ink, lineWidth: 2.5)
             )
+            .background(
+                RoundedRectangle(cornerRadius: 21.5, style: .continuous)
+                    .strokeBorder(selected ? ClimbColor.mint : Color.white.opacity(0.35), lineWidth: selected ? 3 : 2)
+                    .padding(selected ? -3 : -2)
+            )
+            .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(ClimbColor.ink).offset(y: 5))
             .overlay(alignment: .topLeading) {
                 if let badge {
                     PaywallSaveTab(text: badge)
                         .offset(x: 16, y: -13)
                 }
             }
-            .shadow(color: selected ? OB.accent.opacity(0.25) : .clear, radius: 16, y: 8)
+            .shadow(color: selected ? ClimbColor.mint.opacity(0.35) : .clear, radius: 16, y: 6)
             .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         }
         .buttonStyle(.plain)
@@ -2273,6 +2281,8 @@ struct PaywallView: View {
 @MainActor
 struct MemoCutePaywallPreviewView: View {
     @State private var selectedPlan: PaywallPlan = .annual
+    /// Onboarding paywall: where Memo stands, so the hill's crest meets his feet.
+    @State private var climbCrestY: CGFloat?
     private let screenTimeReceiptValue = "4h 43m"
 
     var body: some View {

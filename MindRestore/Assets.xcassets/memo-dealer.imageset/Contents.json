@@ -1,0 +1,12 @@
+{
+  "images" : [
+    {
+      "filename" : "memo-dealer.png",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}
