@@ -143,18 +143,7 @@ struct ProfileView: View {
 
     private var identity: some View {
         VStack(spacing: 6) {
-            HStack(spacing: 8) {
-                OutlinedText(text: displayName, size: 32, outline: 2.5)
-                if isProUser {
-                    Text("PRO")
-                        .font(.brand(size: 11, weight: .heavy))
-                        .foregroundStyle(Self.ink)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 2)
-                        .background(Self.mint, in: Capsule())
-                        .overlay(Capsule().strokeBorder(Self.ink, lineWidth: 1.5))
-                }
-            }
+            OutlinedText(text: displayName, size: 32, outline: 2.5)
             if let user {
                 Text("Joined \(user.createdAt.formatted(.dateTime.month(.abbreviated).day().year()))")
                     .font(.brand(size: 13, weight: .bold))
