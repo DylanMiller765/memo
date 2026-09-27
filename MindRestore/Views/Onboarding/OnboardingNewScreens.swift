@@ -2297,6 +2297,127 @@ struct OnboardingMotivationBridgePage: View {
     }
 }
 
+/// "Where did you find Memo?" One tap answers and moves on; Skip passes nil.
+struct OnboardingAttributionPage: View {
+    let onAnswer: (AcquisitionSource?) -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var appeared = false
+    @State private var picked: AcquisitionSource?
+    @State private var answered = false
+
+    var body: some View {
+        GeometryReader { proxy in
+            let compact = proxy.size.height < OBLayout.compactHeight
+            VStack(spacing: 0) {
+                Spacer(minLength: 0)
+
+                ClimbMemo(mood: .neutral, size: compact ? 88 : 112)
+
+                ClimbHeadline(text: "Where did you find Memo?", size: compact ? 26 : 30)
+                    .padding(.top, compact ? 12 : 18)
+
+                LazyVGrid(
+                    columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)],
+                    spacing: compact ? 12 : 14
+                ) {
+                    ForEach(AcquisitionSource.allCases) { source in
+                        tile(source, compact: compact)
+                    }
+                }
+                .padding(.top, compact ? 18 : 26)
+                .opacity(appeared ? 1 : 0)
+                .offset(y: appeared ? 0 : 10)
+
+                Button("Skip") { answer(nil) }
+                    .font(.system(size: 15, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.7))
+                    .frame(minWidth: 88, minHeight: 44)
+                    .padding(.top, compact ? 8 : 14)
+                    .disabled(answered)
+
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, OBLayout.gutter)
+            .frame(maxWidth: OBLayout.contentMaxWidth + OBLayout.gutter * 2)
+            .frame(maxWidth: .infinity)
+        }
+        .preferredColorScheme(.dark)
+        .onAppear {
+            withAnimation(reduceMotion ? nil : .spring(response: 0.65, dampingFraction: 0.82).delay(0.1)) {
+                appeared = true
+            }
+        }
+    }
+
+    private func tile(_ source: AcquisitionSource, compact: Bool) -> some View {
+        let selected = picked == source
+        let iconSize: CGFloat = compact ? 30 : 34
+        return Button { answer(source) } label: {
+            HStack(spacing: 10) {
+                icon(source, size: iconSize)
+                Text(source.title)
+                    .font(.system(size: compact ? 14 : 15, weight: .bold, design: .rounded))
+                    .foregroundStyle(selected ? ClimbColor.ink : .white)
+                    .multilineTextAlignment(.leading)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.85)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity, minHeight: compact ? 54 : 60)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(selected ? Color.white : Color(red: 0.024, green: 0.118, blue: 0.149).opacity(0.86))
+            )
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(ClimbColor.ink, lineWidth: 2.5))
+            .background(
+                RoundedRectangle(cornerRadius: 19.5, style: .continuous)
+                    .strokeBorder(selected ? ClimbColor.mint : .white.opacity(0.85), lineWidth: selected ? 3 : 2)
+                    .padding(-2)
+            )
+            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(ClimbColor.ink).offset(y: 4))
+            .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .disabled(answered)
+        .accessibilityAddTraits(selected ? [.isSelected] : [])
+    }
+
+    @ViewBuilder
+    private func icon(_ source: AcquisitionSource, size: CGFloat) -> some View {
+        switch source {
+        case .tiktok: OnboardingAppIcon(asset: "logo-tiktok", size: size)
+        case .instagram: OnboardingAppIcon(asset: "logo-instagram", size: size)
+        case .youtube: OnboardingAppIcon(asset: "logo-youtube", size: size)
+        case .appStoreSearch: symbolIcon("magnifyingglass", size: size)
+        case .friend: symbolIcon("person.2.fill", size: size)
+        case .other: symbolIcon("ellipsis", size: size)
+        }
+    }
+
+    private func symbolIcon(_ name: String, size: CGFloat) -> some View {
+        Image(systemName: name)
+            .font(.system(size: size * 0.45, weight: .heavy))
+            .foregroundStyle(ClimbColor.ink)
+            .frame(width: size, height: size)
+            .background(RoundedRectangle(cornerRadius: size * 0.23, style: .continuous).fill(ClimbColor.amber))
+    }
+
+    private func answer(_ source: AcquisitionSource?) {
+        guard !answered else { return }
+        answered = true
+        HapticService.tap()
+        withAnimation(.easeOut(duration: 0.15)) { picked = source }
+        Task { @MainActor in
+            // Let the selected tile register before the page moves on.
+            if source != nil { try? await Task.sleep(for: .milliseconds(220)) }
+            onAnswer(source)
+        }
+    }
+}
+
 /// Three familiar feeds as padlocked stickers — what Memo actually does.
 struct OnboardingLockedAppFan: View {
     let compact: Bool

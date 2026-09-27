@@ -393,6 +393,8 @@ struct ContentView: View {
         switch target {
         case "onboarding-welcome":
             return OnboardingPage.welcome.rawValue
+        case "onboarding-attribution":
+            return OnboardingPage.attribution.rawValue
         case "onboarding-attention", "onboarding-attention-result", "onboarding-bridge":
             return OnboardingPage.motivationBridge.rawValue
         case "onboarding-slot", "onboarding-game", "onboarding-game-reward", "onboarding-rank":

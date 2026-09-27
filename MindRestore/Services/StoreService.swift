@@ -219,6 +219,12 @@ final class StoreService {
         }
     }
 
+    /// Subscriber attribute so RevenueCat revenue can be split by where people found Memo.
+    static func setAcquisitionSource(_ source: AcquisitionSource) {
+        RevenueCatBootstrap.configureIfNeeded()
+        Purchases.shared.attribution.setAttributes(["acquisition_source": source.rawValue])
+    }
+
     @discardableResult
     func restorePurchases() async -> Bool {
         await startIfNeeded()

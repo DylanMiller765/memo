@@ -164,6 +164,7 @@
 		1FB7D88B33803824376CA53A /* TrainUpNext.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59798F2DEF0DEFA761CD6140 /* TrainUpNext.swift */; };
 		9043BAFAB71621DD45E7DBCE /* OnboardingClimb.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E6D6FCFA616824C10BBE030 /* OnboardingClimb.swift */; };
 		AAAECFEFF4CF9E529EE25AF1 /* OnboardingRivalsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EF51150B70EA17D7A68F138 /* OnboardingRivalsTests.swift */; };
+		ACQS0000000000000000A001 /* AcquisitionSourceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACQS0000000000000000F001 /* AcquisitionSourceTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -398,6 +399,7 @@
 		59798F2DEF0DEFA761CD6140 /* TrainUpNext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainUpNext.swift; sourceTree = "<group>"; };
 		4E6D6FCFA616824C10BBE030 /* OnboardingClimb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingClimb.swift; sourceTree = "<group>"; };
 		8EF51150B70EA17D7A68F138 /* OnboardingRivalsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingRivalsTests.swift; sourceTree = "<group>"; };
+		ACQS0000000000000000F001 /* AcquisitionSourceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcquisitionSourceTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -874,6 +876,7 @@
 			isa = PBXGroup;
 			children = (
 				8EF51150B70EA17D7A68F138 /* OnboardingRivalsTests.swift */,
+				ACQS0000000000000000F001 /* AcquisitionSourceTests.swift */,
 				8F7754704398E8954D7B39F3 /* TrainUpNextTests.swift */,
 				2B5A458148C1F5A2A0F7D387 /* InsightsWeekSummaryTests.swift */,
 				463B9BC2B1ED4305ACC63AE2 /* LeagueRivalsTests.swift */,
@@ -1372,6 +1375,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AAAECFEFF4CF9E529EE25AF1 /* OnboardingRivalsTests.swift in Sources */,
+				ACQS0000000000000000A001 /* AcquisitionSourceTests.swift in Sources */,
 				6613BC32B97108EBBDECDFFF /* TrainUpNextTests.swift in Sources */,
 				2BF34BA8A2FCE23B06851D0A /* InsightsWeekSummaryTests.swift in Sources */,
 				1DF7970D40803B0B546EF24E /* LeagueRivalsTests.swift in Sources */,

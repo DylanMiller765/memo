@@ -45,6 +45,7 @@ enum OnboardingPage: Int, Equatable {
     case unlockLoopDemo = 17
     case attentionTime = 18
     case motivationBridge = 19
+    case attribution = 20
 }
 
 private enum MemoOnboardingVariant: String, CaseIterable {
@@ -65,7 +66,7 @@ private enum MemoOnboardingVariant: String, CaseIterable {
 }
 
 struct OnboardingFlowOrder {
-    static let pageCount = 20
+    static let pageCount = 21
     static let monetizationPages: [OnboardingPage] = [
         .trialTrustBridge,
         .planPersonalizing
@@ -267,7 +268,7 @@ struct OnboardingView: View {
             ]
         case .concise:
             return [
-                .welcome, .motivationBridge, .goals,
+                .welcome, .attribution, .motivationBridge, .goals,
                 .trialTrustBridge, .trialReminderBridge
             ]
         }
@@ -550,7 +551,7 @@ struct OnboardingView: View {
     private var climbSky: ClimbSky {
         if let climbSkyOverride { return climbSkyOverride }
         switch OnboardingPage(rawValue: currentPage) {
-        case .welcome, .motivationBridge: return .night
+        case .welcome, .attribution, .motivationBridge: return .night
         case .goals: return .twilight
         case .trialTrustBridge, .trialReminderBridge: return .sunrise
         default: return .twilight
@@ -758,6 +759,7 @@ struct OnboardingView: View {
         guard onboardingVariant == .concise else { return Analytics.onboardingStepName(for: page) }
         switch OnboardingPage(rawValue: page) {
         case .welcome: return "story_block"
+        case .attribution: return "attribution"
         case .motivationBridge: return "story_bridge"
         case .goals: return "story_playable_loop"
         case .trialTrustBridge: return "trial_offer"
@@ -817,6 +819,7 @@ struct OnboardingView: View {
         case 17: unlockLoopDemoPage
         case 18: attentionTimePage
         case 19: motivationBridgePage
+        case 20: attributionPage
         default: EmptyView()
         }
     }
@@ -1711,6 +1714,17 @@ struct OnboardingView: View {
                 properties["estimated_distracting_app_days_annual"] = Int((hours * 365 / 24).rounded())
             }
             trackOnboardingStepCompleted("story_attention_time", extraProperties: properties)
+            goToNextRoute()
+        }
+    }
+
+    private var attributionPage: some View {
+        OnboardingAttributionPage { source in
+            Analytics.onboardingAttributionSelected(source: source)
+            if let source { StoreService.setAcquisitionSource(source) }
+            trackOnboardingStepCompleted("attribution", extraProperties: [
+                "source": source?.rawValue ?? "skipped"
+            ])
             goToNextRoute()
         }
     }

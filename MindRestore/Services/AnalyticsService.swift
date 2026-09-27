@@ -256,6 +256,20 @@ enum Analytics {
         PostHogSDK.shared.capture("onboarding.step_viewed", properties: properties)
     }
 
+    static func attributionSelectedProperties(source: AcquisitionSource?) -> [String: Any] {
+        ["source": source?.rawValue ?? "skipped"]
+    }
+
+    /// "Where did you find Memo?" A skip is logged but never stored on the person.
+    static func onboardingAttributionSelected(source: AcquisitionSource?) {
+        PostHogSDK.shared.capture(
+            "onboarding.attribution_selected",
+            properties: attributionSelectedProperties(source: source)
+        )
+        guard let source else { return }
+        PostHogSDK.shared.capture("$set", userProperties: ["acquisition_source": source.rawValue])
+    }
+
     static func onboardingDroppedOff(
         lastStep: String,
         totalSteps: Int,
@@ -780,5 +794,29 @@ enum Analytics {
 
     static func focusCooldownInitiated() {
         PostHogSDK.shared.capture("focus_cooldown_initiated")
+    }
+}
+
+/// Answers to onboarding's "Where did you find Memo?" in the order they're shown.
+/// Raw values are what PostHog and RevenueCat store, so keep them stable.
+enum AcquisitionSource: String, CaseIterable, Identifiable {
+    case tiktok
+    case instagram
+    case youtube
+    case appStoreSearch = "app_store_search"
+    case friend
+    case other
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .tiktok: return "TikTok"
+        case .instagram: return "Instagram"
+        case .youtube: return "YouTube"
+        case .appStoreSearch: return "App Store search"
+        case .friend: return "A friend"
+        case .other: return "Other"
+        }
     }
 }
