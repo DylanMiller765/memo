@@ -79,7 +79,7 @@ enum FocusUnlockSlotCopy {
 
 enum FocusUnlockSlotMode {
     case live
-    /// Onboarding demo: rigged near-miss past a FREE PASS, no game launch, no sound,
+    /// Onboarding demo: rigged near-miss past a FREE PASS, no game launch,
     /// always the full ceremony.
     case demo
 }
@@ -530,7 +530,7 @@ struct FocusUnlockSlotMachine: View {
                 if Date().timeIntervalSince(lastTickAt) >= 0.045 {
                     lastTickAt = Date()
                     HapticService.tap()
-                    if mode == .live { SlotSound.tick() }
+                    SlotSound.tick()
                 }
             }
 
@@ -552,7 +552,7 @@ struct FocusUnlockSlotMachine: View {
 
         switch result {
         case .game:
-            if mode == .live { SlotSound.lock() }
+            SlotSound.lock()
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             task = Task { @MainActor in
                 await blinkBulbs()
@@ -567,7 +567,7 @@ struct FocusUnlockSlotMachine: View {
                 deliver(result)
             }
         case .freePass:
-            if mode == .live { SlotSound.chime() }
+            SlotSound.chime()
             HapticService.complete()
             withAnimation(.spring(response: 0.22, dampingFraction: 0.45)) { dealerBounce = true }
             task = Task { @MainActor in

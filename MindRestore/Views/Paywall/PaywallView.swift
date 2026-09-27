@@ -295,7 +295,7 @@ private struct PaywallFeatureTile: View {
                 .lineLimit(2)
                 .minimumScaleFactor(0.85)
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.vertical, compact ? 10 : 14)
         .padding(.horizontal, 6)
         .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color(red: 0.024, green: 0.118, blue: 0.149).opacity(0.86)))
@@ -683,64 +683,16 @@ struct PaywallView: View {
         compact: Bool
     ) -> some View {
         VStack(spacing: 0) {
-            GeometryReader { scrollArea in
-                ScrollView(showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: 0) {
-                        PaywallUnlockHero(compact: compact)
-                            .frame(maxWidth: .infinity)
-                            .padding(.top, compact ? 0 : 8)
-                            .zIndex(1)
-
-                        ClimbHeadline(text: conciseHeadline, size: compact ? 26 : 32)
-                            .frame(maxWidth: .infinity)
-                            .padding(.top, compact ? 10 : 18)
-                            .animation(nil, value: selectedPlan)
-
-                        // Short phones keep the hero and plans on one screen; the
-                        // hero already shows what blocking looks like.
-                        if !compact {
-                            HStack(alignment: .top, spacing: 10) {
-                                PaywallFeatureTile(kind: .block, compact: compact)
-                                PaywallFeatureTile(kind: .play, compact: compact)
-                                PaywallFeatureTile(kind: .rank, compact: compact)
-                            }
-                            .padding(.top, 20)
-                        }
-
-                        Spacer(minLength: compact ? 16 : 24)
-
-                        VStack(spacing: 10) {
-                            annualPlanCard(compact: compact)
-                            weeklyPlanCard(compact: compact)
-                        }
-                        .padding(.top, 13)
-
-                        if storeService.products.isEmpty && !storeService.isLoading {
-                            HStack {
-                                Text("Couldn't load prices.")
-                                    .font(.system(size: 14, weight: .medium, design: .rounded))
-                                    .foregroundStyle(PW.fgMuted)
-                                Spacer()
-                                Button("Try again") {
-                                    storeService.purchaseError = nil
-                                    Task { await storeService.loadProducts() }
-                                }
-                                .font(.system(size: 14, weight: .bold, design: .rounded))
-                                .foregroundStyle(OB.accent)
-                                .buttonStyle(.plain)
-                            }
-                            .frame(minHeight: 44)
-                            .padding(.top, 6)
-                        }
-
-                    }
-                    .padding(.horizontal, 24)
-                    .padding(.bottom, 10)
-                    .frame(maxWidth: 500, minHeight: scrollArea.size.height, alignment: .top)
-                    .frame(maxWidth: .infinity)
-                }
-                .scrollBounceBehavior(.basedOnSize)
+            // Never scrolls: the first layout that fits wins, trading hero
+            // size and then the feature tiles for room so both plans stay
+            // above the purchase controls.
+            ViewThatFits(in: .vertical) {
+                conciseTopContent(heroCompact: compact, showsTiles: !compact, compact: compact)
+                conciseTopContent(heroCompact: true, showsTiles: !compact, compact: compact)
+                conciseTopContent(heroCompact: true, showsTiles: false, compact: compact)
+                conciseTopContent(heroCompact: nil, showsTiles: false, compact: compact)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 
             VStack(spacing: compact ? 6 : 8) {
                 Text(conciseSummaryLine)
@@ -815,6 +767,64 @@ struct PaywallView: View {
         .animation(.easeInOut(duration: 0.2), value: selectedPlan)
         .coordinateSpace(name: ClimbReporter.space)
         .environment(\.climbReporter, ClimbReporter(crest: { y in if climbCrestY != y { climbCrestY = y } }))
+    }
+
+    /// Hero, headline, tiles and plans. `heroCompact == nil` drops the hero.
+    private func conciseTopContent(heroCompact: Bool?, showsTiles: Bool, compact: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if let heroCompact {
+                PaywallUnlockHero(compact: heroCompact)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, heroCompact ? 0 : 8)
+                    .zIndex(1)
+            }
+
+            ClimbHeadline(text: conciseHeadline, size: compact ? 26 : 32)
+                .frame(maxWidth: .infinity)
+                .padding(.top, heroCompact == false ? 18 : 10)
+                .animation(nil, value: selectedPlan)
+
+            if showsTiles {
+                HStack(alignment: .top, spacing: 10) {
+                    PaywallFeatureTile(kind: .block, compact: compact)
+                    PaywallFeatureTile(kind: .play, compact: compact)
+                    PaywallFeatureTile(kind: .rank, compact: compact)
+                }
+                // Every tile takes the tallest one's height.
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 20)
+            }
+
+            Spacer(minLength: compact ? 16 : 24)
+
+            VStack(spacing: 10) {
+                annualPlanCard(compact: compact)
+                weeklyPlanCard(compact: compact)
+            }
+            .padding(.top, 13)
+
+            if storeService.products.isEmpty && !storeService.isLoading {
+                HStack {
+                    Text("Couldn't load prices.")
+                        .font(.system(size: 14, weight: .medium, design: .rounded))
+                        .foregroundStyle(PW.fgMuted)
+                    Spacer()
+                    Button("Try again") {
+                        storeService.purchaseError = nil
+                        Task { await storeService.loadProducts() }
+                    }
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .foregroundStyle(OB.accent)
+                    .buttonStyle(.plain)
+                }
+                .frame(minHeight: 44)
+                .padding(.top, 6)
+            }
+        }
+        .padding(.horizontal, 24)
+        .padding(.bottom, 10)
+        .frame(maxWidth: 500)
+        .frame(maxWidth: .infinity)
     }
 
     private func annualPlanCard(compact: Bool) -> some View {
