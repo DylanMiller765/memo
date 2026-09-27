@@ -26,12 +26,44 @@ enum Analytics {
     ]
 
     static func configure() {
-        let config = PostHogConfig(apiKey: apiKey, host: host)
+        let config = PostHogConfig(projectToken: apiKey, host: host)
         config.captureApplicationLifecycleEvents = true
+        // Replay never starts on its own: only onboarding and its paywall are
+        // recorded (see startOnboardingReplay). Screenshot mode, because
+        // wireframes draw the hill and stickers as grey boxes.
+        config.sessionReplay = false
+        config.sessionReplayConfig.screenshotMode = true
+        config.sessionReplayConfig.maskAllTextInputs = true
+        config.sessionReplayConfig.maskAllImages = false
+        config.sessionReplayConfig.captureNetworkTelemetry = false
         #if DEBUG
         config.debug = true
         #endif
         PostHogSDK.shared.setup(config)
+    }
+
+    // MARK: - Session replay
+
+    @MainActor private static var onboardingReplayTask: Task<Void, Never>?
+
+    /// Records onboarding and its paywall. On a first launch PostHog's remote
+    /// settings can land a few seconds after onboarding appears, and recording
+    /// can't start before them, so keep trying briefly.
+    @MainActor static func startOnboardingReplay() {
+        onboardingReplayTask?.cancel()
+        onboardingReplayTask = Task { @MainActor in
+            for _ in 0..<20 {
+                PostHogSDK.shared.startSessionRecording()
+                if PostHogSDK.shared.isSessionReplayActive() || Task.isCancelled { return }
+                try? await Task.sleep(for: .seconds(1))
+            }
+        }
+    }
+
+    @MainActor static func stopOnboardingReplay() {
+        onboardingReplayTask?.cancel()
+        onboardingReplayTask = nil
+        PostHogSDK.shared.stopSessionRecording()
     }
 
     // MARK: - User Identification

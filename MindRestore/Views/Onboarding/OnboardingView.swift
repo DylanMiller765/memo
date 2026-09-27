@@ -491,9 +491,11 @@ struct OnboardingView: View {
         .onAppear {
             SoundService.shared.isSuppressed = true
             trackOnboardingStartedIfNeeded()
+            Analytics.startOnboardingReplay()
         }
         .onDisappear {
             SoundService.shared.isSuppressed = false
+            Analytics.stopOnboardingReplay()
             if users.first?.hasCompletedOnboarding != true, presentedCover == nil, !onboardingCompletionQueued {
                 Analytics.onboardingDroppedOff(
                     lastStep: onboardingStepName(for: currentPage),
