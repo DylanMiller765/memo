@@ -33,7 +33,10 @@ enum Analytics {
         // wireframes draw the hill and stickers as grey boxes.
         config.sessionReplay = false
         config.sessionReplayConfig.screenshotMode = true
-        config.sessionReplayConfig.maskAllTextInputs = true
+        // This flag masks every label, not just fields. Onboarding and its
+        // paywall have no text entry (passwords are always masked), and the
+        // copy is what we need to read in a replay.
+        config.sessionReplayConfig.maskAllTextInputs = false
         config.sessionReplayConfig.maskAllImages = false
         config.sessionReplayConfig.captureNetworkTelemetry = false
         #if DEBUG
