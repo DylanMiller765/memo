@@ -211,7 +211,6 @@ struct ChimpTestView: View {
     var onPreviewProgress: ((Int) -> Void)? = nil
     @State private var viewModel = ChimpTestViewModel()
     @State private var showingPaywall = false
-    @State private var shareImage: UIImage?
     @State private var isNewPersonalBest = false
     @State private var exerciseSaved = false
     @State private var resultsAppeared = false
@@ -294,7 +293,6 @@ struct ChimpTestView: View {
                 AdaptiveDifficultyEngine.shared.recordBlock(domain: .chimpTest, correct: max(0, viewModel.bestLevel - 4), total: max(1, viewModel.bestLevel))
                 saveExercise()
                 mode.run?.finish(finalScore: viewModel.bestLevel)
-                generateShareCard()
             }
         }
     }
@@ -443,32 +441,6 @@ struct ChimpTestView: View {
             },
             onDone: { dismiss() }
         )
-    }
-
-    // MARK: - Share Card
-
-    private func generateShareCard() {
-        if shareImage == nil {
-            let card = ExerciseShareCard(
-                exerciseName: "Chimp Test",
-                exerciseIcon: "pawprint.fill",
-                accentColor: AppColors.amber,
-                mainValue: "\(viewModel.bestLevel)",
-                mainLabel: "NUMBERS REMEMBERED",
-                ratingText: viewModel.ratingText,
-                stats: [
-                    ("Time", "\(viewModel.durationSeconds)s")
-                ],
-                ctaText: "Can you beat the chimp?"
-            )
-            shareImage = card.renderAsImage(size: CGSize(width: 360, height: 640), scale: 3)
-        }
-        guard let image = shareImage else { return }
-        let activityVC = UIActivityViewController(activityItems: [image], applicationActivities: nil)
-        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-           let root = windowScene.windows.first?.rootViewController {
-            root.present(activityVC, animated: true)
-        }
     }
 
     // MARK: - Save
