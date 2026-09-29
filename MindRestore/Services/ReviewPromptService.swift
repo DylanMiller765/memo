@@ -9,10 +9,29 @@ enum ReviewPromptService {
     /// the player just earned, so it waits for `presentPendingIfAny()`.
     @MainActor
     static func requestIfAppropriate(totalExercises: Int, streak: Int) {
-        let lastPrompt = UserDefaults.standard.double(forKey: "lastReviewPromptDate")
-        let daysSincePrompt = (Date.now.timeIntervalSince1970 - lastPrompt) / 86400
-        guard totalExercises >= 5, streak >= 2, daysSincePrompt > 90 else { return }
+        guard totalExercises >= 5, streak >= 2, isCooledDown(now: .now) else { return }
         isPending = true
+    }
+
+    /// Called when the player taps "Go scroll" on an unlock they earned in a game.
+    /// From the third one on, that's the happy moment to ask for a rating.
+    @MainActor
+    static func unlockEarned() {
+        let count = UserDefaults.standard.integer(forKey: unlocksEarnedKey) + 1
+        UserDefaults.standard.set(count, forKey: unlocksEarnedKey)
+        guard shouldAskAfterUnlock(unlocksEarned: count, lastPrompt: UserDefaults.standard.double(forKey: "lastReviewPromptDate"), now: .now) else { return }
+        isPending = true
+        presentPendingIfAny()
+    }
+
+    static let unlocksEarnedKey = "reviewPrompt.unlocksEarned"
+
+    static func shouldAskAfterUnlock(unlocksEarned: Int, lastPrompt: TimeInterval, now: Date) -> Bool {
+        unlocksEarned >= 3 && (now.timeIntervalSince1970 - lastPrompt) / 86400 > 90
+    }
+
+    @MainActor private static func isCooledDown(now: Date) -> Bool {
+        (now.timeIntervalSince1970 - UserDefaults.standard.double(forKey: "lastReviewPromptDate")) / 86400 > 90
     }
 
     /// Called when the player taps Done on a result: asks for the rating on the way out.

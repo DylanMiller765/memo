@@ -25,6 +25,8 @@ final class ChimpTestViewModel {
         didSet { if !holdAdvance && pendingAdvance { pendingAdvance = false; setupLevel() } }
     }
     private var pendingAdvance = false
+    /// Onboarding's demo: one life, so the run ends on the first miss.
+    var isOnboardingPreview = false
     var lives = 3
     var nextExpected = 1
     var numbersHidden = false
@@ -82,7 +84,7 @@ final class ChimpTestViewModel {
         phase = .playing
         currentLevel = 4
         bestLevel = 0
-        lives = 3
+        lives = isOnboardingPreview ? 1 : 3
         startTime = Date.now
         if let seed = challengeSeed {
             rng = SeededGenerator(seed: UInt64(seed))
@@ -202,6 +204,11 @@ struct ChimpTestView: View {
     var autoStart: Bool = false
 
     var mode: GameMode = .train
+    /// Onboarding's demo: no chrome, nothing saved, ends on the first miss.
+    var isOnboardingPreview = false
+    var onPreviewComplete: (() -> Void)? = nil
+    /// Numbers remembered so far (the level just cleared).
+    var onPreviewProgress: ((Int) -> Void)? = nil
     @State private var viewModel = ChimpTestViewModel()
     @State private var showingPaywall = false
     @State private var shareImage: UIImage?
@@ -215,10 +222,14 @@ struct ChimpTestView: View {
     private var isProUser: Bool { storeService.isProUser || (user?.isProUser ?? false) }
 
     var body: some View {
-        GameScaffold(mode: mode, trainTitle: "Chimp Test",
-                     trainBest: PersonalBestTracker.shared.best(for: .chimpTest) > 0 ? "\(PersonalBestTracker.shared.best(for: .chimpTest))" : nil,
-                     glow: Color(red: 0.2, green: 0.145, blue: 0.047)) {
+        if isOnboardingPreview {
             phaseContent
+        } else {
+            GameScaffold(mode: mode, trainTitle: "Chimp Test",
+                         trainBest: PersonalBestTracker.shared.best(for: .chimpTest) > 0 ? "\(PersonalBestTracker.shared.best(for: .chimpTest))" : nil,
+                         glow: Color(red: 0.2, green: 0.145, blue: 0.047)) {
+                phaseContent
+            }
         }
     }
 
@@ -232,7 +243,7 @@ struct ChimpTestView: View {
                 playingView
                     .transition(.opacity)
             case .finished:
-                if mode.run != nil {
+                if mode.run != nil || isOnboardingPreview {
                     Color.clear
                 } else {
                     resultsView
@@ -250,20 +261,32 @@ struct ChimpTestView: View {
                 viewModel.onLevelCleared = { run.report(score: $0) }
             }
             if autoStart && viewModel.phase == .setup {
-                Analytics.exerciseStarted(game: ExerciseType.chimpTest.rawValue)
+                viewModel.isOnboardingPreview = isOnboardingPreview
+                if !isOnboardingPreview {
+                    Analytics.exerciseStarted(game: ExerciseType.chimpTest.rawValue)
+                }
                 viewModel.startGame()
             }
         }
         .onDisappear {
-            if viewModel.phase == .playing {
+            if isOnboardingPreview {
+                viewModel.reset()
+            } else if viewModel.phase == .playing {
                 Analytics.exerciseAbandoned(game: ExerciseType.chimpTest.rawValue, roundReached: viewModel.currentLevel)
             }
         }
         .onChange(of: mode.run?.isFrozen ?? false) { _, frozen in
             viewModel.holdAdvance = frozen
         }
+        .onChange(of: viewModel.bestLevel) { _, newValue in
+            if isOnboardingPreview && newValue > 0 { onPreviewProgress?(newValue) }
+        }
         .onChange(of: viewModel.phase) { _, newPhase in
             if newPhase == .finished {
+                if isOnboardingPreview {
+                    onPreviewComplete?()
+                    return
+                }
                 isNewPersonalBest = PersonalBestTracker.shared.record(score: viewModel.leaderboardScore, for: .chimpTest)
                 if isNewPersonalBest {
                     Analytics.personalBest(game: ExerciseType.chimpTest.rawValue, score: viewModel.leaderboardScore)

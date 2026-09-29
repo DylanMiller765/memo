@@ -460,7 +460,8 @@ struct FocusUnlockSlotMachine: View {
 
         let result: SlotResult
         if mode == .demo {
-            result = .game(.visualMemory)
+            // The TikTok slides feature the Chimp Test, so the demo lands on it.
+            result = .game(.chimpTest)
         } else {
             var rng = SystemRandomNumberGenerator()
             result = SlotOdds.pick(freePassAvailable: PendingSpinStore.shared.freePassAvailableToday, using: &rng)
@@ -472,7 +473,7 @@ struct FocusUnlockSlotMachine: View {
         var symbols = Array(strip.prefix(idleCenter + 1)) + (0..<22).map { _ in randomSymbol() }
         let landIndex = symbols.count
         if mode == .demo {
-            // Near-miss: a FREE PASS crawls through the window right before Visual Memory settles.
+            // Near-miss: a FREE PASS crawls through the window right before the Chimp Test settles.
             symbols[landIndex - 1] = .freePass(usedToday: false)
         }
         symbols.append(symbol(for: result))

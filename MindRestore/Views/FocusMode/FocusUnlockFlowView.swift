@@ -90,6 +90,8 @@ struct FocusUnlockFlowView: View {
             UnlockedScreen(game: game, outcome: outcome) {
                 store.resolve()
                 grant(minutes)
+                // Asked on the way out ("Go scroll"), never over the ticket.
+                ReviewPromptService.unlockEarned()
             }
         case .denied(let score, let distance):
             DeniedScreen(game: game, score: score, distance: distance, denials: denials,

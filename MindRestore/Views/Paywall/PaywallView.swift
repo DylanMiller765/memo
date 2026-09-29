@@ -279,7 +279,7 @@ private struct PaywallFeatureTile: View {
     private var title: String {
         switch kind {
         case .block: return "Block any app"
-        case .play: return "Play to unlock"
+        case .play: return "Train to unlock"
         case .rank: return "Climb the ranks"
         }
     }

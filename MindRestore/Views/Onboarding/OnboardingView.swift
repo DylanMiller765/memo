@@ -899,6 +899,25 @@ struct OnboardingView: View {
         }
     }
 
+    /// Accounts the App Store says can't get the free trial skip the trial
+    /// pages ("7 days free", the reminder) and go straight to the paywall.
+    private func advancePastPlayableLoop() {
+        if onboardingVariant == .concise, !storeService.products.isEmpty, storeService.annualFreeTrialLabel == nil {
+            skipTrialPagesToPaywall()
+        } else {
+            goToNextRoute()
+        }
+    }
+
+    private func skipTrialPagesToPaywall() {
+        trackOnboardingStepCompleted("trialTrustBridge", extraProperties: [
+            "next_step": "paywall",
+            "trial_eligible": false,
+            "skipped_no_trial": true
+        ])
+        presentedCover = .paywall
+    }
+
     private func goToNextRoute() {
         let nextIndex = currentRouteIndex + 1
         guard routePages.indices.contains(nextIndex) else { return }
@@ -1568,13 +1587,13 @@ struct OnboardingView: View {
         if onboardingVariant == .concise {
             OnboardingPlayableLoopPage(previewStage: screenshotTryItStage) { levelsCleared in
                 trackOnboardingStepCompleted("story_playable_loop", extraProperties: [
-                    "demo_game": "visual_memory",
+                    "demo_game": "chimp_test",
                     "used_product_slot": true,
                     "used_product_game": true,
                     "preview_levels_cleared": levelsCleared,
                     "preview_only": true
                 ])
-                goToNextRoute()
+                advancePastPlayableLoop()
             }
         } else {
             legacyGoalsPage
@@ -1944,6 +1963,10 @@ struct OnboardingView: View {
         .task {
             if storeService.products.isEmpty {
                 await storeService.loadProducts()
+            }
+            if onboardingVariant == .concise, presentedCover == nil,
+               !storeService.products.isEmpty, storeService.annualFreeTrialLabel == nil {
+                skipTrialPagesToPaywall()
             }
         }
     }

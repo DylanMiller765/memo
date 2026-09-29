@@ -182,6 +182,7 @@
 		266CC8B9CB6FA224178937B6 /* GameResultFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85F809EFFB5A330F67AE2DDC /* GameResultFlow.swift */; };
 		AD0D692F826C314C72A74C9F /* GameIntro.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEB77FA523D6710AAA1EC65B /* GameIntro.swift */; };
 		E9E9DD202DA6ABF001232EE5 /* GameEndDataTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FF4CCBFE423D93713CD3839 /* GameEndDataTests.swift */; };
+		9EEDE594764E516C800CB774 /* ReviewPromptTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E85809019436FFAD02732FA /* ReviewPromptTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -434,6 +435,7 @@
 		85F809EFFB5A330F67AE2DDC /* GameResultFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameResultFlow.swift; sourceTree = "<group>"; };
 		AEB77FA523D6710AAA1EC65B /* GameIntro.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameIntro.swift; sourceTree = "<group>"; };
 		8FF4CCBFE423D93713CD3839 /* GameEndDataTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameEndDataTests.swift; sourceTree = "<group>"; };
+		0E85809019436FFAD02732FA /* ReviewPromptTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewPromptTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -912,6 +914,7 @@
 		TEST0003000000000000TS01 /* MindRestoreTests */ = {
 			isa = PBXGroup;
 			children = (
+				0E85809019436FFAD02732FA /* ReviewPromptTests.swift */,
 				8FF4CCBFE423D93713CD3839 /* GameEndDataTests.swift */,
 				8EF51150B70EA17D7A68F138 /* OnboardingRivalsTests.swift */,
 				ACQS0000000000000000F001 /* AcquisitionSourceTests.swift */,
@@ -1443,6 +1446,7 @@
 			files = (
 				AAAECFEFF4CF9E529EE25AF1 /* OnboardingRivalsTests.swift in Sources */,
 				ACQS0000000000000000A001 /* AcquisitionSourceTests.swift in Sources */,
+				9EEDE594764E516C800CB774 /* ReviewPromptTests.swift in Sources */,
 				E9E9DD202DA6ABF001232EE5 /* GameEndDataTests.swift in Sources */,
 				6613BC32B97108EBBDECDFFF /* TrainUpNextTests.swift in Sources */,
 				2BF34BA8A2FCE23B06851D0A /* InsightsWeekSummaryTests.swift in Sources */,

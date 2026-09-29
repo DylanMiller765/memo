@@ -2190,7 +2190,7 @@ struct OnboardingIntroPage: View {
                         .font(.system(size: 11, weight: .heavy, design: .monospaced))
                         .tracking(2.2)
                         .foregroundStyle(ClimbColor.mint)
-                    ClimbHeadline(text: "The app blocker\nyou play to unlock.", size: compact ? 28 : 33)
+                    ClimbHeadline(text: "The app blocker\nyou train to unlock.", size: compact ? 28 : 33)
                 }
                 .padding(.top, compact ? 2 : 8)
 
@@ -2223,7 +2223,7 @@ struct OnboardingIntroPage: View {
                 Spacer(minLength: compact ? 14 : 24)
 
                 ClimbBodyText(
-                    text: "Memo locks the apps you pick. Finish a quick brain game to open one for a few minutes.",
+                    text: "Memo locks the apps you pick. Finish a quick brain game to open one for a few minutes. Every unlock is a memory rep.",
                     size: compact ? 14 : 15
                 )
                 .padding(.bottom, compact ? 2 : 8)
@@ -2482,8 +2482,9 @@ struct OnboardingLockedAppFan: View {
 // MARK: 3 · Try it
 
 /// One interactive page in four beats: the production slot, the production
-/// Visual Memory game (played until the first miss), the unlock that game
-/// earns, then where the score lands on this week's real leaderboard.
+/// Chimp Test (played until the first miss), the unlock that game earns, then
+/// where the score lands on this week's real leaderboard. The Chimp Test is
+/// the game the TikTok slides feature ("chimps average 7").
 /// Nothing here is submitted or unlocked for real.
 struct OnboardingPlayableLoopPage: View {
     let onContinue: (Int) -> Void
@@ -2503,11 +2504,11 @@ struct OnboardingPlayableLoopPage: View {
         self.onContinue = onContinue
         let initial: Stage = previewStage.flatMap(Stage.init(rawValue:)) ?? (previewCompleted ? .unlock : .slot)
         _stage = State(initialValue: initial)
-        _levelsCleared = State(initialValue: initial.rawValue >= Stage.unlock.rawValue ? 6 : 0)
+        _levelsCleared = State(initialValue: initial.rawValue >= Stage.unlock.rawValue ? 8 : 0)
     }
 
-    /// The demo reel always lands on Visual Memory; the ticket shows the
-    /// Great tier (LV 7), the same payout the pre-2.1.6 demo showed.
+    /// The demo reel always lands on the Chimp Test; the ticket shows the
+    /// Great tier, the same payout the pre-2.1.6 demo showed.
     private var payoutMinutes: Int {
         landedMinutes ?? UnlockRulebook.minutes(for: .great, isPersonalBest: false)
     }
@@ -2531,7 +2532,9 @@ struct OnboardingPlayableLoopPage: View {
                     OnboardingUnlockMoment(
                         minutes: payoutMinutes,
                         compact: compact,
+                        intro: payoutIntro,
                         climb: true,
+                        introHoldMilliseconds: 1500,
                         onRevealed: { unlockRevealed = true }
                     )
                     .padding(.horizontal, OBLayout.gutter)
@@ -2541,6 +2544,8 @@ struct OnboardingPlayableLoopPage: View {
                         board: board,
                         level: levelsCleared,
                         compact: compact,
+                        unit: BoardUnit.forGame(.chimpTest),
+                        footnote: levelsCleared > 0 ? "Chimps average 7. You remembered \(levelsCleared)." : nil,
                         onPlayAgain: playAgain
                     )
                     .padding(.horizontal, OBLayout.gutter)
@@ -2603,7 +2608,7 @@ struct OnboardingPlayableLoopPage: View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 5) {
                 HStack(alignment: .center) {
-                    ClimbHeadline(text: "Visual Memory", size: compact ? 24 : 28, alignment: .leading)
+                    ClimbHeadline(text: "Chimp Test", size: compact ? 24 : 28, alignment: .leading)
                     Spacer(minLength: 8)
                     Text("\(payoutMinutes) MIN")
                         .font(.system(size: 12, weight: .heavy, design: .monospaced))
@@ -2615,7 +2620,7 @@ struct OnboardingPlayableLoopPage: View {
                         .accessibilityLabel("Worth \(payoutMinutes) minutes")
                 }
                 ClimbBodyText(
-                    text: "Memorize the lit squares, then tap them. The grid keeps growing until you miss.",
+                    text: "Tap 1 first and the other numbers hide. Tap the rest in order. Every level adds a number.",
                     size: compact ? 13 : 15,
                     alignment: .leading
                 )
@@ -2624,7 +2629,7 @@ struct OnboardingPlayableLoopPage: View {
             // Keep the crest high so the grid plays over the grass.
             .climbCrest()
 
-            VisualMemoryView(
+            ChimpTestView(
                 autoStart: true,
                 isOnboardingPreview: true,
                 onPreviewComplete: { finishGame() },
@@ -2640,14 +2645,14 @@ struct OnboardingPlayableLoopPage: View {
         switch stage {
         case .slot:
             if landedMinutes != nil {
-                OBActionBar(title: "Play Visual Memory", backdrop: .clear) {
+                OBActionBar(title: "Play Chimp Test", backdrop: .clear) {
                     advance(to: .game)
                 }
                 .transition(.opacity)
             } else {
                 // Hold the CTA's space so the machine doesn't resize when the
                 // button appears after the reel lands.
-                OBActionBar(title: "Play Visual Memory", action: {})
+                OBActionBar(title: "Play Chimp Test", action: {})
                     .hidden()
                     .accessibilityHidden(true)
             }
@@ -2670,6 +2675,13 @@ struct OnboardingPlayableLoopPage: View {
         withAnimation(reduceMotion ? nil : .spring(response: 0.5, dampingFraction: 0.86)) {
             stage = next
         }
+    }
+
+    /// Honest about the run: the first ticket pays out either way.
+    private var payoutIntro: String {
+        if levelsCleared > 7 { return "You beat the chimps. Your ticket pays out." }
+        if levelsCleared == 7 { return "You tied the chimps. Your ticket pays out." }
+        return "Nice try. Memo pays out anyway on your first run."
     }
 
     private func finishGame() {
@@ -2709,7 +2721,7 @@ struct OnboardingPlayableLoopPage: View {
         if case .loaded = board { return }
         board = .loading
         let result = await gameCenterService.loadLeaderboardEntries(
-            category: .visualMemory,
+            category: .chimpTest,
             timeFilter: .thisWeek,
             range: NSRange(location: 1, length: 50)
         )
@@ -2794,6 +2806,8 @@ struct OnboardingUnlockMoment: View {
     var intro: String? = nil
     /// Onboarding's hill: outlined type, and the crest under the countdown.
     var climb = false
+    /// Extra time on the intro line before the ticket tears, so it can be read.
+    var introHoldMilliseconds = 0
     let onRevealed: () -> Void
 
     private enum Phase: Int, Comparable {
@@ -3065,7 +3079,7 @@ struct OnboardingUnlockMoment: View {
             heavy.impactOccurred(intensity: 0.8)
 
             // 4 · Tear along the perforation; the stub becomes the live pass.
-            try? await Task.sleep(for: .milliseconds(520))
+            try? await Task.sleep(for: .milliseconds(520 + introHoldMilliseconds))
             guard !Task.isCancelled else { return }
             soft.impactOccurred()
             startedAt = .now
@@ -3271,6 +3285,8 @@ struct OnboardingLeaderboardClimb: View {
     var unit: BoardUnit = .visualMemory
     /// True after a real game: the score is posted, so "You're #5", not "You'd place #5".
     var isPosted = false
+    /// One line under the board, e.g. the game's average next to the player's score.
+    var footnote: String? = nil
     let onPlayAgain: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -3343,6 +3359,15 @@ struct OnboardingLeaderboardClimb: View {
                 .climbCrest()
 
             boardCard
+
+            if let footnote {
+                Label(footnote, systemImage: "pawprint.fill")
+                    .font(.system(size: compact ? 13 : 15, weight: .heavy, design: .rounded))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 14).padding(.vertical, 8)
+                    .background(Capsule().fill(Color.white.opacity(0.1)))
+                    .padding(.top, compact ? 10 : 14)
+            }
 
             if isPractice, level > 0 {
                 Text("Byte, Turbo, Pixel and Nova are Memo's practice rivals. Real players show up once you're on Game Center.")
