@@ -366,6 +366,7 @@ struct ContentView: View {
             isProUser: storeService.isProUser
         )
 
+        SoundPreference.migrate(userSoundEnabled: user.soundEnabled)
         scheduleStreakRiskIfNeeded(for: user)
         scheduleComebackIfNeeded(for: user)
         if user.notificationsEnabled {

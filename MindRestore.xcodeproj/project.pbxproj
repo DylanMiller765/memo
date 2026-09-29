@@ -183,6 +183,8 @@
 		AD0D692F826C314C72A74C9F /* GameIntro.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEB77FA523D6710AAA1EC65B /* GameIntro.swift */; };
 		E9E9DD202DA6ABF001232EE5 /* GameEndDataTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FF4CCBFE423D93713CD3839 /* GameEndDataTests.swift */; };
 		9EEDE594764E516C800CB774 /* ReviewPromptTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E85809019436FFAD02732FA /* ReviewPromptTests.swift */; };
+		66D54B460C783516EEF1DB92 /* ProgressReset.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBC11E4627572CA98ABA5040 /* ProgressReset.swift */; };
+		89E3A0F68C6D99973A05BC90 /* SettingsCleanupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9405E0DF2F66609AC140B112 /* SettingsCleanupTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -436,6 +438,8 @@
 		AEB77FA523D6710AAA1EC65B /* GameIntro.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameIntro.swift; sourceTree = "<group>"; };
 		8FF4CCBFE423D93713CD3839 /* GameEndDataTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameEndDataTests.swift; sourceTree = "<group>"; };
 		0E85809019436FFAD02732FA /* ReviewPromptTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewPromptTests.swift; sourceTree = "<group>"; };
+		CBC11E4627572CA98ABA5040 /* ProgressReset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressReset.swift; sourceTree = "<group>"; };
+		9405E0DF2F66609AC140B112 /* SettingsCleanupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsCleanupTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -700,6 +704,7 @@
 		3FB21F1A039F009995EF6AC7 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				CBC11E4627572CA98ABA5040 /* ProgressReset.swift */,
 				D5A03982E6960A17520C02CF /* GameSound.swift */,
 				59798F2DEF0DEFA761CD6140 /* TrainUpNext.swift */,
 				586F7FD19AF1E548EDA0BC55 /* LeagueRivals.swift */,
@@ -914,6 +919,7 @@
 		TEST0003000000000000TS01 /* MindRestoreTests */ = {
 			isa = PBXGroup;
 			children = (
+				9405E0DF2F66609AC140B112 /* SettingsCleanupTests.swift */,
 				0E85809019436FFAD02732FA /* ReviewPromptTests.swift */,
 				8FF4CCBFE423D93713CD3839 /* GameEndDataTests.swift */,
 				8EF51150B70EA17D7A68F138 /* OnboardingRivalsTests.swift */,
@@ -1392,6 +1398,7 @@
 				B10B3396842B4C6C456D4A98 /* ColorMatchView.swift in Sources */,
 				CHMP0001000000000000CH01 /* ChimpTestView.swift in Sources */,
 				QGVW0001000000000000QG01 /* QuickGameView.swift in Sources */,
+				66D54B460C783516EEF1DB92 /* ProgressReset.swift in Sources */,
 				AD0D692F826C314C72A74C9F /* GameIntro.swift in Sources */,
 				266CC8B9CB6FA224178937B6 /* GameResultFlow.swift in Sources */,
 				D897092BE2F48D3A03923F75 /* GameSound.swift in Sources */,
@@ -1446,6 +1453,7 @@
 			files = (
 				AAAECFEFF4CF9E529EE25AF1 /* OnboardingRivalsTests.swift in Sources */,
 				ACQS0000000000000000A001 /* AcquisitionSourceTests.swift in Sources */,
+				89E3A0F68C6D99973A05BC90 /* SettingsCleanupTests.swift in Sources */,
 				9EEDE594764E516C800CB774 /* ReviewPromptTests.swift in Sources */,
 				E9E9DD202DA6ABF001232EE5 /* GameEndDataTests.swift in Sources */,
 				6613BC32B97108EBBDECDFFF /* TrainUpNextTests.swift in Sources */,

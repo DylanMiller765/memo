@@ -314,4 +314,22 @@ final class NotificationService: Sendable {
     func cancelAll() {
         UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
     }
+
+    /// Identifiers the Notifications switch controls. The trial-ends reminder
+    /// isn't one: the paywall promised it, so it stays until the trial is over.
+    static let reminderIdentifiers = ["daily_reminder", "streak_risk", "comeback", "weekly_leaderboard_reset",
+                                      "achievement_nudge", "retake-reminder"]
+
+    static func isReminder(_ identifier: String) -> Bool {
+        reminderIdentifiers.contains(identifier) || identifier.hasPrefix("milestone_")
+    }
+
+    /// Cancels Memo's reminders and milestone notes, and keeps the trial reminder.
+    func cancelReminders() {
+        let center = UNUserNotificationCenter.current()
+        center.getPendingNotificationRequests { requests in
+            let ids = requests.map(\.identifier).filter(Self.isReminder)
+            center.removePendingNotificationRequests(withIdentifiers: ids)
+        }
+    }
 }

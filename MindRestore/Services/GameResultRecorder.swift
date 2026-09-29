@@ -34,7 +34,9 @@ enum GameResultRecorder {
             _ = user.updateStreak()
             user.totalExercises += 1
             NotificationService.shared.cancelStreakRisk()
-            NotificationService.shared.scheduleMilestone(streak: user.currentStreak)
+            if user.notificationsEnabled {
+                NotificationService.shared.scheduleMilestone(streak: user.currentStreak)
+            }
             WidgetDataService.updateWidgetData(
                 streak: user.currentStreak,
                 exercisesToday: session.exercisesCompleted.count,

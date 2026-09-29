@@ -1,10 +1,12 @@
 import SwiftUI
 import SwiftData
+import StoreKit
 
 struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(StoreService.self) private var storeService
     @Environment(GameCenterService.self) private var gameCenterService
+    @Environment(FocusModeService.self) private var focusModeService
     @Query private var users: [User]
 
     @State private var showingPaywall = false
@@ -15,7 +17,15 @@ struct SettingsView: View {
     @State private var showingDebugFocusSetup = false
     @State private var editingName = false
     @State private var editedName = ""
-    @State private var showingAgePicker = false
+    @State private var showingFocusSettings = false
+    @State private var showingManageSubscriptions = false
+    @State private var restoreMessage: String?
+    @Environment(\.dismiss) private var dismiss
+
+    // Profile's palette: Settings opens from Profile and should read as part of it.
+    private static let ink = Color(red: 0.043, green: 0.106, blue: 0.133)          // #0B1B22
+    private static let mint = Color(red: 0.482, green: 0.89, blue: 0.776)          // #7BE3C6
+    @AppStorage(SoundPreference.key) private var soundOn = true
 
     private var user: User? { users.first }
     private var isProUser: Bool { storeService.isProUser }
@@ -25,11 +35,29 @@ struct SettingsView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 20) {
-                    // Settings Section
-                    settingsCard
-
-                    // About/Legal Section
-                    aboutCard
+                    header
+                    // Memo stands on the hill, like Profile; the cards sit on the ground below.
+                    ZStack(alignment: .bottom) {
+                        Ellipse()
+                            .fill(Color.black.opacity(0.45))
+                            .frame(width: 80, height: 14)
+                            .blur(radius: 4)
+                            .offset(y: -3)
+                        RiveMascotView(mood: .happy, size: 130, playbackPolicy: .continuous)
+                            .frame(height: 116)
+                            .accessibilityHidden(true)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, -14)
+                    section("Account") {
+                        nameRow
+                        rowDivider
+                        gameCenterRow
+                    }
+                    section("Focus Mode") { focusRow }
+                    section("Preferences") { preferencesRows }
+                    section("Subscription") { subscriptionRows }
+                    section("About") { aboutRows }
 
                     // Reset Data (standalone red button)
                     resetDataButton
@@ -39,25 +67,36 @@ struct SettingsView: View {
                     debugCard
                     #endif
                 }
-                .padding(.horizontal)
-                .padding(.top, 8)
-                .padding(.bottom, 32)
+                .padding(.horizontal, 20)
+                .padding(.top, 10)
+                .padding(.bottom, 40)
                 .responsiveContent()
                 .frame(maxWidth: .infinity)
             }
-            .pageBackground()
-            .navigationTitle("Settings")
+            .scrollIndicators(.hidden)
+            .background(alignment: .top) {
+                HomeHillScene(tier: .calm, crestFromSafeTop: 196)
+            }
+            .toolbar(.hidden, for: .navigationBar)
+            .tint(Self.mint)
             .sheet(isPresented: $showingPaywall) {
                 PaywallView()
             }
             .sheet(isPresented: $showingDebugFocusSetup) {
                 FocusModeSetupView()
             }
+            .sheet(isPresented: $showingFocusSettings) {
+                FocusModeSettingsView()
+            }
+            .manageSubscriptionsSheet(isPresented: $showingManageSubscriptions)
+            .alert(restoreMessage ?? "", isPresented: Binding(get: { restoreMessage != nil }, set: { if !$0 { restoreMessage = nil } })) {
+                Button("OK", role: .cancel) {}
+            }
             .alert("Reset All Data", isPresented: $showingResetConfirmation) {
                 Button("Reset Everything", role: .destructive) { resetAllData() }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("Are you sure? This will delete all your progress, scores, and settings.")
+                Text("This deletes your games, scores, streak and name, stops blocking your apps and clears your Focus schedule. Your subscription stays. Scores already on Game Center can't be removed.")
             }
             .alert("Load Screenshot Data", isPresented: $showingScreenshotDataConfirmation) {
                 Button("Load Demo Data", role: .destructive) { loadScreenshotData() }
@@ -83,293 +122,243 @@ struct SettingsView: View {
 
     // MARK: - 5. Settings Section
 
-    private var settingsCard: some View {
-        VStack(spacing: 0) {
-            // Name
-            settingsRow(icon: "person.fill", color: AppColors.accent, title: "Name") {
-                if editingName {
-                    TextField("Your name", text: $editedName)
-                        .font(.subheadline)
-                        .multilineTextAlignment(.trailing)
-                        .submitLabel(.done)
-                        .onSubmit {
-                            user?.username = editedName.trimmingCharacters(in: .whitespacesAndNewlines)
-                            editingName = false
-                        }
-                } else {
-                    Button {
-                        editedName = user?.username ?? ""
-                        editingName = true
-                    } label: {
-                        Text(user?.username.isEmpty == false ? user!.username : "Not set")
-                            .font(.subheadline)
-                            .foregroundStyle(user?.username.isEmpty == false ? .primary : .secondary)
-                    }
-                }
-            }
-            Divider().padding(.leading, 44)
-
-            // Notifications
-            settingsRow(icon: "bell.fill", color: AppColors.coral, title: "Notifications") {
-                if let user {
-                    Toggle("", isOn: Binding(
-                        get: { user.notificationsEnabled },
-                        set: { newValue in
-                            user.notificationsEnabled = newValue
-                            if newValue {
-                                Task {
-                                    let granted = await NotificationService.shared.requestPermission()
-                                    if granted {
-                                        NotificationService.shared.scheduleDailyReminder(
-                                            hour: user.reminderHour,
-                                            minute: user.reminderMinute,
-                                            streak: user.currentStreak
-                                        )
-                                    } else {
-                                        user.notificationsEnabled = false
-                                    }
-                                }
-                            } else {
-                                NotificationService.shared.cancelAll()
-                            }
-                        }
-                    ))
-                    .tint(AppColors.accent)
-                    .labelsHidden()
-                }
-            }
-            Divider().padding(.leading, 44)
-
-            // Sounds
-            settingsRow(icon: "speaker.wave.2.fill", color: AppColors.teal, title: "Sounds") {
-                if let user {
-                    Toggle("", isOn: Binding(
-                        get: { user.soundEnabled },
-                        set: { user.soundEnabled = $0 }
-                    ))
-                    .tint(AppColors.accent)
-                    .labelsHidden()
-                }
-            }
-            Divider().padding(.leading, 44)
-
-            // Daily Goal
-            settingsRow(icon: "target", color: AppColors.amber, title: "Daily Goal") {
-                if let user {
-                    Stepper("\(user.dailyGoal) games", value: Binding(
-                        get: { user.dailyGoal },
-                        set: { user.dailyGoal = $0 }
-                    ), in: 1...10)
-                    .font(.subheadline)
-                }
-            }
-            Divider().padding(.leading, 44)
-
-            // Your Age
-            Button {
-                showingAgePicker = true
-            } label: {
-                settingsRow(icon: "birthday.cake.fill", color: AppColors.coral, title: "Your Age") {
-                    HStack(spacing: 4) {
-                        Text(user?.userAge ?? 0 > 0 ? "\(user!.userAge)" : "Not set")
-                            .font(.subheadline)
-                            .foregroundStyle(user?.userAge ?? 0 > 0 ? .primary : .secondary)
-                        Image(systemName: "chevron.right")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.tertiary)
-                    }
-                }
+    /// Title and a close button, in Profile's style.
+    private var header: some View {
+        HStack {
+            Text("Settings")
+                .font(.brand(size: 30, weight: .heavy))
+                .foregroundStyle(.white)
+                .shadow(color: .black.opacity(0.35), radius: 6, y: 2)
+            Spacer()
+            Button { dismiss() } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 15, weight: .heavy))
+                    .foregroundStyle(Self.ink)
+                    .frame(width: 40, height: 40)
+                    .background(.white, in: Circle())
+                    .overlay(Circle().strokeBorder(Self.ink, lineWidth: 2.5))
+                    .background(Circle().fill(Self.ink).offset(y: 3))
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Close")
         }
-        .appCard(padding: 0)
-        .sheet(isPresented: $showingAgePicker) {
-            NavigationStack {
-                VStack(spacing: 16) {
-                    Text("Select your age")
-                        .font(.headline)
+        .accessibilityAddTraits(.isHeader)
+    }
 
-                    if let user {
-                        Picker("Age", selection: Binding(
-                            get: { user.userAge > 0 ? user.userAge : 25 },
-                            set: { user.userAge = $0 }
-                        )) {
-                            ForEach(18...99, id: \.self) { age in
-                                Text("\(age)").tag(age)
-                            }
-                        }
-                        .pickerStyle(.wheel)
-                        .frame(height: 150)
-                    }
+    /// A titled group of rows.
+    private func section<Rows: View>(_ title: String, @ViewBuilder rows: () -> Rows) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.brand(size: 15, weight: .heavy))
+                .foregroundStyle(.white.opacity(0.8))
+                .shadow(color: .black.opacity(0.35), radius: 4)
+                .padding(.leading, 6)
+            VStack(spacing: 0) { rows() }
+                .background(Color(red: 0, green: 0.086, blue: 0.11).opacity(0.42), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Color.white.opacity(0.07), lineWidth: 1))
+        }
+    }
 
-                    HStack(spacing: 6) {
-                        Image(systemName: "lock.fill")
-                            .font(.caption2)
-                        Text("Stored on your device only. Never shared.")
-                            .font(.caption)
+    private var rowDivider: some View {
+        Rectangle().fill(Color.white.opacity(0.08)).frame(height: 1).padding(.leading, 62)
+    }
+
+    private func rowIcon(_ name: String) -> some View {
+        Image(systemName: name)
+            .font(.system(size: 15, weight: .bold))
+            .foregroundStyle(.white.opacity(0.85))
+            .frame(width: 36, height: 36)
+            .background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .accessibilityHidden(true)
+    }
+
+    private func rowTitle(_ title: String) -> some View {
+        Text(title)
+            .font(.brand(size: 16, weight: .heavy))
+            .foregroundStyle(.white)
+    }
+
+    private func rowValue(_ text: String) -> some View {
+        Text(text)
+            .font(.brand(size: 15, weight: .bold))
+            .foregroundStyle(Self.mint)
+    }
+
+    private var rowChevron: some View {
+        Image(systemName: "chevron.right")
+            .font(.system(size: 13, weight: .bold))
+            .foregroundStyle(.white.opacity(0.45))
+    }
+
+    private var nameRow: some View {
+        settingsRow(icon: "person.fill", color: AppColors.accent, title: "Name") {
+            if editingName {
+                TextField("Your name", text: $editedName)
+                    .font(.brand(size: 15, weight: .bold))
+                    .foregroundStyle(.white)
+                    .multilineTextAlignment(.trailing)
+                    .submitLabel(.done)
+                    .onSubmit {
+                        user?.username = editedName.trimmingCharacters(in: .whitespacesAndNewlines)
+                        editingName = false
                     }
-                    .foregroundStyle(.secondary)
-                }
-                .padding()
-                .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Done") { showingAgePicker = false }
-                    }
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Remove") {
-                            user?.userAge = 0
-                            showingAgePicker = false
-                        }
-                        .foregroundStyle(.red)
-                    }
+            } else {
+                Button {
+                    editedName = user?.username ?? ""
+                    editingName = true
+                } label: {
+                    rowValue(user?.username.isEmpty == false ? user!.username : "Add your name")
                 }
             }
-            .presentationDetents([.medium])
+        }
+    }
+
+    /// Blocked apps and schedule: the same screen Home's Focus card opens.
+    private var focusRow: some View {
+        Button { showingFocusSettings = true } label: {
+            settingsRow(icon: "lock.fill", color: AppColors.violet, title: "Blocked apps & schedule") {
+                HStack(spacing: 6) {
+                    rowValue(focusStatus)
+                    rowChevron
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var focusStatus: String {
+        let count = focusModeService.blockedAppCount
+        guard focusModeService.isEnabled, count > 0 else { return "Off" }
+        return count == 1 ? "1 app" : "\(count) apps"
+    }
+
+    @ViewBuilder
+    private var preferencesRows: some View {
+        settingsRow(icon: "bell.fill", color: AppColors.coral, title: "Notifications") {
+            if let user {
+                Toggle("Notifications", isOn: Binding(
+                    get: { user.notificationsEnabled },
+                    set: { newValue in
+                        user.notificationsEnabled = newValue
+                        if newValue {
+                            Task {
+                                let granted = await NotificationService.shared.requestPermission()
+                                if granted {
+                                    NotificationService.shared.scheduleDailyReminder(
+                                        hour: user.reminderHour,
+                                        minute: user.reminderMinute,
+                                        streak: user.currentStreak
+                                    )
+                                } else {
+                                    user.notificationsEnabled = false
+                                }
+                            }
+                        } else {
+                            NotificationService.shared.cancelReminders()
+                        }
+                    }
+                ))
+                .tint(Self.mint)
+                .labelsHidden()
+            }
+        }
+        rowDivider
+        settingsRow(icon: "speaker.wave.2.fill", color: AppColors.teal, title: "Sounds") {
+            if let user {
+                Toggle("Sounds", isOn: Binding(
+                    get: { soundOn },
+                    set: { soundOn = $0; user.soundEnabled = $0 }
+                ))
+                .tint(Self.mint)
+                .labelsHidden()
+            }
+        }
+    }
+
+    /// Signed in, or a button to sign in: rankings on Compete and after each game need it.
+    private var gameCenterRow: some View {
+        settingsRow(icon: "gamecontroller.fill", color: AppColors.mint, title: "Game Center") {
+            if gameCenterService.isAuthenticated {
+                Label("Signed in", systemImage: "checkmark.circle.fill")
+                    .font(.brand(size: 15, weight: .bold))
+                    .foregroundStyle(Self.mint)
+            } else {
+                Button("Sign in") { gameCenterService.authenticate() }
+                    .font(.brand(size: 15, weight: .heavy))
+                    .foregroundStyle(Self.mint)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var subscriptionRows: some View {
+        if isProUser {
+            aboutRow(icon: "creditcard.fill", color: .blue, title: "Manage subscription", isLink: true) {
+                showingManageSubscriptions = true
+            }
+            rowDivider
+        }
+        aboutRow(icon: "arrow.clockwise", color: .teal, title: "Restore purchases", isLink: true) {
+            Task {
+                let restored = await storeService.restorePurchases()
+                restoreMessage = restored ? "Purchases restored." : "No purchases to restore on this Apple ID."
+            }
         }
     }
 
     private func settingsRow<Trailing: View>(icon: String, color: Color, title: String, @ViewBuilder trailing: () -> Trailing) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(width: 28, height: 28)
-                .background(color, in: RoundedRectangle(cornerRadius: 7))
-
-            Text(title)
-                .font(.subheadline)
-
+            rowIcon(icon)
+            rowTitle(title)
             Spacer()
-
             trailing()
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 13)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
     }
 
-    // MARK: - 6. About/Legal Section
+    // MARK: - About
 
-    private var aboutCard: some View {
-        VStack(spacing: 0) {
-            aboutRow(icon: "info.circle.fill", color: .gray, title: "Version", trailing: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0")
-                #if DEBUG
-                .onTapGesture { debugTapCount += 1 }
-                #endif
-            Divider().padding(.leading, 52)
-            if isProUser {
-                aboutRow(icon: "creditcard.fill", color: .blue, title: "Manage Subscription", isLink: true) {
-                    if let url = URL(string: "https://apps.apple.com/account/subscriptions") {
-                        UIApplication.shared.open(url)
-                    }
-                }
-                Divider().padding(.leading, 52)
+    @ViewBuilder
+    private var aboutRows: some View {
+        Button {
+            if let url = URL(string: "itms-apps://itunes.apple.com/app/id6760178716?action=write-review") {
+                UIApplication.shared.open(url)
             }
-            if isProUser {
-                aboutRow(icon: "xmark.circle.fill", color: .gray, title: "How to Cancel", isLink: true) {
-                    if let url = URL(string: "https://apps.apple.com/account/subscriptions") {
-                        UIApplication.shared.open(url)
-                    }
-                }
-                Divider().padding(.leading, 52)
-            }
-            aboutRow(icon: "arrow.clockwise", color: .teal, title: "Restore Purchases", isLink: true) {
-                Task { await storeService.restorePurchases() }
-            }
-            Divider().padding(.leading, 52)
-            Link(destination: URL(string: "https://getmemoriapp.com/privacy")!) {
-                HStack(spacing: 12) {
-                    Image(systemName: "hand.raised.fill")
-                        .font(.caption)
-                        .foregroundStyle(.white)
-                        .frame(width: 28, height: 28)
-                        .background(Color.purple, in: RoundedRectangle(cornerRadius: 7))
-
-                    Text("Privacy Policy")
-                        .font(.subheadline)
-                        .foregroundStyle(.primary)
-
-                    Spacer()
-
-                    Image(systemName: "arrow.up.right")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 13)
-            }
-            Divider().padding(.leading, 52)
-            Link(destination: URL(string: "https://getmemoriapp.com/terms")!) {
-                HStack(spacing: 12) {
-                    Image(systemName: "doc.text.fill")
-                        .font(.caption)
-                        .foregroundStyle(.white)
-                        .frame(width: 28, height: 28)
-                        .background(Color.gray, in: RoundedRectangle(cornerRadius: 7))
-
-                    Text("Terms of Use")
-                        .font(.subheadline)
-                        .foregroundStyle(.primary)
-
-                    Spacer()
-
-                    Image(systemName: "arrow.up.right")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 13)
-            }
-            Divider().padding(.leading, 52)
-            Button {
-                if let url = URL(string: "itms-apps://itunes.apple.com/app/id6760178716") {
-                    UIApplication.shared.open(url)
-                }
-            } label: {
-                HStack(spacing: 12) {
-                    Image(systemName: "star.fill")
-                        .font(.caption)
-                        .foregroundStyle(.white)
-                        .frame(width: 28, height: 28)
-                        .background(Color.orange, in: RoundedRectangle(cornerRadius: 7))
-
-                    Text("Rate Memo")
-                        .font(.subheadline)
-                        .foregroundStyle(.primary)
-
-                    Spacer()
-
-                    Image(systemName: "arrow.up.right")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 13)
-            }
-            .buttonStyle(.plain)
-            Divider().padding(.leading, 52)
-            Link(destination: URL(string: "mailto:dylanjaws@icloud.com")!) {
-                HStack(spacing: 12) {
-                    Image(systemName: "questionmark.circle.fill")
-                        .font(.caption)
-                        .foregroundStyle(.white)
-                        .frame(width: 28, height: 28)
-                        .background(Color.blue, in: RoundedRectangle(cornerRadius: 7))
-
-                    Text("Support")
-                        .font(.subheadline)
-                        .foregroundStyle(.primary)
-
-                    Spacer()
-
-                    Image(systemName: "arrow.up.right")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 13)
-            }
+        } label: {
+            linkRowLabel(icon: "star.fill", color: .orange, title: "Rate Memo")
         }
-        .appCard(padding: 0)
+        .buttonStyle(.plain)
+        rowDivider
+        Link(destination: URL(string: "https://getmemoriapp.com/privacy")!) {
+            linkRowLabel(icon: "hand.raised.fill", color: .purple, title: "Privacy Policy")
+        }
+        .buttonStyle(.plain)
+        rowDivider
+        Link(destination: URL(string: "https://getmemoriapp.com/terms")!) {
+            linkRowLabel(icon: "doc.text.fill", color: .gray, title: "Terms of Use")
+        }
+        .buttonStyle(.plain)
+        rowDivider
+        aboutRow(icon: "info.circle.fill", color: .gray, title: "Version", trailing: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0")
+            #if DEBUG
+            .onTapGesture { debugTapCount += 1 }
+            #endif
+    }
+
+    private func linkRowLabel(icon: String, color: Color, title: String) -> some View {
+        HStack(spacing: 12) {
+            rowIcon(icon)
+            rowTitle(title)
+            Spacer()
+            Image(systemName: "arrow.up.right")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(.white.opacity(0.45))
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+        .contentShape(Rectangle())
     }
 
     private func aboutRow(icon: String, color: Color, title: String, trailing: String? = nil, isLink: Bool = false, action: (() -> Void)? = nil) -> some View {
@@ -377,29 +366,23 @@ struct SettingsView: View {
             action?()
         } label: {
             HStack(spacing: 12) {
-                Image(systemName: icon)
-                    .font(.caption)
-                    .foregroundStyle(.white)
-                    .frame(width: 28, height: 28)
-                    .background(color, in: RoundedRectangle(cornerRadius: 7))
-
-                Text(title)
-                    .font(.subheadline)
-                    .foregroundStyle(.primary)
-
+                rowIcon(icon)
+                rowTitle(title)
                 Spacer()
-
                 if let trailing {
-                    Text(trailing).font(.subheadline).foregroundStyle(.secondary)
+                    Text(trailing)
+                        .font(.brand(size: 15, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.6))
                 } else if isLink {
-                    Image(systemName: "chevron.right").font(.caption2.weight(.semibold)).foregroundStyle(.tertiary)
+                    rowChevron
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 13)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(action == nil)
+        .allowsHitTesting(action != nil)
     }
 
     // MARK: - 7. Reset Data Button
@@ -409,8 +392,8 @@ struct SettingsView: View {
             showingResetConfirmation = true
         } label: {
             Text("Reset All Data")
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(.red)
+                .font(.brand(size: 15, weight: .heavy))
+                .foregroundStyle(Color(red: 1, green: 0.5, blue: 0.5))
         }
         .padding(.top, 8)
     }
@@ -620,9 +603,20 @@ struct SettingsView: View {
                 user.totalExercises = 0
                 user.totalPerfectScores = 0
             }
-            NotificationService.shared.cancelAll()
+            if let user {
+                user.username = ""
+                user.soundEnabled = true
+            }
+            soundOn = true
+            NotificationService.shared.cancelReminders()
+            focusModeService.resetAll()
+            PersonalBestTracker.shared.resetAll()
+            AdaptiveDifficultyEngine.shared.resetAll()
+            ProgressReset.clear(standard: .standard, shared: UserDefaults(suiteName: "group.com.memori.shared") ?? .standard)
+            WidgetDataService.updateWidgetData(streak: 0, exercisesToday: 0, trainedToday: false)
         } catch {
             // Silent fail — data will be inconsistent but app won't crash
         }
     }
 }
+

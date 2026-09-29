@@ -11,6 +11,7 @@ enum SlotSound {
     static func chime() { play("slot-chime", volume: 0.9) }
 
     private static func play(_ name: String, volume: Float) {
+        guard SoundPreference.isOn else { return }
         if !configured {
             try? AVAudioSession.sharedInstance().setCategory(.ambient, options: [.mixWithOthers])
             configured = true

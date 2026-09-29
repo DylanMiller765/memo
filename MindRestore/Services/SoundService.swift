@@ -10,13 +10,7 @@ final class SoundService {
     /// cheap there, so those moments lean on haptics until custom audio exists.
     var isSuppressed = false
 
-    private var isEnabled: Bool {
-        let defaults = UserDefaults.standard
-        if defaults.object(forKey: "soundEnabled") == nil {
-            return true
-        }
-        return defaults.bool(forKey: "soundEnabled")
-    }
+    private var isEnabled: Bool { SoundPreference.isOn }
 
     // The stock "Fanfare"/"Ladder" tones read as cheap; these route to Memo's own sounds.
     func playCorrect() {

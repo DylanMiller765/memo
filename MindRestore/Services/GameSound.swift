@@ -24,13 +24,8 @@ enum GameSound {
 
     static func complete() { play("game-complete", volume: 0.65) }
 
-    private static var isEnabled: Bool {
-        let defaults = UserDefaults.standard
-        return defaults.object(forKey: "soundEnabled") == nil || defaults.bool(forKey: "soundEnabled")
-    }
-
     private static func play(_ name: String, volume: Float) {
-        guard isEnabled else { return }
+        guard SoundPreference.isOn else { return }
         if !configured {
             // Same as the slot: respects the silent switch, mixes with the user's music.
             try? AVAudioSession.sharedInstance().setCategory(.ambient, options: [.mixWithOthers])
@@ -47,5 +42,26 @@ enum GameSound {
         player.volume = volume
         player.currentTime = 0
         player.play()
+    }
+}
+
+/// The one Sounds switch (Settings). Game, slot and legacy sounds all check it.
+enum SoundPreference {
+    static let key = "soundEnabled"
+
+    static var isOn: Bool {
+        get { isOn(in: .standard) }
+        set { UserDefaults.standard.set(newValue, forKey: key) }
+    }
+
+    static func isOn(in defaults: UserDefaults) -> Bool {
+        defaults.object(forKey: key) == nil || defaults.bool(forKey: key)
+    }
+
+    /// Before 2.1.8 Settings saved the switch only on the User model, where no
+    /// sound code looked. Carry an "off" over once so it finally takes effect.
+    static func migrate(userSoundEnabled: Bool, defaults: UserDefaults = .standard) {
+        guard defaults.object(forKey: key) == nil, !userSoundEnabled else { return }
+        defaults.set(false, forKey: key)
     }
 }

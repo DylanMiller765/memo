@@ -281,6 +281,32 @@ final class FocusModeService {
         return true
     }
 
+    /// Reset All Data: stop blocking and forget the picked apps, schedule and
+    /// counters. Screen Time permission stays; it's an iOS setting, not app data.
+    func resetAll() {
+        removeShields()
+        activityCenter.stopMonitoring()
+        for key in [FocusKey.enabled, FocusKey.unlockUntil, FocusKey.unlockDuration, FocusKey.scheduleEnabled,
+                    FocusKey.scheduleStart, FocusKey.scheduleEnd, FocusKey.dailyAttemptCount, FocusKey.dailyAttemptDate,
+                    FocusKey.cooldownUntil, FocusKey.activitySelection, FocusKey.scheduleDays,
+                    FocusKey.manualScheduleOverrideUntil, FocusKey.dailyMinutes, FocusKey.weeklyMinutes,
+                    FocusKey.monthlyMinutes, FocusKey.dayStart, FocusKey.weekStart, FocusKey.monthStart,
+                    FocusKey.lastBlockStart] {
+            sharedDefaults.removeObject(forKey: key)
+        }
+        isEnabled = false
+        unlockUntil = nil
+        unlockDuration = 15
+        scheduleEnabled = false
+        scheduleStart = Calendar.current.date(bySettingHour: 22, minute: 0, second: 0, of: Date()) ?? Date()
+        scheduleEnd = Calendar.current.date(bySettingHour: 8, minute: 0, second: 0, of: Date()) ?? Date()
+        scheduleDays = [1, 2, 3, 4, 5, 6, 7]
+        manualScheduleOverrideUntil = nil
+        dailyAttemptCount = 0
+        cooldownUntil = nil
+        activitySelection = FamilyActivitySelection()
+    }
+
     // MARK: - Temporary Unlock
 
     /// Temporarily remove shields for `durationMinutes` minutes, then re-apply.
