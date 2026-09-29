@@ -2391,18 +2391,8 @@ struct OnboardingAttributionPage: View {
         case .tiktok: OnboardingAppIcon(asset: "logo-tiktok", size: size)
         case .instagram: OnboardingAppIcon(asset: "logo-instagram", size: size)
         case .youtube: OnboardingAppIcon(asset: "logo-youtube", size: size)
-        case .appStoreSearch: symbolIcon("magnifyingglass", size: size)
-        case .friend: symbolIcon("person.2.fill", size: size)
-        case .other: symbolIcon("ellipsis", size: size)
+        case .appStoreSearch, .friend, .other: AttributionGlyphIcon(source: source, size: size)
         }
-    }
-
-    private func symbolIcon(_ name: String, size: CGFloat) -> some View {
-        Image(systemName: name)
-            .font(.system(size: size * 0.45, weight: .heavy))
-            .foregroundStyle(ClimbColor.ink)
-            .frame(width: size, height: size)
-            .background(RoundedRectangle(cornerRadius: size * 0.23, style: .continuous).fill(ClimbColor.amber))
     }
 
     private func answer(_ source: AcquisitionSource?) {
@@ -2415,6 +2405,43 @@ struct OnboardingAttributionPage: View {
             if source != nil { try? await Task.sleep(for: .milliseconds(220)) }
             onAnswer(source)
         }
+    }
+}
+
+/// The non-app answers drawn as app icons, so they sit level with the
+/// TikTok, Instagram and YouTube logos next to them.
+struct AttributionGlyphIcon: View {
+    let source: AcquisitionSource
+    let size: CGFloat
+
+    private var symbol: String {
+        switch source {
+        case .appStoreSearch: return "magnifyingglass"
+        case .friend: return "person.2.fill"
+        default: return "ellipsis"
+        }
+    }
+
+    /// App Store blue, Messages green, Settings grey: each reads like what it means.
+    private var colors: [Color] {
+        switch source {
+        case .appStoreSearch: return [Color(red: 0.12, green: 0.78, blue: 1.0), Color(red: 0.07, green: 0.42, blue: 0.96)]
+        case .friend: return [Color(red: 0.4, green: 0.93, blue: 0.47), Color(red: 0.05, green: 0.72, blue: 0.24)]
+        default: return [Color(red: 0.62, green: 0.64, blue: 0.7), Color(red: 0.36, green: 0.38, blue: 0.45)]
+        }
+    }
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: size * 0.23, style: .continuous)
+        Image(systemName: symbol)
+            .font(.system(size: size * (source == .other ? 0.5 : 0.44), weight: .bold))
+            .foregroundStyle(.white)
+            .shadow(color: .black.opacity(0.18), radius: 1, y: 1)
+            .frame(width: size, height: size)
+            .background(shape.fill(LinearGradient(colors: colors, startPoint: .top, endPoint: .bottom)))
+            .overlay(shape.fill(LinearGradient(colors: [.white.opacity(0.22), .clear], startPoint: .top, endPoint: .center)))
+            .overlay(shape.stroke(Color.white.opacity(0.14), lineWidth: 1))
+            .accessibilityHidden(true)
     }
 }
 
@@ -3207,10 +3234,43 @@ struct OnboardingSparkBurst: View {
 /// counter per pass — until it lands where the score would place. Every
 /// name, level and rank comes from Game Center; without it the board stays
 /// locked instead of being invented.
+/// How a weekly board's scores read: "Lv 9", "9 digits", "212 ms". Reaction Time is lower-is-better.
+struct BoardUnit {
+    var gameName: String
+    var short: (Int) -> String
+    var phrase: (Int) -> String
+    var lowerIsBetter = false
+
+    func capitalized(_ score: Int) -> String {
+        let text = phrase(score)
+        return text.prefix(1).uppercased() + text.dropFirst()
+    }
+
+    /// The score that beats `score`.
+    func next(after score: Int) -> Int { lowerIsBetter ? max(score - 1, 1) : score + 1 }
+
+    static let visualMemory = BoardUnit(gameName: "Visual Memory", short: { "Lv \($0)" }, phrase: { "level \($0)" })
+
+    static func forGame(_ game: UnlockGame) -> BoardUnit {
+        switch game {
+        case .visualMemory: .visualMemory
+        case .numberMemory: BoardUnit(gameName: "Number Memory", short: { "\($0) digits" }, phrase: { "\($0) digits" })
+        case .chimpTest: BoardUnit(gameName: "Chimp Test", short: { "Lv \($0)" }, phrase: { "level \($0)" })
+        case .mathSprint: BoardUnit(gameName: "Math Sprint", short: { "\($0) solved" }, phrase: { "\($0) solved" })
+        case .colorMatch: BoardUnit(gameName: "Color Match", short: { "\($0) right" }, phrase: { "\($0) right" })
+        case .reactionTime: BoardUnit(gameName: "Reaction Time", short: { "\($0) ms" }, phrase: { "\($0) ms" }, lowerIsBetter: true)
+        }
+    }
+}
+
 struct OnboardingLeaderboardClimb: View {
     let board: OnboardingBoardState
     let level: Int
     let compact: Bool
+    /// Which board and how its scores read. Defaults to onboarding's Visual Memory demo.
+    var unit: BoardUnit = .visualMemory
+    /// True after a real game: the score is posted, so "You're #5", not "You'd place #5".
+    var isPosted = false
     let onPlayAgain: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -3233,7 +3293,7 @@ struct OnboardingLeaderboardClimb: View {
     /// The practice board is built from the level, so it's resolved here.
     private var resolved: OnboardingBoardState {
         if case .practice = board {
-            let rivals = OnboardingRivals.entries(level: level)
+            let rivals = OnboardingRivals.entries(level: level, lowerIsBetter: unit.lowerIsBetter)
             return .loaded(entries: rivals, totalPlayers: rivals.count)
         }
         return board
@@ -3246,7 +3306,7 @@ struct OnboardingLeaderboardClimb: View {
 
     private var window: Window? {
         guard case .loaded(let entries, let totalPlayers) = resolved, level > 0 else { return nil }
-        let beatenIndex = entries.firstIndex { $0.score < level } ?? entries.count
+        let beatenIndex = entries.firstIndex { unit.lowerIsBetter ? $0.score > level : $0.score < level } ?? entries.count
         // Only claim a rank that the loaded slice of the board can prove.
         let placementKnown = beatenIndex < entries.count || totalPlayers <= entries.count
         if placementKnown {
@@ -3359,7 +3419,7 @@ struct OnboardingLeaderboardClimb: View {
             guard let window else { return "Checking this week's board…" }
             if window.placement == nil { return landed ? "On the climb." : "Climbing…" }
             let rank = liveRank ?? (window.firstRank + window.rows.count)
-            return "You'd place #\(rank)\(landed ? "." : "…")"
+            return "\(isPosted ? "You're" : "You'd place") #\(rank)\(landed ? "." : "…")"
         }
     }
 
@@ -3369,20 +3429,20 @@ struct OnboardingLeaderboardClimb: View {
               totalPlayers >= placement, totalPlayers > 1 else { return nil }
         let percent = max(1, Int((Double(placement) / Double(totalPlayers) * 100).rounded(.up)))
         guard percent <= 50 else { return nil }
-        return "Top \(percent)% of Visual Memory players this week"
+        return "Top \(percent)% of \(unit.gameName) players this week"
     }
 
     private var subline: String {
         if level == 0 { return "Clear level 1 and your score counts." }
-        if isPractice { return "Level \(level) · Visual Memory · vs Memo's rivals" }
+        if isPractice { return "\(unit.capitalized(level)) · \(unit.gameName) · vs Memo's rivals" }
         switch resolved {
-        case .loading: return "Visual Memory · this week"
+        case .loading: return "\(unit.gameName) · this week"
         case .unavailable, .practice: return "Sign in to Game Center to compare with this week's players."
         case .loaded(let entries, _):
-            if entries.isEmpty { return "Nobody has posted a Visual Memory score yet." }
-            guard landed else { return "Level \(level) · Visual Memory · this week" }
-            if let cutoff = window?.cutoff { return "The top 50 starts at level \(cutoff) this week." }
-            return percentileText ?? "Level \(level) on this week's Visual Memory board"
+            if entries.isEmpty { return "Nobody has posted a \(unit.gameName) score yet." }
+            guard landed else { return "\(unit.capitalized(level)) · \(unit.gameName) · this week" }
+            if let cutoff = window?.cutoff { return "The top 50 starts at \(unit.phrase(cutoff)) this week." }
+            return percentileText ?? "\(unit.capitalized(level)) on this week's \(unit.gameName) board"
         }
     }
 
@@ -3456,7 +3516,7 @@ struct OnboardingLeaderboardClimb: View {
                     .background(RoundedRectangle(cornerRadius: 5).fill(ClimbColor.mint))
             }
             Spacer(minLength: 8)
-            Text("Lv \(entry.score)")
+            Text(unit.short(entry.score))
                 .font(.system(size: 13, weight: .heavy, design: .rounded))
                 .foregroundStyle(.white.opacity(0.8))
         }
@@ -3485,7 +3545,7 @@ struct OnboardingLeaderboardClimb: View {
             Text("You")
                 .font(.system(size: 16, weight: .heavy, design: .rounded))
             Spacer(minLength: 8)
-            Text("Lv \(level)")
+            Text(unit.short(level))
                 .font(.system(size: 14, weight: .heavy, design: .rounded))
         }
         .foregroundStyle(ClimbColor.ink)
@@ -3513,9 +3573,9 @@ struct OnboardingLeaderboardClimb: View {
                 .foregroundStyle(OB.coral)
             Group {
                 if let cutoff = window.cutoff {
-                    Text("Reach level \(cutoff + 1) to crack the top 50.")
+                    Text("Reach \(unit.phrase(unit.next(after: cutoff))) to crack the top 50.")
                 } else if let above = window.above {
-                    Text("Reach level \(above.score + 1) to pass \(above.username).")
+                    Text("Reach \(unit.phrase(unit.next(after: above.score))) to pass \(above.username).")
                 } else {
                     Text("Nobody's above you. Now defend it.")
                 }
@@ -3559,7 +3619,7 @@ struct OnboardingLeaderboardClimb: View {
                 Text("Your spot is waiting")
                     .font(.system(size: 16, weight: .bold, design: .rounded))
                     .foregroundStyle(OB.fg)
-                Text("Level \(level) · sign in to Game Center to reveal it")
+                Text("\(unit.capitalized(level)) · sign in to Game Center to reveal it")
                     .font(.system(size: 13, weight: .medium, design: .rounded))
                     .foregroundStyle(OB.fg2)
                     .multilineTextAlignment(.center)

@@ -78,6 +78,7 @@ final class ChimpTestViewModel {
     // MARK: - Game Logic
 
     func startGame() {
+        GameSound.resetCombo()
         phase = .playing
         currentLevel = 4
         bestLevel = 0
@@ -134,7 +135,7 @@ final class ChimpTestViewModel {
             if nextExpected > currentLevel {
                 // Level complete!
                 HapticService.correct()
-                SoundService.shared.playCorrect()
+                GameSound.levelUp()
                 bestLevel = max(bestLevel, currentLevel)
                 currentLevel += 1
                 onLevelCleared?(bestLevel)
@@ -147,7 +148,7 @@ final class ChimpTestViewModel {
             // Wrong tap
             wrongCell = index
             HapticService.wrong()
-            SoundService.shared.playWrong()
+            GameSound.wrong()
             lives -= 1
 
             if lives <= 0 {
@@ -167,7 +168,7 @@ final class ChimpTestViewModel {
     private func finishGame() {
         // bestLevel now tracks the highest level actually completed (set before currentLevel increments)
         phase = .finished
-        SoundService.shared.playComplete()
+        GameSound.complete()
         HapticService.complete()
     }
 
@@ -278,45 +279,19 @@ struct ChimpTestView: View {
     // MARK: - Setup
 
     private var setupView: some View {
-        VStack(spacing: 20) {
-            Spacer()
-
-            TrainingTileMiniPreview(type: .chimpTest, color: AppColors.amber, scale: 2.0)
-                .frame(width: 200, height: 140)
-
-            VStack(spacing: 6) {
-                Text("Chimp Test")
-                    .font(.title.weight(.bold))
-                Text("Can you beat a chimpanzee?")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-
-            VStack(alignment: .leading, spacing: 10) {
-                infoRow(icon: "number", text: "Numbers appear on a grid")
-                infoRow(icon: "eye.slash", text: "Tap 1 first — then numbers hide")
-                infoRow(icon: "arrow.up", text: "Tap remaining in order from memory")
-                infoRow(icon: "heart.fill", text: "3 lives — wrong tap loses one")
-                infoRow(icon: "star.fill", text: "Each level adds one more number")
-                infoRow(icon: "pawprint.fill", text: "Chimps average level 7 — can you beat that?")
-            }
-            .appCard()
-            .padding(.horizontal)
-
-            Spacer()
-
-            Button {
+        GameIntro(
+            game: .chimpTest,
+            subtitle: "Can you beat a chimp?",
+            steps: [
+                (icon: "1.circle.fill", text: "Tap 1 first. The rest hide."),
+                (icon: "list.number", text: "Tap the rest in order"),
+                (icon: "heart.fill", text: "3 lives. Each level adds a number."),
+            ],
+            onStart: {
                 Analytics.exerciseStarted(game: ExerciseType.chimpTest.rawValue)
                 viewModel.startGame()
-            } label: {
-                Text("Start")
-                    .accentButton()
             }
-            .pulsingWhenIdle()
-            .accessibilityHint("Starts the exercise")
-            .padding(.horizontal, 32)
-        }
-        .padding(.vertical, 24)
+        )
         .overlay(alignment: .topTrailing) {
             Button { showingInfo = true } label: {
                 Image(systemName: "questionmark.circle.fill")

@@ -17,7 +17,13 @@ struct GameGlyph: View {
     }
 
     private var base: LinearGradient {
-        let pair: (Color, Color) = switch game {
+        let pair = Self.palette(game)
+        return LinearGradient(colors: [pair.0, pair.1], startPoint: .top, endPoint: .bottom)
+    }
+
+    /// Top and bottom of each game's tile, shared with the intro's step icons.
+    static func palette(_ game: UnlockGame) -> (Color, Color) {
+        switch game {
         case .visualMemory: (Color(red: 0.17, green: 0.23, blue: 0.53), Color(red: 0.11, green: 0.15, blue: 0.38))
         case .numberMemory: (Color(red: 0.05, green: 0.30, blue: 0.29), Color(red: 0.03, green: 0.19, blue: 0.19))
         case .chimpTest: (Color(red: 0.35, green: 0.25, blue: 0.03), Color(red: 0.23, green: 0.16, blue: 0.01))
@@ -25,7 +31,6 @@ struct GameGlyph: View {
         case .colorMatch: (Color(red: 0.25, green: 0.12, blue: 0.35), Color(red: 0.15, green: 0.07, blue: 0.22))
         case .reactionTime: (Color(red: 0.55, green: 0.13, blue: 0.10), Color(red: 0.07, green: 0.47, blue: 0.24))
         }
-        return LinearGradient(colors: [pair.0, pair.1], startPoint: .top, endPoint: .bottom)
     }
 
     @ViewBuilder private var content: some View {

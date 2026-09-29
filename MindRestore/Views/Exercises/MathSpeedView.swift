@@ -30,6 +30,7 @@ final class MathSprintViewModel {
     var accuracy: Double { Double(completed) / Double(max(1, completed + wrongCount)) }
 
     func start() {
+        GameSound.resetCombo()
         bank = TimeBank()
         wrongCount = 0
         entry = ""
@@ -57,12 +58,14 @@ final class MathSprintViewModel {
             float = FuseFloat(text: text, positive: true)
             flash = .correct
             HapticService.correct()
+            GameSound.levelUp()
         } else {
             bank.wrong()
             wrongCount += 1
             float = FuseFloat(text: "−3", positive: false)
             flash = .wrong
             HapticService.wrong()
+            GameSound.wrong()
             if bank.isEmpty { isOver = true }
         }
         let next = MathSprintEngine.problem(completed: bank.completed, using: &rng)
@@ -141,34 +144,19 @@ struct MathSpeedView: View {
     // MARK: Intro (Train mode, first run)
 
     private var intro: some View {
-        VStack(spacing: 16) {
-            Spacer()
-            Text("7 × 8")
-                .font(HeroNumber.font(56))
-                .foregroundStyle(LinearGradient.hero(Color(red: 0.56, green: 0.69, blue: 1)))
-            Text("Math Sprint")
-                .font(.brand(size: 28, weight: .black))
-                .foregroundStyle(OB.fg)
-            Text("Answer before the bar runs out.\nRight answers add time. Wrong ones cost 3 seconds.")
-                .font(.brand(size: 15, weight: .semibold))
-                .foregroundStyle(OB.fg2)
-                .multilineTextAlignment(.center)
-            Spacer()
-            Button {
+        GameIntro(
+            game: .mathSprint,
+            subtitle: "Quick math against the clock.",
+            steps: [
+                (icon: "timer", text: "Solve before the bar runs out"),
+                (icon: "plus", text: "Right answers add time"),
+                (icon: "minus", text: "Wrong answers cost 3 seconds"),
+            ],
+            onStart: {
                 Analytics.exerciseStarted(game: ExerciseType.mathSpeed.rawValue)
                 viewModel.start()
-            } label: {
-                Text("Start")
-                    .font(.brand(size: 17, weight: .heavy))
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity, minHeight: 56)
-                    .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(OB.accent))
             }
-            .buttonStyle(.plain)
-            .padding(.horizontal, 20)
-            .padding(.bottom, 12)
-        }
-        .padding(.horizontal, 20)
+        )
     }
 
     // MARK: Playing

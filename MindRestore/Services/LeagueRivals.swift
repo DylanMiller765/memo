@@ -103,10 +103,12 @@ enum LeagueRivalMemory {
 enum OnboardingRivals {
     private static let seats: [(name: String, offset: Int)] = [("Byte", 2), ("Turbo", -1), ("Pixel", -2), ("Nova", -3)]
 
-    static func entries(level: Int) -> [LeaderboardEntryData] {
+    /// Rivals seated around the player's score. Lower-is-better boards (Reaction Time, in ms)
+    /// space them 15 ms apart and flip the direction so Byte still leads.
+    static func entries(level: Int, lowerIsBetter: Bool = false) -> [LeaderboardEntryData] {
         guard level > 0 else { return [] }
         return seats
-            .map { (name: $0.name, score: level + $0.offset) }
+            .map { (name: $0.name, score: lowerIsBetter ? level - $0.offset * 15 : level + $0.offset) }
             .filter { $0.score >= 1 }
             .enumerated()
             .map { index, seat in

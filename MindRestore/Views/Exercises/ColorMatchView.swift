@@ -30,6 +30,7 @@ final class ColorMatchSprintViewModel {
     var accuracy: Double { Double(completed) / Double(max(1, completed + wrongCount)) }
 
     func start() {
+        GameSound.resetCombo()
         bank = TimeBank()
         wrongCount = 0
         flash = .idle
@@ -55,12 +56,14 @@ final class ColorMatchSprintViewModel {
             float = FuseFloat(text: text, positive: true)
             flash = .correct
             HapticService.correct()
+            GameSound.levelUp()
         } else {
             bank.wrong()
             wrongCount += 1
             float = FuseFloat(text: "−3", positive: false)
             flash = .wrong
             HapticService.wrong()
+            GameSound.wrong()
             if bank.isEmpty { isOver = true }
         }
         let next = ColorMatchEngine.prompt(completed: bank.completed, previous: prompt, using: &rng)
@@ -144,34 +147,19 @@ struct ColorMatchView: View {
     // MARK: Intro (Train mode, first run)
 
     private var intro: some View {
-        VStack(spacing: 16) {
-            Spacer()
-            Text("BLUE")
-                .font(HeroNumber.font(56))
-                .foregroundStyle(InkColor.red.color)
-            Text("Color Match")
-                .font(.brand(size: 28, weight: .black))
-                .foregroundStyle(OB.fg)
-            Text("Tap the color of the ink, not the word.\nRight answers add time. Wrong ones cost 3 seconds.")
-                .font(.brand(size: 15, weight: .semibold))
-                .foregroundStyle(OB.fg2)
-                .multilineTextAlignment(.center)
-            Spacer()
-            Button {
+        GameIntro(
+            game: .colorMatch,
+            subtitle: "Tap the ink, not the word.",
+            steps: [
+                (icon: "paintpalette.fill", text: "Tap the ink color, not the word"),
+                (icon: "plus", text: "Right answers add time"),
+                (icon: "minus", text: "Wrong answers cost 3 seconds"),
+            ],
+            onStart: {
                 Analytics.exerciseStarted(game: ExerciseType.colorMatch.rawValue)
                 viewModel.start()
-            } label: {
-                Text("Start")
-                    .font(.brand(size: 17, weight: .heavy))
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity, minHeight: 56)
-                    .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(OB.accent))
             }
-            .buttonStyle(.plain)
-            .padding(.horizontal, 20)
-            .padding(.bottom, 12)
-        }
-        .padding(.horizontal, 20)
+        )
     }
 
     // MARK: Playing

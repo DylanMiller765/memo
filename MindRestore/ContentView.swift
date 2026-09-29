@@ -75,6 +75,8 @@ struct ContentView: View {
     @State private var showingMemoPoseSheet = false
     #endif
     @State private var showingScreenshotHardPaywall = false
+    /// `--screenshot-target game-intro | game-result | game-result-pb`: the first-run and results screens.
+    @State private var screenshotGameScreen: String?
     #endif
 
     @State private var showQuickGame = false
@@ -136,6 +138,9 @@ struct ContentView: View {
         .environment(deepLinkRouter)
         .environment(focusModeService)
         #if DEBUG
+        .fullScreenCover(item: Binding(get: { screenshotGameScreen.map(ScreenshotGameScreen.init) }, set: { screenshotGameScreen = $0?.id })) { screen in
+            screen.view.environment(gameCenterService).environment(trainingManager).environment(paywallTrigger).environment(storeService).environment(deepLinkRouter)
+        }
         .fullScreenCover(isPresented: $showingScreenshotHardPaywall) {
             PaywallView(
                 isHighIntent: true,
@@ -480,6 +485,10 @@ struct ContentView: View {
                 showingMemoPoseSheet = true
             case "paywall-hard", "paywall-concise":
                 showingScreenshotHardPaywall = true
+            case let t? where t.hasPrefix("result-") || t.hasPrefix("flow-") || t.hasPrefix("intro-") || t.hasPrefix("unlock-end"):
+                screenshotGameScreen = t
+            case "game-intro", "game-result", "game-result-pb":
+                screenshotGameScreen = screenshotTargetArgument
             case "train":
                 selectedTab = .train
             case "compete":
@@ -519,4 +528,42 @@ struct ContentView: View {
 
 }
 
+#if DEBUG
+/// Screenshot hosts for the game screens, with Visual Memory's real result data shape.
+private struct ScreenshotGameScreen: Identifiable {
+    let id: String
 
+    @ViewBuilder var view: some View {
+        switch id {
+        case "game-intro":
+            ExerciseInstructionsView(type: .visualMemory) {}
+        case let v where v.hasPrefix("result-") || v.hasPrefix("flow-"):
+            ResultMockScreen(target: v)
+        case "unlock-end":
+            UnlockedScreen(game: .visualMemory, outcome: .unlocked(minutes: 10, tier: .great, score: 9, isPersonalBest: true)) {}
+        case "intro-reactionTime": NavigationStack { ReactionTimeView() }
+        case "intro-sequentialMemory": NavigationStack { SequentialMemoryView() }
+        case "intro-mathSpeed": NavigationStack { MathSpeedView() }
+        case "intro-colorMatch": NavigationStack { ColorMatchView() }
+        case "intro-visualMemory": NavigationStack { VisualMemoryView() }
+        case "intro-chimpTest": NavigationStack { ChimpTestView() }
+        default:
+            GameResultView(
+                gameTitle: "Visual Memory",
+                gameIcon: "square.grid.3x3.fill",
+                accentColor: AppColors.indigo,
+                mainScore: 9,
+                scoreLabel: "LEVEL REACHED",
+                ratingText: "Sharp!",
+                stats: [(label: "Levels Cleared", value: "8"), (label: "Time", value: "1:42")],
+                isNewPersonalBest: id == "game-result-pb",
+                personalBest: 7,
+                exerciseType: .visualMemory,
+                leaderboardScore: 9,
+                onPlayAgain: {},
+                onDone: {}
+            )
+        }
+    }
+}
+#endif

@@ -71,6 +71,7 @@ final class VisualMemoryViewModel {
     }
 
     func startGame() {
+        GameSound.resetCombo()
         level = (isOnboardingPreview || startsAtLevelOne) ? 1 : max(1, AdaptiveDifficultyEngine.shared.currentLevel(for: .visualMemory))
         levelsCompleted = 0
         startTime = Date.now
@@ -124,6 +125,7 @@ final class VisualMemoryViewModel {
     private func clearLevel() {
         levelsCompleted = level
         HapticService.correct()
+        GameSound.levelUp()
         phase = .correct
         onLevelCleared?(levelsCompleted)
         showTimer?.invalidate()
@@ -318,43 +320,19 @@ struct VisualMemoryView: View {
     // MARK: - Setup
 
     private var setupView: some View {
-        VStack(spacing: 32) {
-            Spacer()
-
-            TrainingTileMiniPreview(type: .visualMemory, color: AppColors.indigo, scale: 2.0)
-                .frame(width: 200, height: 140)
-
-            VStack(spacing: 8) {
-                Text("Visual Memory")
-                    .font(.title.weight(.bold))
-                Text("Remember the pattern")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-
-            VStack(alignment: .leading, spacing: 12) {
-                infoRow(icon: "eye.fill", text: "Memorize which squares light up")
-                infoRow(icon: "hand.tap.fill", text: "Tap to recreate the pattern")
-                infoRow(icon: "exclamationmark.triangle.fill", text: "One mistake and it's over!")
-            }
-            .appCard()
-            .padding(.horizontal)
-
-            Spacer()
-
-            Button {
+        GameIntro(
+            game: .visualMemory,
+            subtitle: "Remember the pattern.",
+            steps: [
+                (icon: "eye.fill", text: "Squares light up"),
+                (icon: "hand.tap.fill", text: "Tap the same squares"),
+                (icon: "xmark", text: "One wrong tap ends it"),
+            ],
+            onStart: {
                 Analytics.exerciseStarted(game: ExerciseType.visualMemory.rawValue)
                 viewModel.startGame()
-            } label: {
-                Text("Start")
-                    .accentButton()
             }
-            .pulsingWhenIdle()
-            .accessibilityHint("Starts the exercise")
-            .padding(.horizontal, 32)
-        }
-        .padding(.vertical, 24)
+        )
         .overlay(alignment: .topTrailing) {
             Button { showingInfo = true } label: {
                 Image(systemName: "questionmark.circle.fill")

@@ -66,7 +66,7 @@ private struct BlockedAppName: View {
     }
 }
 
-private func loadWeeklyBoard(for game: UnlockGame, gameCenter: GameCenterService) async -> [LeaderboardEntryData] {
+func loadWeeklyBoard(for game: UnlockGame, gameCenter: GameCenterService) async -> [LeaderboardEntryData] {
     let result = await gameCenter.loadLeaderboardEntries(
         category: game.leaderboardCategory,
         timeFilter: .thisWeek,
@@ -169,7 +169,8 @@ struct UnlockedScreen: View {
                             .padding(.top, 40)
                     }
                     if showClimb, let game {
-                        OnboardingLeaderboardClimb(board: board, level: max(score, 1), compact: compact, onPlayAgain: {})
+                        OnboardingLeaderboardClimb(board: board, level: max(score, 1), compact: compact,
+                                                   unit: BoardUnit.forGame(game), onPlayAgain: {})
                             .padding(.horizontal, 20)
                             .transition(.move(edge: .bottom).combined(with: .opacity))
                             .task { await loadBoard(game) }

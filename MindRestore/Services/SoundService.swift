@@ -18,16 +18,20 @@ final class SoundService {
         return defaults.bool(forKey: "soundEnabled")
     }
 
+    // The stock "Fanfare"/"Ladder" tones read as cheap; these route to Memo's own sounds.
     func playCorrect() {
-        play(systemSoundID: 1025)
+        guard !isSuppressed else { return }
+        GameSound.levelUp()
     }
 
     func playWrong() {
-        play(systemSoundID: 1521)
+        guard !isSuppressed else { return }
+        GameSound.wrong()
     }
 
     func playComplete() {
-        play(systemSoundID: 1026)
+        guard !isSuppressed else { return }
+        GameSound.complete()
     }
 
     func playTap() {

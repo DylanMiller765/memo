@@ -2,19 +2,31 @@ import StoreKit
 import UIKit
 
 enum ReviewPromptService {
+    /// Set when a game qualifies; shown once the player leaves the result screen.
+    @MainActor private static var isPending = false
+
+    /// Called as each game is saved. The rating sheet would cover the result
+    /// the player just earned, so it waits for `presentPendingIfAny()`.
     @MainActor
     static func requestIfAppropriate(totalExercises: Int, streak: Int) {
-        let defaults = UserDefaults.standard
-        let lastPrompt = defaults.double(forKey: "lastReviewPromptDate")
+        let lastPrompt = UserDefaults.standard.double(forKey: "lastReviewPromptDate")
         let daysSincePrompt = (Date.now.timeIntervalSince1970 - lastPrompt) / 86400
-
         guard totalExercises >= 5, streak >= 2, daysSincePrompt > 90 else { return }
+        isPending = true
+    }
 
-        defaults.set(Date.now.timeIntervalSince1970, forKey: "lastReviewPromptDate")
-
-        if let scene = UIApplication.shared.connectedScenes
-            .first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene {
-            AppStore.requestReview(in: scene)
+    /// Called when the player taps Done on a result: asks for the rating on the way out.
+    @MainActor
+    static func presentPendingIfAny() {
+        guard isPending else { return }
+        isPending = false
+        UserDefaults.standard.set(Date.now.timeIntervalSince1970, forKey: "lastReviewPromptDate")
+        // Let the result finish closing first.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            if let scene = UIApplication.shared.connectedScenes
+                .first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene {
+                AppStore.requestReview(in: scene)
+            }
         }
     }
 

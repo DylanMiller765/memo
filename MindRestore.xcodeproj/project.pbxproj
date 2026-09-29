@@ -141,6 +141,18 @@
 		D1BC39E1096EFABF0806ADA8 /* slot-tick.caf in Resources */ = {isa = PBXBuildFile; fileRef = 70D6EDBF7EE65C79D9F21E51 /* slot-tick.caf */; };
 		2DCB0743D6F7CB424FEB4D33 /* slot-lock.caf in Resources */ = {isa = PBXBuildFile; fileRef = CB550715C7C6B6B8FD0A2895 /* slot-lock.caf */; };
 		582503BA66E8F359CCE62372 /* slot-chime.caf in Resources */ = {isa = PBXBuildFile; fileRef = BC89DAB585C8EEF815515204 /* slot-chime.caf */; };
+		955CC623A0E060C84D12EC5C /* level-up-1.caf in Resources */ = {isa = PBXBuildFile; fileRef = 1AE3705A850C4CC942B13782 /* level-up-1.caf */; };
+		42973A7380EB138A8E70741A /* level-up-2.caf in Resources */ = {isa = PBXBuildFile; fileRef = 1EF0FFFDBDBD9DB1A9D37B3F /* level-up-2.caf */; };
+		5CF2888794BD27BA588F4F0F /* level-up-3.caf in Resources */ = {isa = PBXBuildFile; fileRef = 02EAB44044F4E0BB66C569D6 /* level-up-3.caf */; };
+		3BD01C1630418A0E21321665 /* level-up-4.caf in Resources */ = {isa = PBXBuildFile; fileRef = BAA6D61B0E92ED3A0B516EC2 /* level-up-4.caf */; };
+		B8B14B3C76173A4E7643A82B /* level-up-5.caf in Resources */ = {isa = PBXBuildFile; fileRef = 13DB7F29EF928D3CF38E0039 /* level-up-5.caf */; };
+		3775176317E5D19A169A7EF6 /* level-up-6.caf in Resources */ = {isa = PBXBuildFile; fileRef = 78FC32DA1BEE8F601AEFA7BE /* level-up-6.caf */; };
+		8E1C81CF81F03EE0646FE47A /* level-up-7.caf in Resources */ = {isa = PBXBuildFile; fileRef = CC5587BEB67B86832C1C1712 /* level-up-7.caf */; };
+		0806F2474548EC59F4F5A3B2 /* level-up-8.caf in Resources */ = {isa = PBXBuildFile; fileRef = 73F2FE92F4FD7C11901B49DC /* level-up-8.caf */; };
+		292CDD2E642AFCD7CA3E76FA /* level-up-9.caf in Resources */ = {isa = PBXBuildFile; fileRef = 7F40842BE1B3D8494DB38F04 /* level-up-9.caf */; };
+		841529FC51DF16F6F5C6D7D9 /* level-up-10.caf in Resources */ = {isa = PBXBuildFile; fileRef = 5ECEF6CE054A09FFB1A05380 /* level-up-10.caf */; };
+		69663A25DD3F208054C97FF1 /* game-complete.caf in Resources */ = {isa = PBXBuildFile; fileRef = F79B8975B77D49225AC5822B /* game-complete.caf */; };
+		4E172D52B17018A2A1FC2986 /* wrong-soft.caf in Resources */ = {isa = PBXBuildFile; fileRef = A42A4282982854FBF49DE803 /* wrong-soft.caf */; };
 		F789EDC9ED468B3E1450FA8E /* SlotSound.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A30C2699777846E67604987 /* SlotSound.swift */; };
 		68093D0B7E69513A5ACE8B57 /* FocusUnlockFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FE626F2B7360F9FD1EAE727 /* FocusUnlockFlowView.swift */; };
 		67D5D3434F4F7BD38985B0A3 /* UnlockEndScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F868B72EAF022F12EC52513 /* UnlockEndScreens.swift */; };
@@ -165,6 +177,11 @@
 		9043BAFAB71621DD45E7DBCE /* OnboardingClimb.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E6D6FCFA616824C10BBE030 /* OnboardingClimb.swift */; };
 		AAAECFEFF4CF9E529EE25AF1 /* OnboardingRivalsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EF51150B70EA17D7A68F138 /* OnboardingRivalsTests.swift */; };
 		ACQS0000000000000000A001 /* AcquisitionSourceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACQS0000000000000000F001 /* AcquisitionSourceTests.swift */; };
+		6AB2A84F503CEB3B24EA7B02 /* GameResultVariants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C2DF53B78B5FCB8CB4CE832 /* GameResultVariants.swift */; };
+		D897092BE2F48D3A03923F75 /* GameSound.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5A03982E6960A17520C02CF /* GameSound.swift */; };
+		266CC8B9CB6FA224178937B6 /* GameResultFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85F809EFFB5A330F67AE2DDC /* GameResultFlow.swift */; };
+		AD0D692F826C314C72A74C9F /* GameIntro.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEB77FA523D6710AAA1EC65B /* GameIntro.swift */; };
+		E9E9DD202DA6ABF001232EE5 /* GameEndDataTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FF4CCBFE423D93713CD3839 /* GameEndDataTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -376,6 +393,18 @@
 		70D6EDBF7EE65C79D9F21E51 /* slot-tick.caf */ = {isa = PBXFileReference; lastKnownFileType = file; path = slot-tick.caf; sourceTree = "<group>"; };
 		CB550715C7C6B6B8FD0A2895 /* slot-lock.caf */ = {isa = PBXFileReference; lastKnownFileType = file; path = slot-lock.caf; sourceTree = "<group>"; };
 		BC89DAB585C8EEF815515204 /* slot-chime.caf */ = {isa = PBXFileReference; lastKnownFileType = file; path = slot-chime.caf; sourceTree = "<group>"; };
+		1AE3705A850C4CC942B13782 /* level-up-1.caf */ = {isa = PBXFileReference; lastKnownFileType = file; path = level-up-1.caf; sourceTree = "<group>"; };
+		1EF0FFFDBDBD9DB1A9D37B3F /* level-up-2.caf */ = {isa = PBXFileReference; lastKnownFileType = file; path = level-up-2.caf; sourceTree = "<group>"; };
+		02EAB44044F4E0BB66C569D6 /* level-up-3.caf */ = {isa = PBXFileReference; lastKnownFileType = file; path = level-up-3.caf; sourceTree = "<group>"; };
+		BAA6D61B0E92ED3A0B516EC2 /* level-up-4.caf */ = {isa = PBXFileReference; lastKnownFileType = file; path = level-up-4.caf; sourceTree = "<group>"; };
+		13DB7F29EF928D3CF38E0039 /* level-up-5.caf */ = {isa = PBXFileReference; lastKnownFileType = file; path = level-up-5.caf; sourceTree = "<group>"; };
+		78FC32DA1BEE8F601AEFA7BE /* level-up-6.caf */ = {isa = PBXFileReference; lastKnownFileType = file; path = level-up-6.caf; sourceTree = "<group>"; };
+		CC5587BEB67B86832C1C1712 /* level-up-7.caf */ = {isa = PBXFileReference; lastKnownFileType = file; path = level-up-7.caf; sourceTree = "<group>"; };
+		73F2FE92F4FD7C11901B49DC /* level-up-8.caf */ = {isa = PBXFileReference; lastKnownFileType = file; path = level-up-8.caf; sourceTree = "<group>"; };
+		7F40842BE1B3D8494DB38F04 /* level-up-9.caf */ = {isa = PBXFileReference; lastKnownFileType = file; path = level-up-9.caf; sourceTree = "<group>"; };
+		5ECEF6CE054A09FFB1A05380 /* level-up-10.caf */ = {isa = PBXFileReference; lastKnownFileType = file; path = level-up-10.caf; sourceTree = "<group>"; };
+		F79B8975B77D49225AC5822B /* game-complete.caf */ = {isa = PBXFileReference; lastKnownFileType = file; path = game-complete.caf; sourceTree = "<group>"; };
+		A42A4282982854FBF49DE803 /* wrong-soft.caf */ = {isa = PBXFileReference; lastKnownFileType = file; path = wrong-soft.caf; sourceTree = "<group>"; };
 		4A30C2699777846E67604987 /* SlotSound.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlotSound.swift; sourceTree = "<group>"; };
 		8FE626F2B7360F9FD1EAE727 /* FocusUnlockFlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusUnlockFlowView.swift; sourceTree = "<group>"; };
 		5F868B72EAF022F12EC52513 /* UnlockEndScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnlockEndScreens.swift; sourceTree = "<group>"; };
@@ -400,6 +429,11 @@
 		4E6D6FCFA616824C10BBE030 /* OnboardingClimb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingClimb.swift; sourceTree = "<group>"; };
 		8EF51150B70EA17D7A68F138 /* OnboardingRivalsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingRivalsTests.swift; sourceTree = "<group>"; };
 		ACQS0000000000000000F001 /* AcquisitionSourceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcquisitionSourceTests.swift; sourceTree = "<group>"; };
+		1C2DF53B78B5FCB8CB4CE832 /* GameResultVariants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameResultVariants.swift; sourceTree = "<group>"; };
+		D5A03982E6960A17520C02CF /* GameSound.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameSound.swift; sourceTree = "<group>"; };
+		85F809EFFB5A330F67AE2DDC /* GameResultFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameResultFlow.swift; sourceTree = "<group>"; };
+		AEB77FA523D6710AAA1EC65B /* GameIntro.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameIntro.swift; sourceTree = "<group>"; };
+		8FF4CCBFE423D93713CD3839 /* GameEndDataTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameEndDataTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -664,6 +698,7 @@
 		3FB21F1A039F009995EF6AC7 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				D5A03982E6960A17520C02CF /* GameSound.swift */,
 				59798F2DEF0DEFA761CD6140 /* TrainUpNext.swift */,
 				586F7FD19AF1E548EDA0BC55 /* LeagueRivals.swift */,
 				C1205D3B2DBA3FC584AAFA48 /* LeagueChase.swift */,
@@ -750,6 +785,8 @@
 		B57CC3DB666874F9DD66355F /* Components */ = {
 			isa = PBXGroup;
 			children = (
+				85F809EFFB5A330F67AE2DDC /* GameResultFlow.swift */,
+				1C2DF53B78B5FCB8CB4CE832 /* GameResultVariants.swift */,
 				1675A3128AFEEE6237CB4A6B /* StickerAvatar.swift */,
 				072AAB21E68ECE4AE2A41824 /* ChunkyButton.swift */,
 				7DD4F43975842F6CBE6D7E7E /* StreakFreezeToast.swift */,
@@ -875,6 +912,7 @@
 		TEST0003000000000000TS01 /* MindRestoreTests */ = {
 			isa = PBXGroup;
 			children = (
+				8FF4CCBFE423D93713CD3839 /* GameEndDataTests.swift */,
 				8EF51150B70EA17D7A68F138 /* OnboardingRivalsTests.swift */,
 				ACQS0000000000000000F001 /* AcquisitionSourceTests.swift */,
 				8F7754704398E8954D7B39F3 /* TrainUpNextTests.swift */,
@@ -916,6 +954,7 @@
 		B657C365A4F9C192417576D3 /* GameKit */ = {
 			isa = PBXGroup;
 			children = (
+				AEB77FA523D6710AAA1EC65B /* GameIntro.swift */,
 				AB629122C607D803AB2A9AD1 /* GameScaffold.swift */,
 				C6B50D4DEC42A20E78EB9749 /* GameGlyph.swift */,
 				EEB97712AB294AB2094F9B5F /* UnlockBanner.swift */,
@@ -932,6 +971,18 @@
 			isa = PBXGroup;
 			children = (
 				BC89DAB585C8EEF815515204 /* slot-chime.caf */,
+				1AE3705A850C4CC942B13782 /* level-up-1.caf */,
+				1EF0FFFDBDBD9DB1A9D37B3F /* level-up-2.caf */,
+				02EAB44044F4E0BB66C569D6 /* level-up-3.caf */,
+				BAA6D61B0E92ED3A0B516EC2 /* level-up-4.caf */,
+				13DB7F29EF928D3CF38E0039 /* level-up-5.caf */,
+				78FC32DA1BEE8F601AEFA7BE /* level-up-6.caf */,
+				CC5587BEB67B86832C1C1712 /* level-up-7.caf */,
+				73F2FE92F4FD7C11901B49DC /* level-up-8.caf */,
+				7F40842BE1B3D8494DB38F04 /* level-up-9.caf */,
+				5ECEF6CE054A09FFB1A05380 /* level-up-10.caf */,
+				F79B8975B77D49225AC5822B /* game-complete.caf */,
+				A42A4282982854FBF49DE803 /* wrong-soft.caf */,
 				CB550715C7C6B6B8FD0A2895 /* slot-lock.caf */,
 				70D6EDBF7EE65C79D9F21E51 /* slot-tick.caf */,
 			);
@@ -1192,6 +1243,18 @@
 			buildActionMask = 2147483647;
 			files = (
 				582503BA66E8F359CCE62372 /* slot-chime.caf in Resources */,
+				955CC623A0E060C84D12EC5C /* level-up-1.caf in Resources */,
+				42973A7380EB138A8E70741A /* level-up-2.caf in Resources */,
+				5CF2888794BD27BA588F4F0F /* level-up-3.caf in Resources */,
+				3BD01C1630418A0E21321665 /* level-up-4.caf in Resources */,
+				B8B14B3C76173A4E7643A82B /* level-up-5.caf in Resources */,
+				3775176317E5D19A169A7EF6 /* level-up-6.caf in Resources */,
+				8E1C81CF81F03EE0646FE47A /* level-up-7.caf in Resources */,
+				0806F2474548EC59F4F5A3B2 /* level-up-8.caf in Resources */,
+				292CDD2E642AFCD7CA3E76FA /* level-up-9.caf in Resources */,
+				841529FC51DF16F6F5C6D7D9 /* level-up-10.caf in Resources */,
+				69663A25DD3F208054C97FF1 /* game-complete.caf in Resources */,
+				4E172D52B17018A2A1FC2986 /* wrong-soft.caf in Resources */,
 				2DCB0743D6F7CB424FEB4D33 /* slot-lock.caf in Resources */,
 				D1BC39E1096EFABF0806ADA8 /* slot-tick.caf in Resources */,
 				71D9D0C42F87CD4C001C0433 /* memori (1).riv in Resources */,
@@ -1326,6 +1389,10 @@
 				B10B3396842B4C6C456D4A98 /* ColorMatchView.swift in Sources */,
 				CHMP0001000000000000CH01 /* ChimpTestView.swift in Sources */,
 				QGVW0001000000000000QG01 /* QuickGameView.swift in Sources */,
+				AD0D692F826C314C72A74C9F /* GameIntro.swift in Sources */,
+				266CC8B9CB6FA224178937B6 /* GameResultFlow.swift in Sources */,
+				D897092BE2F48D3A03923F75 /* GameSound.swift in Sources */,
+				6AB2A84F503CEB3B24EA7B02 /* GameResultVariants.swift in Sources */,
 				FMCD0001000000000000FC01 /* FocusModeCard.swift in Sources */,
 				FMSU0001000000000000FS01 /* FocusModeSetupView.swift in Sources */,
 				FMST0001000000000000FS01 /* FocusModeSettingsView.swift in Sources */,
@@ -1376,6 +1443,7 @@
 			files = (
 				AAAECFEFF4CF9E529EE25AF1 /* OnboardingRivalsTests.swift in Sources */,
 				ACQS0000000000000000A001 /* AcquisitionSourceTests.swift in Sources */,
+				E9E9DD202DA6ABF001232EE5 /* GameEndDataTests.swift in Sources */,
 				6613BC32B97108EBBDECDFFF /* TrainUpNextTests.swift in Sources */,
 				2BF34BA8A2FCE23B06851D0A /* InsightsWeekSummaryTests.swift in Sources */,
 				1DF7970D40803B0B546EF24E /* LeagueRivalsTests.swift in Sources */,

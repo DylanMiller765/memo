@@ -686,9 +686,12 @@ struct PaywallView: View {
             // Never scrolls: the first layout that fits wins, trading hero
             // size and then the feature tiles for room so both plans stay
             // above the purchase controls.
+            // The purchase controls below keep one height for both plans, so
+            // switching plans never swaps this layout.
             ViewThatFits(in: .vertical) {
                 conciseTopContent(heroCompact: compact, showsTiles: !compact, compact: compact)
                 conciseTopContent(heroCompact: true, showsTiles: !compact, compact: compact)
+                conciseTopContent(heroCompact: true, showsTiles: !compact, tightTiles: true, compact: compact)
                 conciseTopContent(heroCompact: true, showsTiles: false, compact: compact)
                 conciseTopContent(heroCompact: nil, showsTiles: false, compact: compact)
             }
@@ -710,16 +713,26 @@ struct PaywallView: View {
                 .disabled(storeService.isLoading || !conciseSelectedProductAvailable)
                 .opacity(storeService.isLoading || !conciseSelectedProductAvailable ? 0.5 : 1)
 
-                if selectedPlanHasTrial {
+                if trialLabel != nil {
                     OBReassurance(text: "No payment due now")
+                        .opacity(selectedPlanHasTrial ? 1 : 0)
+                        .accessibilityHidden(!selectedPlanHasTrial)
                 }
 
-                Text(conciseDisclosure)
-                    .font(.system(size: 11, weight: .medium, design: .rounded))
-                    .foregroundStyle(PW.fgMuted)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity)
+                // Sized by the longest plan's terms so the panel never changes height.
+                ZStack {
+                    ForEach(PaywallPlan.allCases, id: \.self) { plan in
+                        Text(conciseDisclosure(for: plan))
+                            .hidden()
+                            .accessibilityHidden(true)
+                    }
+                    Text(conciseDisclosure)
+                }
+                .font(.system(size: 11, weight: .medium, design: .rounded))
+                .foregroundStyle(PW.fgMuted)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity)
 
                 HStack(spacing: compact ? 16 : 22) {
                     Button("Promo code") {
@@ -770,7 +783,7 @@ struct PaywallView: View {
     }
 
     /// Hero, headline, tiles and plans. `heroCompact == nil` drops the hero.
-    private func conciseTopContent(heroCompact: Bool?, showsTiles: Bool, compact: Bool) -> some View {
+    private func conciseTopContent(heroCompact: Bool?, showsTiles: Bool, tightTiles: Bool = false, compact: Bool) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             if let heroCompact {
                 PaywallUnlockHero(compact: heroCompact)
@@ -786,13 +799,13 @@ struct PaywallView: View {
 
             if showsTiles {
                 HStack(alignment: .top, spacing: 10) {
-                    PaywallFeatureTile(kind: .block, compact: compact)
-                    PaywallFeatureTile(kind: .play, compact: compact)
-                    PaywallFeatureTile(kind: .rank, compact: compact)
+                    PaywallFeatureTile(kind: .block, compact: compact || tightTiles)
+                    PaywallFeatureTile(kind: .play, compact: compact || tightTiles)
+                    PaywallFeatureTile(kind: .rank, compact: compact || tightTiles)
                 }
                 // Every tile takes the tallest one's height.
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 20)
+                .padding(.top, tightTiles ? 14 : 20)
             }
 
             Spacer(minLength: compact ? 16 : 24)
@@ -1011,15 +1024,17 @@ struct PaywallView: View {
     }
 
     /// Auto-renew terms, stated with the live price for the selected plan.
-    private var conciseDisclosure: String {
+    private var conciseDisclosure: String { conciseDisclosure(for: selectedPlan) }
+
+    private func conciseDisclosure(for plan: PaywallPlan) -> String {
         let cancel = "Cancel in Settings › Apple ID › Subscriptions"
-        if selectedPlanHasTrial {
+        if plan == .annual && trialLabel != nil {
             let start = storeService.annualFreeTrialDays
                 .flatMap { Calendar.current.date(byAdding: .day, value: $0, to: .now) }
                 .map { " from \($0.formatted(.dateTime.month(.abbreviated).day()))" } ?? " after the trial"
             return "Renews at \(conciseAnnualPrice ?? "the yearly price")/year\(start) until canceled. \(cancel) at least 24 hours before the trial ends to avoid the charge."
         }
-        if selectedPlan == .annual {
+        if plan == .annual {
             return "\(conciseAnnualPrice ?? "The yearly price") charged today, then every year until canceled. \(cancel) at least 24 hours before renewal."
         }
         return "\(conciseWeeklyPrice ?? "The weekly price") charged today, then every week until canceled. \(cancel) at least 24 hours before renewal."

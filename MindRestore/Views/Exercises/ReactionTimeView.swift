@@ -56,6 +56,7 @@ final class ReactionTimeViewModel {
     }
 
     func start() {
+        GameSound.resetCombo()
         reactionTimes = []
         lastReactionMs = 0
         startTime = .now
@@ -67,6 +68,7 @@ final class ReactionTimeViewModel {
         case .waiting:
             generation += 1
             HapticService.wrong()
+            GameSound.wrong()
             phase = .tooSoon
             schedule(after: 0.8) { $0.startRound() }
         case .ready:
@@ -76,6 +78,7 @@ final class ReactionTimeViewModel {
             lastReactionMs = ms
             reactionTimes.append(ms)
             HapticService.tap()
+            GameSound.levelUp()
             phase = .result
             schedule(after: 1.2) { $0.nextOrFinish() }
         default:
@@ -192,33 +195,19 @@ struct ReactionTimeView: View {
     // MARK: Intro (Train mode, first run)
 
     private var intro: some View {
-        VStack(spacing: 16) {
-            Spacer()
-            Text("⚡")
-                .font(.system(size: 56))
-            Text("Reaction Time")
-                .font(.brand(size: 28, weight: .black))
-                .foregroundStyle(OB.fg)
-            Text("Tap the moment the screen turns green.\n5 rounds. Tap early and the round replays.")
-                .font(.brand(size: 15, weight: .semibold))
-                .foregroundStyle(OB.fg2)
-                .multilineTextAlignment(.center)
-            Spacer()
-            Button {
+        GameIntro(
+            game: .reactionTime,
+            subtitle: "How fast are you?",
+            steps: [
+                (icon: "hourglass", text: "Wait for red to turn green"),
+                (icon: "hand.tap.fill", text: "Tap the moment it does"),
+                (icon: "arrow.counterclockwise", text: "5 rounds. Tapping early replays it."),
+            ],
+            onStart: {
                 Analytics.exerciseStarted(game: ExerciseType.reactionTime.rawValue)
                 viewModel.start()
-            } label: {
-                Text("Start")
-                    .font(.brand(size: 17, weight: .heavy))
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity, minHeight: 56)
-                    .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(OB.accent))
             }
-            .buttonStyle(.plain)
-            .padding(.horizontal, 20)
-            .padding(.bottom, 12)
-        }
-        .padding(.horizontal, 20)
+        )
     }
 
     // MARK: Arena

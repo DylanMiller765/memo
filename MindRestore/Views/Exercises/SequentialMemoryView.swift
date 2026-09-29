@@ -64,6 +64,7 @@ final class SequentialMemoryViewModel {
     }
 
     func startGame() {
+        GameSound.resetCombo()
         currentLength = 3
         round = 0
         maxCorrectLength = 0
@@ -115,6 +116,7 @@ final class SequentialMemoryViewModel {
         if isCorrect {
             maxCorrectLength = max(maxCorrectLength, currentLength)
             HapticService.correct()
+            GameSound.levelUp()
             onLevelCleared?(maxCorrectLength)
             digitTimer = Timer.scheduledTimer(withTimeInterval: 0.7, repeats: false) { [weak self] _ in
                 Task { @MainActor in
@@ -242,7 +244,7 @@ struct SequentialMemoryView: View {
                 }
             }
             if newPhase == .finished {
-                SoundService.shared.playComplete()
+                GameSound.complete()
                 isNewPersonalBest = PersonalBestTracker.shared.record(score: viewModel.maxCorrectLength, for: .sequentialMemory)
                 if isNewPersonalBest {
                     Analytics.personalBest(game: ExerciseType.sequentialMemory.rawValue, score: viewModel.maxCorrectLength)
@@ -271,43 +273,19 @@ struct SequentialMemoryView: View {
     // MARK: - Setup
 
     private var setupView: some View {
-        VStack(spacing: 32) {
-            Spacer()
-
-            TrainingTileMiniPreview(type: .sequentialMemory, color: AppColors.teal, scale: 2.0)
-                .frame(width: 200, height: 140)
-
-            VStack(spacing: 8) {
-                Text("Number Memory")
-                    .font(.title.weight(.bold))
-                Text("Remember the digits shown one at a time")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-
-            VStack(alignment: .leading, spacing: 12) {
-                infoRow(icon: "eye", text: "Watch each digit appear one by one")
-                infoRow(icon: "keyboard", text: "Type the full sequence from memory")
-                infoRow(icon: "arrow.up.right", text: "Sequence gets longer each round you pass")
-            }
-            .appCard()
-            .padding(.horizontal)
-
-            Spacer()
-
-            Button {
+        GameIntro(
+            game: .numberMemory,
+            subtitle: "Remember the number.",
+            steps: [
+                (icon: "eye.fill", text: "Watch each digit appear"),
+                (icon: "keyboard.fill", text: "Type the whole number"),
+                (icon: "arrow.up.right", text: "It grows one digit each round"),
+            ],
+            onStart: {
                 Analytics.exerciseStarted(game: ExerciseType.sequentialMemory.rawValue)
                 viewModel.startGame()
-            } label: {
-                Text("Start")
-                    .accentButton()
             }
-            .pulsingWhenIdle()
-            .accessibilityHint("Starts the exercise")
-            .padding(.horizontal, 32)
-        }
-        .padding(.vertical, 24)
+        )
         .overlay(alignment: .topTrailing) {
             Button { showingInfo = true } label: {
                 Image(systemName: "questionmark.circle.fill")
