@@ -123,13 +123,21 @@ struct GuidedChoiceTile: View {
 /// Memo on the hill asking the question in a speech bubble.
 struct GuidedMemoAsks: View {
     let question: String
+    var hint: String? = nil
     var compact = false
 
     var body: some View {
         VStack(spacing: 0) {
-            Text(question)
-                .font(.brand(size: compact ? 22 : 25, weight: .heavy))
-                .foregroundStyle(ClimbColor.ink)
+            VStack(spacing: 4) {
+                Text(question)
+                    .font(.brand(size: compact ? 22 : 25, weight: .heavy))
+                    .foregroundStyle(ClimbColor.ink)
+                if let hint {
+                    Text(hint)
+                        .font(.system(size: compact ? 12.5 : 13.5, weight: .semibold, design: .rounded))
+                        .foregroundStyle(ClimbColor.ink.opacity(0.6))
+                }
+            }
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 20)
@@ -183,6 +191,7 @@ struct GuidedNumberSticker: View {
     let value: Int
     let unit: String
     let color: Color
+    var textColor: Color = ClimbColor.ink
     var size: CGFloat = 96
     var animateFromZero = true
 
@@ -198,7 +207,7 @@ struct GuidedNumberSticker: View {
             Text(unit)
                 .font(.brand(size: size * 0.34, weight: .heavy))
         }
-        .foregroundStyle(ClimbColor.ink)
+        .foregroundStyle(textColor)
         .padding(.horizontal, 26)
         .padding(.vertical, 6)
         .background(RoundedRectangle(cornerRadius: 26, style: .continuous).fill(color))
@@ -252,16 +261,15 @@ struct OnboardingGuidedChoicePage<Option: Identifiable & Equatable>: View {
     var body: some View {
         GuidedPage { compact in
             Spacer(minLength: 0)
-            GuidedMemoAsks(question: title, compact: compact)
-            ClimbBodyText(text: detail, size: compact ? 13 : 14)
-                .padding(.top, compact ? 14 : 10)
+            GuidedMemoAsks(question: title, hint: detail, compact: compact)
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: columns), spacing: compact ? 10 : 12) {
                 ForEach(options) { option in
                     GuidedChoiceTile(title: label(option), selected: picked == option, compact: compact) { pick(option) }
                 }
             }
-            .padding(.top, compact ? 14 : 20)
-            Spacer(minLength: 0)
+            .padding(.top, compact ? 16 : 24)
+            // A shorter spacer below than above: the answers sit lower, nearer the thumb.
+            Spacer(minLength: 0).frame(maxHeight: compact ? 10 : 36)
         } bar: {
             EmptyView()
         }
@@ -282,18 +290,31 @@ struct OnboardingGuidedChoicePage<Option: Identifiable & Equatable>: View {
 
 // MARK: - 3 · The math, as a slot machine
 
-/// Their answers lock in on three reels, then the big reel lands on the years
-/// the feed takes: the feed is a slot machine, and the house always wins.
+/// Red is the cost: the years the feed takes. Mint (years back) is the relief.
+enum GuidedColor {
+    static let loss = Color(red: 1.0, green: 0.30, blue: 0.34)        // #FF4D57
+    static let lossDeep = Color(red: 0.62, green: 0.06, blue: 0.13)
+    static let cream = Color(red: 0.99, green: 0.96, blue: 0.9)
+}
+
+enum GuidedSlotStyle: String { case cabinet, receipt }
+
+/// Their answers lock in on three reels, then the machine pays out the years the
+/// feed takes: the feed is a slot machine, and the house always wins.
 struct OnboardingGuidedCalculatingPage: View {
     let math: GuidedLifeMath
     let screenTime: GuidedScreenTime
     let ageLabel: String
+    var style: GuidedSlotStyle = .cabinet
     let onDone: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var landed = 0 // reels locked so far (4 = the years)
+    @State private var landed = 0 // reels locked so far; 4 = paid out
     @State private var spinning = false
-    @State private var thud = false
+    @State private var lever = false
+    @State private var shake: CGFloat = 0
+    @State private var flash = false
+    @State private var printed: CGFloat = 0
 
     private var reels: [(label: String, final: String, filler: [String])] {
         [("A DAY", screenTime.reelLabel, ["1 HR", "8+ HRS", "3 HRS", "6 HRS", "<2 HRS", "5 HRS"]),
@@ -301,21 +322,24 @@ struct OnboardingGuidedCalculatingPage: View {
          ("YEARS LEFT", "\(max(1, 80 - math.age))", ["12", "70", "38", "5", "44", "61"])]
     }
 
+    private var paidOut: Bool { landed == 4 }
+
     var body: some View {
         GuidedPage { compact in
             Spacer(minLength: 0)
-            ClimbHeadline(text: landed == 4 ? "The house always wins." : "Doing the math…", size: compact ? 26 : 30)
-                .contentTransition(.opacity)
-                .animation(.easeInOut(duration: 0.25), value: landed == 4)
-            ClimbBodyText(text: landed == 4 ? "Your feed pays out in years of your life." : "Your answers, spun into years.", size: compact ? 14 : 15)
+            ClimbHeadline(text: paidOut ? (style == .cabinet ? "The house always wins." : "The feed sent the bill.") : "Doing the math…",
+                          size: compact ? 26 : 30)
+                .animation(.easeInOut(duration: 0.25), value: paidOut)
+            ClimbBodyText(text: paidOut ? "It pays out in years of your life." : "Your answers, spun into years.", size: compact ? 14 : 15)
                 .padding(.top, 6)
-                .contentTransition(.opacity)
-            ClimbMemo(mood: landed == 4 ? .sad : .neutral, size: compact ? 90 : 120)
-                .padding(.top, compact ? 8 : 14)
-                .padding(.bottom, -10)
-                .zIndex(0)
-            machine(compact: compact)
-                .zIndex(1)
+            Group {
+                switch style {
+                case .cabinet: cabinet(compact: compact)
+                case .receipt: receiptMachine(compact: compact)
+                }
+            }
+            .padding(.top, compact ? 10 : 18)
+            .modifier(GuidedShake(amount: shake))
             Spacer(minLength: 0)
         } bar: {
             EmptyView()
@@ -323,121 +347,349 @@ struct OnboardingGuidedCalculatingPage: View {
         .task { await run() }
     }
 
-    private func machine(compact: Bool) -> some View {
-        let rowHeight: CGFloat = compact ? 44 : 58
-        let shape = RoundedRectangle(cornerRadius: 22, style: .continuous)
-        return VStack(spacing: compact ? 10 : 14) {
-            HStack(spacing: 8) {
-                ForEach(reels.indices, id: \.self) { i in
-                    VStack(spacing: 6) {
-                        GuidedReel(filler: reels[i].filler, final: reels[i].final, rowHeight: rowHeight,
-                                   spinning: spinning, landed: landed > i, reduceMotion: reduceMotion)
-                        Text(reels[i].label)
-                            .font(.system(size: 11, weight: .heavy, design: .monospaced))
-                            .tracking(1)
-                            .foregroundStyle(landed > i ? ClimbColor.amber : .white.opacity(0.5))
-                    }
+    // MARK: Reels
+
+    private func reelRow(height: CGFloat, labelColor: Color) -> some View {
+        HStack(spacing: 8) {
+            ForEach(reels.indices, id: \.self) { i in
+                VStack(spacing: 6) {
+                    GuidedReel(filler: reels[i].filler, final: reels[i].final, height: height,
+                               spinning: spinning, landed: landed > i)
+                    Text(reels[i].label)
+                        .font(.system(size: 10.5, weight: .heavy, design: .monospaced))
+                        .tracking(1)
+                        .foregroundStyle(labelColor)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                 }
             }
-            GuidedReel(filler: ["2 YEARS", "31 YEARS", "9 YEARS", "20 YEARS", "5 YEARS", "26 YEARS"],
-                       final: "\(math.yearsOnPhone) YEARS", rowHeight: rowHeight * 1.35,
-                       spinning: spinning, landed: landed == 4, reduceMotion: reduceMotion, jackpot: true)
-                .scaleEffect(thud ? 1.06 : 1)
-            Text(landed == 4 ? "TO YOUR PHONE, BEFORE 80" : "THE FEED'S CUT")
-                .font(.system(size: 12, weight: .heavy, design: .monospaced))
-                .tracking(1)
-                .foregroundStyle(landed == 4 ? ClimbColor.amber : .white.opacity(0.5))
         }
-        .padding(compact ? 14 : 18)
-        .background(shape.fill(Color(red: 0.07, green: 0.07, blue: 0.13)))
-        .overlay(
-            shape.stroke(ClimbColor.amber, style: StrokeStyle(lineWidth: 3, lineCap: .round, dash: [0.1, 12]))
-                .padding(5)
-                .shadow(color: ClimbColor.amber.opacity(0.6), radius: 4)
-        )
-        .overlay(shape.strokeBorder(ClimbColor.ink, lineWidth: 2.5))
-        .background(shape.fill(ClimbColor.ink).offset(y: 5))
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(landed == 4 ? "\(math.yearsOnPhone) years of your life go to your phone before 80" : "Doing the math")
     }
+
+    // MARK: A · Cabinet
+
+    private func cabinet(compact: Bool) -> some View {
+        let reelHeight: CGFloat = compact ? 70 : 100
+        let body = RoundedRectangle(cornerRadius: 30, style: .continuous)
+        return ZStack(alignment: .top) {
+            VStack(spacing: 0) {
+                // Memo peeks over the sign.
+                ClimbMemo(mood: paidOut ? .sad : .neutral, size: compact ? 84 : 112)
+                    .padding(.bottom, -22)
+                    .zIndex(0)
+                GuidedMarqueeSign(text: "THE FEED", flash: flash, lit: spinning || paidOut)
+                    .zIndex(2)
+                    .padding(.bottom, -16)
+                VStack(spacing: compact ? 12 : 16) {
+                    reelRow(height: reelHeight, labelColor: GuidedColor.cream.opacity(0.85))
+                        .padding(10)
+                        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.black.opacity(0.55)))
+                        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(ClimbColor.ink, lineWidth: 2.5))
+                    payoutWindow(height: compact ? 64 : 88)
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 30)
+                .padding(.bottom, 18)
+                .background(
+                    body.fill(LinearGradient(colors: [Color(red: 0.86, green: 0.17, blue: 0.24), GuidedColor.lossDeep],
+                                             startPoint: .top, endPoint: .bottom))
+                )
+                .overlay(body.stroke(Color.white.opacity(0.28), lineWidth: 1.5).padding(4))
+                .overlay(body.strokeBorder(ClimbColor.ink, lineWidth: 3))
+                .background(body.fill(ClimbColor.ink).offset(y: 6))
+                .overlay(alignment: .trailing) { GuidedLever(pulled: lever).offset(x: 26, y: -10) }
+                .zIndex(1)
+            }
+        }
+        .padding(.trailing, 14) // room for the lever
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(paidOut ? "\(math.yearsOnPhone) years of your life go to your phone before 80" : "Doing the math")
+    }
+
+    private func payoutWindow(height: CGFloat) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
+        return ZStack {
+            shape.fill(Color(red: 0.05, green: 0.02, blue: 0.04))
+            if paidOut {
+                Text("\(math.yearsOnPhone) YEARS")
+                    .font(.brand(size: height * 0.5, weight: .heavy))
+                    .foregroundStyle(GuidedColor.loss)
+                    .shadow(color: GuidedColor.loss.opacity(0.9), radius: flash ? 14 : 6)
+                    .transition(.scale(scale: 1.4).combined(with: .opacity))
+            } else {
+                Text(spinning ? "· · ·" : "PAYOUT")
+                    .font(.system(size: 13, weight: .heavy, design: .monospaced))
+                    .tracking(2)
+                    .foregroundStyle(GuidedColor.loss.opacity(0.45))
+            }
+        }
+        .frame(height: height)
+        .overlay(shape.strokeBorder(paidOut ? GuidedColor.loss : ClimbColor.ink, lineWidth: paidOut ? 2.5 : 2.5))
+        .overlay(alignment: .bottom) {
+            Text("TO YOUR PHONE, BEFORE 80")
+                .font(.system(size: 9.5, weight: .heavy, design: .monospaced))
+                .tracking(1)
+                .foregroundStyle(GuidedColor.loss.opacity(paidOut ? 0.9 : 0))
+                .padding(.bottom, 5)
+        }
+    }
+
+    // MARK: B · Receipt
+
+    private func receiptMachine(compact: Bool) -> some View {
+        let reelHeight: CGFloat = compact ? 70 : 100
+        let shape = RoundedRectangle(cornerRadius: 26, style: .continuous)
+        return VStack(spacing: 0) {
+            ClimbMemo(mood: paidOut ? .sad : .neutral, size: compact ? 84 : 112)
+                .padding(.bottom, -18)
+            VStack(spacing: 14) {
+                reelRow(height: reelHeight, labelColor: .white.opacity(0.6))
+                // The printer slot the receipt comes out of.
+                Capsule().fill(Color.black).frame(height: 8).padding(.horizontal, 24)
+            }
+            .padding(16)
+            .background(shape.fill(Color(red: 0.1, green: 0.1, blue: 0.15)))
+            .overlay(shape.strokeBorder(GuidedColor.loss.opacity(spinning || paidOut ? 0.9 : 0.35), lineWidth: 2.5))
+            .shadow(color: GuidedColor.loss.opacity(spinning || paidOut ? 0.55 : 0), radius: 16)
+            .overlay(shape.strokeBorder(ClimbColor.ink, lineWidth: 2.5).padding(-2))
+            .zIndex(1)
+            GuidedReceipt(math: math, screenTime: screenTime, large: !compact)
+                .frame(maxWidth: compact ? 260 : 300)
+                .frame(height: (compact ? 170 : 214) * printed, alignment: .bottom)
+                .clipped()
+                .padding(.top, -12)
+                .zIndex(0)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(paidOut ? "\(math.yearsOnPhone) years of your life go to your phone before 80" : "Doing the math")
+    }
+
+    // MARK: Run
 
     private func run() async {
         if reduceMotion {
             landed = 4
-            try? await Task.sleep(for: .milliseconds(1800))
+            printed = 1
+            try? await Task.sleep(for: .milliseconds(2000))
             onDone()
             return
         }
-        try? await Task.sleep(for: .milliseconds(350))
+        try? await Task.sleep(for: .milliseconds(300))
+        withAnimation(.easeIn(duration: 0.18)) { lever = true }
+        HapticService.tap()
+        try? await Task.sleep(for: .milliseconds(180))
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.5)) { lever = false }
         spinning = true
         SlotSound.tick()
         for i in 1...3 {
-            try? await Task.sleep(for: .milliseconds(i == 1 ? 900 : 550))
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.72)) { landed = i }
+            try? await Task.sleep(for: .milliseconds(i == 1 ? 850 : 520))
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) { landed = i }
             SlotSound.lock()
             HapticService.tap()
         }
-        try? await Task.sleep(for: .milliseconds(900))
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.55)) { landed = 4; thud = true }
+        try? await Task.sleep(for: .milliseconds(style == .cabinet ? 800 : 400))
+        if style == .receipt {
+            spinning = false
+            for step in 1...6 {
+                withAnimation(.linear(duration: 0.16)) { printed = CGFloat(step) / 6 }
+                SlotSound.tick()
+                try? await Task.sleep(for: .milliseconds(170))
+            }
+        }
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.55)) { landed = 4 }
+        spinning = false
         SlotSound.chime()
-        HapticService.complete()
-        try? await Task.sleep(for: .milliseconds(220))
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.6)) { thud = false }
-        try? await Task.sleep(for: .milliseconds(1900))
+        HapticService.wrong()
+        withAnimation(.linear(duration: 0.45)) { shake = 1 }
+        for _ in 0..<3 {
+            withAnimation(.easeInOut(duration: 0.16)) { flash = true }
+            try? await Task.sleep(for: .milliseconds(180))
+            withAnimation(.easeInOut(duration: 0.16)) { flash = false }
+            try? await Task.sleep(for: .milliseconds(180))
+        }
+        try? await Task.sleep(for: .milliseconds(1400))
         onDone()
     }
 }
 
-/// One reel: a blurred strip rolling while spinning, snapping to its value when it lands.
+/// A short side-to-side jolt when the machine pays out.
+private struct GuidedShake: GeometryEffect {
+    var amount: CGFloat
+    var animatableData: CGFloat {
+        get { amount }
+        set { amount = newValue }
+    }
+
+    func effectValue(size: CGSize) -> ProjectionTransform {
+        ProjectionTransform(CGAffineTransform(translationX: sin(amount * .pi * 6) * 6 * (1 - amount), y: 0))
+    }
+}
+
+/// "THE FEED" in lights, like the booth's marquee; the bulbs flash red on the payout.
+private struct GuidedMarqueeSign: View {
+    let text: String
+    let flash: Bool
+    let lit: Bool
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
+        Text(text)
+            .font(.brand(size: 27, weight: .heavy))
+            .tracking(2)
+            .foregroundStyle(lit ? GuidedColor.cream : GuidedColor.cream.opacity(0.6))
+            .shadow(color: (flash ? GuidedColor.loss : ClimbColor.amber).opacity(lit ? 0.9 : 0), radius: 8)
+            .padding(.horizontal, 26)
+            .padding(.vertical, 10)
+            .background(shape.fill(Color(red: 0.1, green: 0.04, blue: 0.08)))
+            .overlay(
+                shape.stroke(flash ? GuidedColor.loss : ClimbColor.amber,
+                             style: StrokeStyle(lineWidth: 3.5, lineCap: .round, dash: [0.1, 10]))
+                    .padding(5)
+                    .shadow(color: (flash ? GuidedColor.loss : ClimbColor.amber).opacity(0.8), radius: 4)
+                    .opacity(lit ? 1 : 0.4)
+            )
+            .overlay(shape.strokeBorder(ClimbColor.ink, lineWidth: 3))
+            .background(shape.fill(ClimbColor.ink).offset(y: 4))
+    }
+}
+
+/// The slot's pull handle: a rod and a red ball that dips when pulled.
+private struct GuidedLever: View {
+    let pulled: Bool
+
+    var body: some View {
+        VStack(spacing: -2) {
+            Circle()
+                .fill(RadialGradient(colors: [Color(red: 1, green: 0.55, blue: 0.55), GuidedColor.loss, GuidedColor.lossDeep],
+                                     center: .init(x: 0.35, y: 0.3), startRadius: 1, endRadius: 16))
+                .overlay(Circle().strokeBorder(ClimbColor.ink, lineWidth: 2.5))
+                .frame(width: 26, height: 26)
+            RoundedRectangle(cornerRadius: 3)
+                .fill(LinearGradient(colors: [Color(white: 0.85), Color(white: 0.55)], startPoint: .leading, endPoint: .trailing))
+                .overlay(RoundedRectangle(cornerRadius: 3).strokeBorder(ClimbColor.ink, lineWidth: 2))
+                .frame(width: 9, height: pulled ? 30 : 64)
+            RoundedRectangle(cornerRadius: 5)
+                .fill(Color(white: 0.4))
+                .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(ClimbColor.ink, lineWidth: 2))
+                .frame(width: 18, height: 26)
+        }
+        .frame(height: 118, alignment: .bottom)
+        .accessibilityHidden(true)
+    }
+}
+
+/// The feed's bill, printed in red: their answers and the total in years.
+private struct GuidedReceipt: View {
+    let math: GuidedLifeMath
+    let screenTime: GuidedScreenTime
+    var large = true
+
+    var body: some View {
+        VStack(spacing: 7) {
+            Text("THE FEED · RECEIPT")
+                .font(.system(size: large ? 13 : 11, weight: .heavy, design: .monospaced))
+                .tracking(1.5)
+            line("Daily scrolling", screenTime.title.lowercased())
+            line("Years ahead", "\(max(1, 80 - math.age))")
+            Rectangle().fill(GuidedColor.lossDeep.opacity(0.5)).frame(height: 1)
+                .mask(HStack(spacing: 3) { ForEach(0..<40, id: \.self) { _ in Rectangle().frame(width: 3) } })
+            HStack(alignment: .firstTextBaseline) {
+                Text("TOTAL").font(.system(size: large ? 15 : 13, weight: .heavy, design: .monospaced))
+                Spacer()
+                Text("\(math.yearsOnPhone) YEARS").font(.brand(size: large ? 32 : 26, weight: .heavy))
+            }
+            Text("of your life, before 80. No refunds.")
+                .font(.system(size: large ? 12.5 : 11, weight: .semibold, design: .monospaced))
+                .opacity(0.8)
+        }
+        .foregroundStyle(GuidedColor.lossDeep)
+        .padding(.horizontal, 16)
+        .padding(.top, 20)
+        .padding(.bottom, 16)
+        .background(GuidedColor.cream)
+        .overlay(alignment: .bottom) { GuidedZigzag().fill(Color(red: 0.07, green: 0.1, blue: 0.14)).frame(height: 6) }
+    }
+
+    private func line(_ label: String, _ value: String) -> some View {
+        HStack {
+            Text(label)
+            Spacer()
+            Text(value).fontWeight(.heavy)
+        }
+        .font(.system(size: large ? 14 : 12.5, weight: .semibold, design: .monospaced))
+    }
+}
+
+/// The torn bottom edge of a receipt.
+private struct GuidedZigzag: Shape {
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        let teeth = 18
+        let w = rect.width / CGFloat(teeth)
+        p.move(to: CGPoint(x: 0, y: rect.maxY))
+        for i in 0..<teeth {
+            p.addLine(to: CGPoint(x: CGFloat(i) * w + w / 2, y: rect.minY))
+            p.addLine(to: CGPoint(x: CGFloat(i + 1) * w, y: rect.maxY))
+        }
+        p.closeSubpath()
+        return p
+    }
+}
+
+/// One reel: a cream strip rolling while it spins, snapping to its value when it lands.
 private struct GuidedReel: View {
     let filler: [String]
     let final: String
-    let rowHeight: CGFloat
+    let height: CGFloat
     let spinning: Bool
     let landed: Bool
-    let reduceMotion: Bool
-    var jackpot = false
+
+    private var font: Font { .brand(size: height * 0.3, weight: .heavy) }
 
     var body: some View {
-        let window = RoundedRectangle(cornerRadius: 12, style: .continuous)
+        let window = RoundedRectangle(cornerRadius: 10, style: .continuous)
         ZStack {
-            window.fill(landed && jackpot ? ClimbColor.amber : Color.white.opacity(0.07))
+            window.fill(GuidedColor.cream)
             if landed || !spinning {
                 Text(landed ? final : "?")
-                    .font(.brand(size: jackpot ? rowHeight * 0.5 : rowHeight * 0.4, weight: .heavy))
-                    .foregroundStyle(landed && jackpot ? ClimbColor.ink : (landed ? .white : .white.opacity(0.35)))
+                    .font(font)
+                    .foregroundStyle(landed ? ClimbColor.ink : ClimbColor.ink.opacity(0.3))
                     .lineLimit(1)
-                    .minimumScaleFactor(0.6)
+                    .minimumScaleFactor(0.55)
                     .padding(.horizontal, 6)
                     .transition(.asymmetric(insertion: .move(edge: .top).combined(with: .opacity), removal: .opacity))
             } else {
-                // TimelineView keeps the roll moving without a state change every frame.
+                // TimelineView keeps the strip rolling without a state change every frame.
                 TimelineView(.animation) { context in
-                    let t = context.date.timeIntervalSinceReferenceDate * (jackpot ? 9 : 11)
+                    let t = context.date.timeIntervalSinceReferenceDate * 11
                     let index = Int(t) % filler.count
                     let frac = CGFloat(t - floor(t))
                     VStack(spacing: 0) {
                         ForEach(0..<3, id: \.self) { k in
                             Text(filler[(index + k) % filler.count])
-                                .font(.brand(size: jackpot ? rowHeight * 0.5 : rowHeight * 0.4, weight: .heavy))
-                                .foregroundStyle(.white.opacity(0.75))
+                                .font(font)
+                                .foregroundStyle(ClimbColor.ink.opacity(0.7))
                                 .lineLimit(1)
-                                .minimumScaleFactor(0.6)
-                                .frame(height: rowHeight)
+                                .minimumScaleFactor(0.55)
+                                .frame(height: height * 0.62)
                         }
                     }
-                    .offset(y: -frac * rowHeight)
-                    .blur(radius: 1.2)
+                    .offset(y: -frac * height * 0.62)
+                    .blur(radius: 1.4)
                 }
-                .frame(height: rowHeight, alignment: .top)
+                .frame(height: height, alignment: .top)
                 .clipped()
             }
+            // Curved-drum shading, top and bottom.
+            LinearGradient(stops: [.init(color: .black.opacity(0.35), location: 0), .init(color: .clear, location: 0.3),
+                                   .init(color: .clear, location: 0.7), .init(color: .black.opacity(0.35), location: 1)],
+                           startPoint: .top, endPoint: .bottom)
+                .allowsHitTesting(false)
         }
         .frame(maxWidth: .infinity)
-        .frame(height: rowHeight)
+        .frame(height: height)
         .clipShape(window)
-        .overlay(window.strokeBorder(landed ? ClimbColor.amber : Color.white.opacity(0.12), lineWidth: landed ? 2.5 : 1))
-        .shadow(color: landed && jackpot ? ClimbColor.amber.opacity(0.7) : .clear, radius: 18)
+        .overlay(window.strokeBorder(landed ? ClimbColor.amber : ClimbColor.ink, lineWidth: landed ? 3 : 2))
     }
 }
 
@@ -468,7 +720,13 @@ struct OnboardingGuidedShockPage: View {
         ClimbMemo(mood: .sad, size: compact ? 96 : 124)
         ClimbHeadline(text: "At this rate, your phone takes", size: compact ? 26 : 30)
             .padding(.top, compact ? 10 : 16)
-        GuidedNumberSticker(value: math.yearsOnPhone, unit: "years", color: ClimbColor.amber, size: compact ? 78 : 96)
+        GuidedNumberSticker(value: math.yearsOnPhone, unit: "years", color: GuidedColor.loss, textColor: .white, size: compact ? 78 : 96)
+            .background(
+                // A red glow behind the number: the one screen where the cost sinks in.
+                RadialGradient(colors: [GuidedColor.loss.opacity(0.45), .clear], center: .center, startRadius: 10, endRadius: 190)
+                    .frame(width: 420, height: 320)
+                    .allowsHitTesting(false)
+            )
             .padding(.vertical, compact ? 14 : 20)
         ClimbBodyText(text: "of your life before you turn 80.", size: compact ? 16 : 18)
         Spacer(minLength: 0)
@@ -551,7 +809,7 @@ struct OnboardingGuidedYearsBackPage: View {
     var body: some View {
         GuidedPage { compact in
             Spacer(minLength: 0)
-            ClimbHeadline(text: "The good news: Memo can\nwin you back", size: compact ? 26 : 30)
+            ClimbHeadline(text: "Good news: Memo can\nwin you back", size: compact ? 26 : 30)
             GuidedNumberSticker(value: math.yearsBack, unit: "years", color: ClimbColor.mint, size: compact ? 78 : 96)
                 .padding(.vertical, compact ? 14 : 20)
             ClimbBodyText(text: "Cut your scrolling in half and that's \(math.yearsBack) years back for friends, school and sleep.", size: compact ? 15 : 16)
@@ -588,6 +846,8 @@ struct OnboardingGuidedScreenTimePage: View {
 
     @ViewBuilder
     private func alertLayout(compact: Bool) -> some View {
+        ClimbMemo(mood: .neutral, size: compact ? 76 : 100)
+            .padding(.bottom, compact ? 8 : 12)
         ClimbHeadline(text: "Connect Memo to\nScreen Time", size: compact ? 26 : 30)
         ClimbBodyText(text: "Your data is private and never leaves your phone.", size: compact ? 14 : 15)
             .padding(.top, 6)
@@ -726,7 +986,7 @@ struct OnboardingGuidedPlanPage: View {
 
     private var items: [(StickerKind, String, String)] {
         [(.clock, "Win back \(math.hoursBackPerDay) a day", "Half your scrolling, one blocked app at a time."),
-         (.dumbbell, "Train your memory every unlock", "A 30-second game each time you open a blocked app."),
+         (.dumbbell, "Train on every unlock", "A 30-second game each time you open a blocked app."),
          (.trophy, "Save \(math.yearsBack) years of your life", "For friends, school and sleep.")]
     }
 
@@ -772,13 +1032,15 @@ struct OnboardingGuidedPlanPage: View {
 
 struct OnboardingGuidedCongratsPage: View {
     let onContinue: () -> Void
+    @State private var sparks = false
 
     var body: some View {
         GuidedPage { compact in
             Spacer(minLength: 0)
             ZStack {
-                OnboardingSparkBurst(active: true, radius: compact ? 110 : 140)
+                OnboardingSparkBurst(active: sparks, radius: compact ? 110 : 140)
                 ClimbMemo(mood: .happy, size: compact ? 130 : 164)
+                ConfettiView()
             }
             ClimbHeadline(text: "First step done.", size: compact ? 30 : 36)
                 .padding(.top, compact ? 12 : 20)
@@ -789,5 +1051,9 @@ struct OnboardingGuidedCongratsPage: View {
             OBActionBar(title: "Continue", action: onContinue)
         }
         .climbSky(.sunrise)
+        .onAppear {
+            sparks = true
+            HapticService.complete()
+        }
     }
 }

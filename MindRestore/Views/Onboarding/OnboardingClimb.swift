@@ -103,6 +103,8 @@ struct OnboardingClimbBackdrop: View {
 
     /// The grassy crest's height as a fraction of the hill image (same art as Home).
     private static let crestFraction: CGFloat = 0.505
+    /// Where the moon sits in the same art.
+    private static let moonFraction: CGFloat = 0.105
 
     var body: some View {
         GeometryReader { geo in
@@ -111,6 +113,10 @@ struct OnboardingClimbBackdrop: View {
             let crest = crestY ?? geo.size.height * 0.62
             let imageOffset = geo.safeAreaInsets.top + crest - imageHeight * Self.crestFraction
             let imageBottom = imageOffset + imageHeight
+            // The moon is painted into the hill art. When the hill moves up, it lands behind
+            // the clock or the headline; cover it there so it never sits behind text.
+            let moonY = imageOffset + imageHeight * Self.moonFraction
+            let hidesMoon = moonY < geo.safeAreaInsets.top + 320
             ZStack(alignment: .top) {
                 // Ground below the art: starts at the art's last row so there's no seam.
                 LinearGradient(
@@ -133,7 +139,7 @@ struct OnboardingClimbBackdrop: View {
                 }
                 .frame(height: max(0, imageOffset) + 2)
 
-                world(width: width)
+                world(width: width, hidesMoon: hidesMoon)
                     .frame(width: width, height: imageHeight)
                     .offset(y: imageOffset)
             }
@@ -146,12 +152,28 @@ struct OnboardingClimbBackdrop: View {
         .accessibilityHidden(true)
     }
 
-    private func world(width: CGFloat) -> some View {
+    private func world(width: CGFloat, hidesMoon: Bool) -> some View {
         let scale = width / 390
         return ZStack {
             Image("paywall-twilight-hill-bg")
                 .resizable()
                 .scaledToFit()
+
+            // Paints over the moon with the sky around it (the same patch sunrise uses).
+            GeometryReader { g in
+                RadialGradient(
+                    stops: [
+                        .init(color: Color(red: 0.024, green: 0.106, blue: 0.41), location: 0.62),
+                        .init(color: Color(red: 0.024, green: 0.106, blue: 0.41).opacity(0), location: 1),
+                    ],
+                    center: .center,
+                    startRadius: 0,
+                    endRadius: 32 * scale
+                )
+                .frame(width: 64 * scale, height: 64 * scale)
+                .position(x: g.size.width * 0.24, y: g.size.height * Self.moonFraction)
+            }
+            .opacity(hidesMoon ? 1 : 0)
 
             // Night: the same scene, deeper.
             ZStack {

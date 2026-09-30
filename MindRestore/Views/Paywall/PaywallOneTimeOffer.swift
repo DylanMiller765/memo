@@ -83,7 +83,7 @@ struct PaywallOneTimeOffer: View {
 
     private var buttons: some View {
         VStack(spacing: 6) {
-            ChunkyButton(title: trialLabel == nil ? "Claim my offer" : "Start my free \(trialLabel!)", systemImage: nil, style: .amber, action: onClaim)
+            ChunkyButton(title: trialLabel == nil ? "Claim my offer" : "Claim \(trialLabel!) free", systemImage: nil, style: .amber, action: onClaim)
                 .disabled(isBusy)
                 .opacity(isBusy ? 0.6 : 1)
             Button("No thanks", action: onDecline)

@@ -1045,14 +1045,25 @@ struct OnboardingView: View {
 
                 Spacer(minLength: 8)
 
-                // Longer routes (the guided arm has 14 steps) get narrower segments so the
-                // header never grows wider than the screen and stretches every page.
-                let segment: CGFloat = routePages.count > 8 ? 11 : 16
-                HStack(spacing: routePages.count > 8 ? 4 : 5) {
-                    ForEach(routePages.indices, id: \.self) { index in
+                // Long routes (the guided arm has 14 steps) get one thin bar: 14 dashes read as a long
+                // road, and fixed-width dashes once stretched the header wider than the screen.
+                Group {
+                    if routePages.count > 8 {
                         Capsule()
-                            .fill(index <= currentRouteIndex ? Color.white : Color.white.opacity(0.28))
-                            .frame(width: index == currentRouteIndex ? segment + 10 : segment, height: 5)
+                            .fill(Color.white.opacity(0.28))
+                            .frame(width: 200, height: 5)
+                            .overlay(alignment: .leading) {
+                                Capsule().fill(Color.white)
+                                    .frame(width: 200 * CGFloat(currentRouteIndex + 1) / CGFloat(routePages.count), height: 5)
+                            }
+                    } else {
+                        HStack(spacing: 5) {
+                            ForEach(routePages.indices, id: \.self) { index in
+                                Capsule()
+                                    .fill(index <= currentRouteIndex ? Color.white : Color.white.opacity(0.28))
+                                    .frame(width: index == currentRouteIndex ? 26 : 16, height: 5)
+                            }
+                        }
                     }
                 }
                 .animation(.easeInOut(duration: 0.3), value: currentRouteIndex)
@@ -1657,7 +1668,7 @@ struct OnboardingView: View {
 
     private var guidedAgePage: some View {
         OnboardingGuidedChoicePage(
-            title: "How old are you?", detail: "Memo uses it to do the math. It stays on your phone.",
+            title: "Quick one:\nhow old are you?", detail: "For the math. It stays on your phone.",
             options: GuidedAgeBand.allCases, label: \.title,
             initial: GuidedAgeBand.allCases.first { $0.age == selectedAge }
         ) { band in
@@ -1669,7 +1680,7 @@ struct OnboardingView: View {
 
     private var guidedScreenTimePage: some View {
         OnboardingGuidedChoicePage(
-            title: "How long are you on\nyour phone a day?", detail: "A guess is fine. Screen Time can check it later.",
+            title: "How long are you on\nyour phone a day?", detail: "A guess is fine.",
             columns: 1, options: GuidedScreenTime.allCases, label: \.title,
             initial: useScreenTimeEstimate ? GuidedScreenTime.allCases.first { $0.hours == screenTimeEstimateHours } : nil
         ) { band in
@@ -1684,7 +1695,8 @@ struct OnboardingView: View {
         OnboardingGuidedCalculatingPage(
             math: guidedMath,
             screenTime: GuidedScreenTime.allCases.first { $0.hours == screenTimeEstimateHours } ?? .from4,
-            ageLabel: GuidedAgeBand.allCases.first { $0.age == selectedAge }?.title ?? "18–24"
+            ageLabel: GuidedAgeBand.allCases.first { $0.age == selectedAge }?.title ?? "18–24",
+            style: Self.debugArgument("--guided-slot").flatMap(GuidedSlotStyle.init) ?? .cabinet
         ) {
             guard OnboardingPage(rawValue: currentPage) == .guidedCalculating else { return }
             trackOnboardingStepCompleted("guided_calculating")
@@ -1929,6 +1941,7 @@ struct OnboardingView: View {
 
     private var trialReminderPage: some View {
         OnboardingTrialReminderView(
+            showsNotificationFootnote: onboardingVariant != .guided,
             trialLabel: storeService.annualFreeTrialLabel,
             trialDays: storeService.annualFreeTrialDays,
             selectedDaysBefore: $trialReminderDaysBefore,

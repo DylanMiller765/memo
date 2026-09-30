@@ -4300,6 +4300,8 @@ struct OnboardingConciseGoalsView: View {
 /// dates on the calendar tiles come from the real StoreKit trial length, and
 /// the banner is the exact notification that gets scheduled.
 struct OnboardingTrialReminderView: View {
+    /// The guided route already asked about notifications, so it drops this line.
+    var showsNotificationFootnote = true
     let trialLabel: String?
     let trialDays: Int?
     @Binding var selectedDaysBefore: Int
@@ -4383,7 +4385,7 @@ struct OnboardingTrialReminderView: View {
             OBActionBar(
                 title: "Continue",
                 reassurance: "No payment due now",
-                footnote: "We'll ask to send notifications after your trial starts.",
+                footnote: showsNotificationFootnote ? "We'll ask to send notifications after your trial starts." : nil,
                 backdrop: .clear,
                 action: onContinue
             )
