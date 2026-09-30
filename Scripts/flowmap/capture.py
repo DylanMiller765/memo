@@ -29,10 +29,19 @@ def add(sid, *steps):
 
 # Onboarding (the concise route that ships)
 for t in ["welcome", "attribution", "bridge", "slot", "game", "game-reward", "rank", "trial-free", "trial-reminder"]:
-    add(f"ob-{t}", ("launch", ["--screenshot-target", f"onboarding-{t}"]), ("wait", 7), ("shot",))
-add("ob-slot-landed", ("launch", ["--screenshot-target", "onboarding-slot"]), ("wait", 7), ("tap", "Spin"), ("wait", 6), ("shot",))
+    add(f"ob-{t}", ("launch", ["--onboarding-variant", "concise", "--screenshot-target", f"onboarding-{t}"]), ("wait", 7), ("shot",))
+add("ob-slot-landed", ("launch", ["--onboarding-variant", "concise", "--screenshot-target", "onboarding-slot"]), ("wait", 7), ("tap", "Spin"), ("wait", 6), ("shot",))
 add("paywall-yearly", ("launch", ["--screenshot-target", "paywall-concise"]), ("wait", 10), ("shot",))
 add("paywall-weekly", ("launch", ["--screenshot-target", "paywall-concise"]), ("wait", 10), ("tap", "Weekly"), ("wait", 1.5), ("shot",))
+
+# Onboarding test, arm B ("guided"): new screens after the demo
+for t in ["age", "screen-time", "shock", "years-back", "screen-time-access", "notifications", "plan", "congrats"]:
+    add(f"g-{t}", ("launch", ["--onboarding-variant", "guided", "--screenshot-target", f"onboarding-guided-{t}"]), ("wait", 8), ("shot",))
+add("g-calculating", ("launch", ["--onboarding-variant", "guided", "--screenshot-target", "onboarding-guided-calculating"]), ("wait", 6), ("shot",))
+
+# One-time offer: the paywall's X shows once and opens it; "No thanks" returns to the paywall without the X
+add("offer", ("reinstall",), ("launch", ["--screenshot-target", "paywall-concise"]), ("wait", 10), ("tap", "Close paywall"), ("wait", 2), ("shot",),
+    ("tap", "No thanks"), ("wait", 1.5), ("shot", "paywall-after-offer"))
 
 # Home
 for n in range(4):

@@ -2,13 +2,14 @@
 """Build the Memo flow map page from capture.py's screenshots.
 
 Usage:
-  python3 Scripts/flowmap/build_page.py --raw <capture out dir> --site <site dir> --build "2.1.7 (46)"
+  python3 Scripts/flowmap/build_page.py --raw <capture out dir> --site <site dir> --build "2.1.7 (46)" [--deploy]
 
-Writes <site>/index.html and <site>/img/*.jpg. Screens the simulator can't show
+Writes <site>/index.html and <site>/img/*.jpg. --deploy publishes the site to Vercel
+(project memo-flowmap → https://memo-flowmap.vercel.app, public, not indexed). Screens the simulator can't show
 (Screen Time's lock screen, iOS prompts, the widget) are drawn as wireframes
 from the copy in the code. Edit FLOWS below when a flow changes.
 """
-import argparse, html, os, time
+import argparse, html, os, subprocess, time
 from PIL import Image
 
 # A node is ("shot", id, name, note) or ("wire", name, lines, buttons, note).
@@ -19,7 +20,7 @@ def W(name, lines, buttons=(), note=""): return ("wire", name, lines, buttons, n
 FLOWS = [
     {
         "id": "onboarding", "title": "Onboarding", "eyebrow": "First open",
-        "text": "The short route that ships. Accounts the App Store says can't get the free trial skip both trial screens and go from the demo straight to the paywall.",
+        "text": "Arm A of the onboarding test: the short route that ships today. Each new install is put in arm A or arm B at random (50/50). Accounts the App Store says can't get the free trial skip both trial screens and go from the demo straight to the paywall.",
         "lanes": [
             [S("ob-welcome", "Welcome", "“The app blocker you train to unlock.”"), "Get started",
              S("ob-attribution", "Where did you find Memo?"), "pick or Skip",
@@ -31,11 +32,49 @@ FLOWS = [
              S("ob-rank", "You'd place #N", "“Chimps average 7. You remembered N.”")],
             ["→ has a free trial", S("ob-trial-free", "7 days free"), "Continue",
              S("ob-trial-reminder", "Trial reminder"), "Continue",
-             S("paywall-yearly", "Paywall · Yearly", "Hard paywall; comes back if closed"), "tap Weekly",
+             S("paywall-yearly", "Paywall · Yearly", "Hard paywall; its X shows once and opens the one-time offer"), "tap Weekly",
              S("paywall-weekly", "Paywall · Weekly"), "Subscribed",
              W("Notifications prompt", ["iOS asks to send notifications", "(only when a trial reminder is set)"], ["Allow", "Don't Allow"]), "",
              S("home-0", "Home")],
             ["→ no trial for this Apple ID", S("paywall-yearly", "Paywall", "Straight from the rank step")],
+        ],
+    },
+    {
+        "id": "guided", "title": "Onboarding · arm B", "eyebrow": "First open · test",
+        "text": "BePresent's order with Memo's demo kept up front. After the demo, Memo asks two questions, a slot machine turns the answers into years, then Screen Time and notifications are asked before the trial pages. Same trial pages and paywall as arm A.",
+        "lanes": [
+            [S("ob-welcome", "Welcome"), "Get started",
+             S("ob-attribution", "Where did you find Memo?"), "",
+             S("ob-rank", "Chimp demo → You'd place #N", "Same demo as arm A"), "Continue",
+             S("g-age", "How old are you?", "Memo asks; one tap moves on"), "pick",
+             S("g-screen-time", "Phone time a day", "5 options"), "pick",
+             S("g-calculating", "Doing the math", "Reels lock in, big reel lands on the years"), "about 5 s",
+             S("g-shock", "Years lost", "Counts up to the years"), "Show me the way back",
+             S("g-years-back", "Years back", "Half the years lost"), "Get those years back",
+             S("g-screen-time-access", "Connect Screen Time", "Previews the iOS prompt"), "Connect Screen Time",
+             W("Screen Time prompt", ["“Memo” Would Like to Access Screen Time"], ["Continue", "Don't Allow"], "Either answer moves on"), "",
+             S("g-notifications", "Notifications", "Turn on or Maybe later"), "Turn on notifications",
+             W("Notifications prompt", ["iOS asks to send notifications"], ["Allow", "Don't Allow"]), "",
+             S("g-plan", "This week, Memo will help you"), "Let's go",
+             S("g-congrats", "First step done")],
+            ["→ has a free trial", S("ob-trial-free", "7 days free"), "Continue",
+             S("ob-trial-reminder", "Trial reminder"), "Continue", S("paywall-yearly", "Paywall")],
+            ["→ no trial for this Apple ID", S("paywall-yearly", "Paywall", "Straight from “First step done”")],
+        ],
+    },
+    {
+        "id": "offer", "title": "One-time offer", "eyebrow": "Paywall",
+        "text": "Yearly at $29.99 (25% off), shown once per install. It opens from the paywall's X or when someone backs out of Apple's payment sheet. It says “7 days free” only when the App Store confirms this account gets the trial.",
+        "lanes": [
+            [S("paywall-yearly", "Paywall", "X visible until the offer has been seen"), "tap X",
+             S("offer", "One-time offer"), "No thanks",
+             S("paywall-after-offer", "Paywall, no X", "Hard paywall again")],
+            [S("paywall-yearly", "Paywall"), "Start free trial",
+             W("Apple payment sheet", ["Memo Pro Annual", "7 days free, then $39.99/year"], ["Subscribe", "Cancel"]), "Cancel",
+             S("offer", "One-time offer", "Shown here instead if the X wasn't tapped first")],
+            [S("offer", "One-time offer"), "Claim my offer",
+             W("Apple payment sheet", ["Memo Pro Limited-Time Annual", "7 days free, then $29.99/year"], ["Subscribe", "Cancel"]), "Subscribed",
+             S("home-0", "Home")],
         ],
     },
     {
@@ -176,7 +215,8 @@ def lane(items, have):
 CSS = """
 :root{color-scheme:dark;--bg:#0a1220;--surface:#111b2e;--raise:#17233b;--line:#243453;--text:#edf2ff;--muted:#8f9cbd;--mint:#7be3c6;--amber:#ffd36b;--sky:#7fa8ff;
 --display:"Bricolage Grotesque","Avenir Next",system-ui,sans-serif;--body:"Figtree",system-ui,-apple-system,sans-serif;--mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace}
-body{background:var(--bg);color:var(--text);font:500 15px/1.5 var(--body);padding-inline:20px;padding-block:32px 72px}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:500 15px/1.5 var(--body);padding-inline:20px;padding-block:32px 72px}
 .wrap{max-width:1280px;margin:0 auto;display:grid;gap:40px}
 h1{font:800 clamp(32px,5vw,54px)/1 var(--display);letter-spacing:-.02em;margin:6px 0 12px}
 h2{font:800 26px/1.15 var(--display);margin:0;text-wrap:balance}
@@ -220,6 +260,7 @@ def main():
     ap.add_argument("--raw", required=True)
     ap.add_argument("--site", required=True)
     ap.add_argument("--build", default="")
+    ap.add_argument("--deploy", action="store_true", help="publish the site to Vercel (memo-flowmap)")
     a = ap.parse_args()
     os.makedirs(os.path.join(a.site, "img"), exist_ok=True)
     have = set()
@@ -244,11 +285,19 @@ def main():
     nav = "".join(f'<a href="#{fl["id"]}">{esc(fl["title"])}</a>' for fl in FLOWS)
     cleanup = "".join(f"<li>{esc(c)}</li>" for c in CLEANUP)
     date = time.strftime("%B %-d, %Y")
-    page = f"""<title>Memo Flow Map</title>
+    page = f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Memo Flow Map</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@600;700&display=swap">
 <style>{CSS}</style>
+</head>
+<body>
 <div class="wrap">
 <header><div class="eyebrow">Memo {esc(a.build)} · every screen</div><h1>Memo Flow Map</h1>
 <p class="lede">Every screen and every tap between them, left to right. Screenshots come from the simulator; striped boxes are wireframes of screens iOS draws itself (Screen Time's shield, prompts, the widget). Blue text is what you tap or the condition that sends you there. Tap any screen to open it full size.</p></header>
@@ -256,9 +305,19 @@ def main():
 {''.join(parts)}
 <section id="cleanup"><div class="cleanup"><span class="eyebrow">In the code, never shown</span><ul>{cleanup}</ul></div></section>
 <footer>Captured {date} from Memo {esc(a.build)} on an iPhone 16 simulator with Scripts/flowmap/capture.py; page built by Scripts/flowmap/build_page.py.</footer>
-</div>"""
+</div>
+</body>
+</html>"""
     open(os.path.join(a.site, "index.html"), "w").write(page)
     print(f"{len(have)} screens, {sum(1 for fl in FLOWS for l in fl.get('lanes', []) for n in l if isinstance(n, tuple))} nodes")
+    if a.deploy:
+        # Unreleased screens and prices are on this page: keep search engines out.
+        open(os.path.join(a.site, "robots.txt"), "w").write("User-agent: *\nDisallow: /\n")
+        # `vercel link` drops a token in .env.local; never upload it.
+        open(os.path.join(a.site, ".vercelignore"), "w").write(".env*\n")
+        if not os.path.isdir(os.path.join(a.site, ".vercel")):
+            subprocess.run(["vercel", "link", "--yes", "--project", "memo-flowmap"], cwd=a.site, check=True)
+        subprocess.run(["vercel", "deploy", "--prod", "--yes"], cwd=a.site, check=True)
 
 
 if __name__ == "__main__":
