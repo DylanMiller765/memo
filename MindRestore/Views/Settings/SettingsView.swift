@@ -14,6 +14,7 @@ struct SettingsView: View {
     @State private var showingScreenshotDataConfirmation = false
     @State private var screenshotDataLoaded = false
     @State private var debugTapCount = 0
+    @State private var markedInternal = InternalDevice.isMarked
     @State private var showingDebugFocusSetup = false
     @State private var editingName = false
     @State private var editedName = ""
@@ -62,7 +63,8 @@ struct SettingsView: View {
                     // Reset Data (standalone red button)
                     resetDataButton
 
-                    // Debug (7-tap easter egg)
+                    // Hidden until Version is tapped 7 times
+                    if debugTapCount >= 7 { internalDeviceCard }
                     #if DEBUG
                     debugCard
                     #endif
@@ -341,10 +343,12 @@ struct SettingsView: View {
         }
         .buttonStyle(.plain)
         rowDivider
-        aboutRow(icon: "info.circle.fill", color: .gray, title: "Version", trailing: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0")
-            #if DEBUG
-            .onTapGesture { debugTapCount += 1 }
-            #endif
+        // 7 taps reveal the internal-device switch (every build) and the debug card (debug builds).
+        // An action, not onTapGesture: rows without one ignore taps entirely.
+        aboutRow(icon: "info.circle.fill", color: .gray, title: "Version",
+                 trailing: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0") {
+            debugTapCount += 1
+        }
     }
 
     private func linkRowLabel(icon: String, color: Color, title: String) -> some View {
@@ -399,6 +403,26 @@ struct SettingsView: View {
     }
 
     // MARK: - Debug (hidden behind 7-tap on version)
+
+    /// Keeps Dylan's own App Store install out of the analytics (App Store builds have no debug card).
+    private var internalDeviceCard: some View {
+        Toggle(isOn: Binding(get: { markedInternal }, set: { on in
+            markedInternal = on
+            InternalDevice.setMarked(on)
+        })) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Mark this device as internal")
+                    .font(.brand(size: 16, weight: .heavy))
+                    .foregroundStyle(.white)
+                Text("Leaves this phone out of Memo's analytics.")
+                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.6))
+            }
+        }
+        .tint(ClimbColor.mint)
+        .padding(16)
+        .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Color.white.opacity(0.07)))
+    }
 
     @ViewBuilder
     private var debugCard: some View {

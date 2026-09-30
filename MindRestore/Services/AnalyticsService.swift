@@ -43,6 +43,7 @@ enum Analytics {
         config.debug = true
         #endif
         PostHogSDK.shared.setup(config)
+        InternalDevice.tagIfNeeded()
     }
 
     // MARK: - Session replay
