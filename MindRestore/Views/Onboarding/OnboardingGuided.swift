@@ -260,7 +260,9 @@ struct OnboardingGuidedChoicePage<Option: Identifiable & Equatable>: View {
 
     var body: some View {
         GuidedPage { compact in
-            Spacer(minLength: 0)
+            // A fixed top gap, not a centering spacer: Memo and the bubble sit at the same height on
+            // every question page (and the hill stays put), whatever the answers below need.
+            Spacer().frame(height: compact ? 6 : 52)
             GuidedMemoAsks(question: title, hint: detail, compact: compact)
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: columns), spacing: compact ? 10 : 12) {
                 ForEach(options) { option in
@@ -268,8 +270,7 @@ struct OnboardingGuidedChoicePage<Option: Identifiable & Equatable>: View {
                 }
             }
             .padding(.top, compact ? 16 : 24)
-            // A shorter spacer below than above: the answers sit lower, nearer the thumb.
-            Spacer(minLength: 0).frame(maxHeight: compact ? 10 : 36)
+            Spacer(minLength: 0)
         } bar: {
             EmptyView()
         }
