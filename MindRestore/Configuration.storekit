@@ -133,7 +133,7 @@
         {
           "adHocOffers": [],
           "codeOffers": [],
-          "displayPrice": "3.99",
+          "displayPrice": "4.99",
           "familyShareable": false,
           "groupNumber": 6,
           "internalID": "ultra_weekly_001",
@@ -215,7 +215,14 @@
           "recurringSubscriptionPeriod": "P1Y",
           "referenceName": "Memo Pro Limited-Time Annual",
           "subscriptionGroupID": "memori_pro",
-          "type": "RecurringSubscription"
+          "type": "RecurringSubscription",
+          "introductoryOffer": {
+            "displayPrice": "0",
+            "internalID": "ultra_annual_founder_free_trial",
+            "numberOfPeriods": 1,
+            "paymentMode": "free",
+            "subscriptionPeriod": "P1W"
+          }
         }
       ]
     }

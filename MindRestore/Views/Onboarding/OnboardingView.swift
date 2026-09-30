@@ -46,11 +46,26 @@ enum OnboardingPage: Int, Equatable {
     case attentionTime = 18
     case motivationBridge = 19
     case attribution = 20
+    // Guided route (onboarding test arm B)
+    case guidedAge = 21
+    case guidedScreenTime = 22
+    case guidedCalculating = 23
+    case guidedShock = 24
+    case guidedYearsBack = 25
+    case guidedScreenTimeAccess = 26
+    case guidedNotifications = 27
+    case guidedPlan = 28
+    case guidedCongrats = 29
 }
 
 private enum MemoOnboardingVariant: String, CaseIterable {
     case control
     case concise
+    /// Arm B of the onboarding test: BePresent's questions → years → permissions order, with Memo's demo.
+    case guided
+
+    /// The current hill-style onboarding (both test arms), as opposed to the old control route.
+    var isShortRoute: Bool { self != .control }
 
     static func resolve() -> Self {
         #if DEBUG
@@ -61,12 +76,12 @@ private enum MemoOnboardingVariant: String, CaseIterable {
         }
         #endif
 
-        return .concise
+        return Self(rawValue: OnboardingRouteAssignment.current()) ?? .concise
     }
 }
 
 struct OnboardingFlowOrder {
-    static let pageCount = 21
+    static let pageCount = 30
     static let monetizationPages: [OnboardingPage] = [
         .trialTrustBridge,
         .planPersonalizing
@@ -271,6 +286,13 @@ struct OnboardingView: View {
                 .welcome, .attribution, .motivationBridge, .goals,
                 .trialTrustBridge, .trialReminderBridge
             ]
+        case .guided:
+            return [
+                .welcome, .attribution, .goals,
+                .guidedAge, .guidedScreenTime, .guidedCalculating, .guidedShock, .guidedYearsBack,
+                .guidedScreenTimeAccess, .guidedNotifications, .guidedPlan, .guidedCongrats,
+                .trialTrustBridge, .trialReminderBridge
+            ]
         }
     }
 
@@ -389,7 +411,7 @@ struct OnboardingView: View {
             // dynamic bg color (the assessment animates color shifts).
             // The concise flow walks up Memo's hill instead: each page marks
             // where the crest goes with `.climbCrest()`.
-            if onboardingVariant == .concise {
+            if onboardingVariant.isShortRoute {
                 OnboardingClimbBackdrop(sky: climbSky, crestY: climbCrestY)
             } else {
                 OB.bg.ignoresSafeArea()
@@ -555,6 +577,9 @@ struct OnboardingView: View {
         switch OnboardingPage(rawValue: currentPage) {
         case .welcome, .attribution, .motivationBridge: return .night
         case .goals: return .twilight
+        case .guidedShock: return .night
+        case .guidedPlan: return .predawn
+        case .guidedYearsBack, .guidedCongrats: return .sunrise
         case .trialTrustBridge, .trialReminderBridge: return .sunrise
         default: return .twilight
         }
@@ -565,12 +590,12 @@ struct OnboardingView: View {
         switch lastDismissedCover {
         case .paywall:
             if didRouteAfterPaywallConversion {
-                if onboardingVariant == .concise {
+                if onboardingVariant.isShortRoute {
                     finishConciseOnboardingAfterConversion()
                 }
             } else if storeService.isProUser {
                 routeAfterPaywallConversion()
-                if onboardingVariant == .concise {
+                if onboardingVariant.isShortRoute {
                     finishConciseOnboardingAfterConversion()
                 }
             } else {
@@ -590,7 +615,7 @@ struct OnboardingView: View {
     private func routeAfterPaywallConversion() {
         guard !didRouteAfterPaywallConversion else { return }
         didRouteAfterPaywallConversion = true
-        if onboardingVariant == .concise {
+        if onboardingVariant.isShortRoute {
             trackOnboardingStepCompleted("paywallConverted", extraProperties: [
                 "next_step": "home"
             ])
@@ -758,7 +783,7 @@ struct OnboardingView: View {
     }
 
     private func onboardingStepName(for page: Int) -> String {
-        guard onboardingVariant == .concise else { return Analytics.onboardingStepName(for: page) }
+        guard onboardingVariant.isShortRoute else { return Analytics.onboardingStepName(for: page) }
         switch OnboardingPage(rawValue: page) {
         case .welcome: return "story_block"
         case .attribution: return "attribution"
@@ -766,6 +791,15 @@ struct OnboardingView: View {
         case .goals: return "story_playable_loop"
         case .trialTrustBridge: return "trial_offer"
         case .trialReminderBridge: return "trial_reminder"
+        case .guidedAge: return "guided_age"
+        case .guidedScreenTime: return "guided_screen_time"
+        case .guidedCalculating: return "guided_calculating"
+        case .guidedShock: return "guided_years_lost"
+        case .guidedYearsBack: return "guided_years_back"
+        case .guidedScreenTimeAccess: return "guided_screen_time_access"
+        case .guidedNotifications: return "guided_notifications"
+        case .guidedPlan: return "guided_plan"
+        case .guidedCongrats: return "guided_congrats"
         default: return Analytics.onboardingStepName(for: page)
         }
     }
@@ -822,6 +856,15 @@ struct OnboardingView: View {
         case 18: attentionTimePage
         case 19: motivationBridgePage
         case 20: attributionPage
+        case 21: guidedAgePage
+        case 22: guidedScreenTimePage
+        case 23: guidedCalculatingPage
+        case 24: guidedShockPage
+        case 25: guidedYearsBackPage
+        case 26: guidedScreenTimeAccessPage
+        case 27: guidedNotificationsPage
+        case 28: guidedPlanPage
+        case 29: guidedCongratsPage
         default: EmptyView()
         }
     }
@@ -902,7 +945,9 @@ struct OnboardingView: View {
     /// Accounts the App Store says can't get the free trial skip the trial
     /// pages ("7 days free", the reminder) and go straight to the paywall.
     private func advancePastPlayableLoop() {
-        if onboardingVariant == .concise, !storeService.products.isEmpty, storeService.annualFreeTrialLabel == nil {
+        let nextIndex = currentRouteIndex + 1
+        let nextIsTrial = routePages.indices.contains(nextIndex) && routePages[nextIndex] == .trialTrustBridge
+        if nextIsTrial, onboardingVariant.isShortRoute, !storeService.products.isEmpty, storeService.annualFreeTrialLabel == nil {
             skipTrialPagesToPaywall()
         } else {
             goToNextRoute()
@@ -977,7 +1022,7 @@ struct OnboardingView: View {
 
     @ViewBuilder
     private var onboardingProgressHeader: some View {
-        if onboardingVariant == .concise {
+        if onboardingVariant.isShortRoute {
             // Equal-width side slots keep the progress bar on the true
             // center line whether or not the back button is showing.
             HStack(spacing: 0) {
@@ -1000,11 +1045,14 @@ struct OnboardingView: View {
 
                 Spacer(minLength: 8)
 
-                HStack(spacing: 5) {
+                // Longer routes (the guided arm has 14 steps) get narrower segments so the
+                // header never grows wider than the screen and stretches every page.
+                let segment: CGFloat = routePages.count > 8 ? 11 : 16
+                HStack(spacing: routePages.count > 8 ? 4 : 5) {
                     ForEach(routePages.indices, id: \.self) { index in
                         Capsule()
                             .fill(index <= currentRouteIndex ? Color.white : Color.white.opacity(0.28))
-                            .frame(width: index == currentRouteIndex ? 26 : 16, height: 5)
+                            .frame(width: index == currentRouteIndex ? segment + 10 : segment, height: 5)
                     }
                 }
                 .animation(.easeInOut(duration: 0.3), value: currentRouteIndex)
@@ -1188,7 +1236,7 @@ struct OnboardingView: View {
 
     @ViewBuilder
     private var welcomePage: some View {
-        if onboardingVariant == .concise {
+        if onboardingVariant.isShortRoute {
             conciseWelcomePage
         } else {
             legacyWelcomePage
@@ -1584,7 +1632,7 @@ struct OnboardingView: View {
 
     @ViewBuilder
     private var goalsPage: some View {
-        if onboardingVariant == .concise {
+        if onboardingVariant.isShortRoute {
             OnboardingPlayableLoopPage(previewStage: screenshotTryItStage) { levelsCleared in
                 trackOnboardingStepCompleted("story_playable_loop", extraProperties: [
                     "demo_game": "chimp_test",
@@ -1598,6 +1646,118 @@ struct OnboardingView: View {
         } else {
             legacyGoalsPage
         }
+    }
+
+    // MARK: - Guided route (onboarding test arm B)
+
+    private var guidedMath: GuidedLifeMath {
+        GuidedLifeMath(age: selectedAge > 0 ? selectedAge : 21,
+                       dailyHours: useScreenTimeEstimate ? screenTimeEstimateHours : 5)
+    }
+
+    private var guidedAgePage: some View {
+        OnboardingGuidedChoicePage(
+            title: "How old are you?", detail: "Memo uses it to do the math. It stays on your phone.",
+            options: GuidedAgeBand.allCases, label: \.title,
+            initial: GuidedAgeBand.allCases.first { $0.age == selectedAge }
+        ) { band in
+            selectedAge = band.age
+            trackOnboardingStepCompleted("guided_age", extraProperties: ["age_band": band.rawValue])
+            goToNextRoute()
+        }
+    }
+
+    private var guidedScreenTimePage: some View {
+        OnboardingGuidedChoicePage(
+            title: "How long are you on\nyour phone a day?", detail: "A guess is fine. Screen Time can check it later.",
+            columns: 1, options: GuidedScreenTime.allCases, label: \.title,
+            initial: useScreenTimeEstimate ? GuidedScreenTime.allCases.first { $0.hours == screenTimeEstimateHours } : nil
+        ) { band in
+            screenTimeEstimateHours = band.hours
+            useScreenTimeEstimate = true
+            trackOnboardingStepCompleted("guided_screen_time", extraProperties: ["screen_time_band": band.rawValue, "hours": band.hours])
+            goToNextRoute()
+        }
+    }
+
+    private var guidedCalculatingPage: some View {
+        OnboardingGuidedCalculatingPage(
+            math: guidedMath,
+            screenTime: GuidedScreenTime.allCases.first { $0.hours == screenTimeEstimateHours } ?? .from4,
+            ageLabel: GuidedAgeBand.allCases.first { $0.age == selectedAge }?.title ?? "18–24"
+        ) {
+            guard OnboardingPage(rawValue: currentPage) == .guidedCalculating else { return }
+            trackOnboardingStepCompleted("guided_calculating")
+            goToNextRoute()
+        }
+    }
+
+    private var guidedShockPage: some View {
+        OnboardingGuidedShockPage(math: guidedMath, style: Self.debugArgument("--guided-shock").flatMap(GuidedShockStyle.init) ?? .number) {
+            trackOnboardingStepCompleted("guided_years_lost", extraProperties: ["years_on_phone": guidedMath.yearsOnPhone])
+            goToNextRoute()
+        }
+    }
+
+    private var guidedYearsBackPage: some View {
+        OnboardingGuidedYearsBackPage(math: guidedMath) {
+            trackOnboardingStepCompleted("guided_years_back", extraProperties: ["years_back": guidedMath.yearsBack])
+            goToNextRoute()
+        }
+    }
+
+    private var guidedScreenTimeAccessPage: some View {
+        OnboardingGuidedScreenTimePage(style: Self.debugArgument("--guided-permission").flatMap(GuidedPermissionStyle.init) ?? .alert) {
+            Task { @MainActor in
+                await focusModeService.requestAuthorization()
+                let approved = focusModeService.authorizationStatus == .approved
+                screenTimeAuthorized = approved
+                trackOnboardingStepCompleted("guided_screen_time_access", extraProperties: [
+                    "screen_time_permission": approved ? "approved" : "denied"
+                ])
+                goToNextRoute()
+            }
+        }
+    }
+
+    private var guidedNotificationsPage: some View {
+        OnboardingGuidedNotificationsPage(
+            onEnable: {
+                Task { @MainActor in
+                    let granted = await NotificationService.shared.requestPermission()
+                    notificationsEnabled = granted
+                    trackOnboardingStepCompleted("guided_notifications", extraProperties: ["notifications_enabled": granted])
+                    goToNextRoute()
+                }
+            },
+            onLater: {
+                trackOnboardingStepCompleted("guided_notifications", extraProperties: ["notifications_enabled": false, "skipped": true])
+                goToNextRoute()
+            }
+        )
+    }
+
+    private var guidedPlanPage: some View {
+        OnboardingGuidedPlanPage(math: guidedMath) {
+            trackOnboardingStepCompleted("guided_plan")
+            goToNextRoute()
+        }
+    }
+
+    private var guidedCongratsPage: some View {
+        OnboardingGuidedCongratsPage {
+            trackOnboardingStepCompleted("guided_congrats")
+            // Same rule as after the demo: no trial for this account → straight to the paywall.
+            advancePastPlayableLoop()
+        }
+    }
+
+    private static func debugArgument(_ name: String) -> String? {
+        #if DEBUG
+        let arguments = ProcessInfo.processInfo.arguments
+        if let i = arguments.firstIndex(of: name), arguments.indices.contains(i + 1) { return arguments[i + 1] }
+        #endif
+        return nil
     }
 
     private var legacyGoalsPage: some View {
@@ -1949,7 +2109,7 @@ struct OnboardingView: View {
                     "trial_eligible": hasTrial,
                     "annual_price_loaded": annualPlanDisplayPrice != nil
                 ])
-                if onboardingVariant == .concise {
+                if onboardingVariant.isShortRoute {
                     if hasTrial {
                         goToNextRoute()
                     } else {
@@ -1964,7 +2124,7 @@ struct OnboardingView: View {
             if storeService.products.isEmpty {
                 await storeService.loadProducts()
             }
-            if onboardingVariant == .concise, presentedCover == nil,
+            if onboardingVariant.isShortRoute, presentedCover == nil,
                !storeService.products.isEmpty, storeService.annualFreeTrialLabel == nil {
                 skipTrialPagesToPaywall()
             }

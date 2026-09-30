@@ -45,6 +45,7 @@
 		8574E446C920D58FEE0C30CF /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E02E7BAD4ADED91F69A38C14 /* NotificationService.swift */; };
 		A33BC116471F3B0282CF3629 /* StreakBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B93885923C4848ACCA6ADDA /* StreakBadge.swift */; };
 		A6BB59590520057ADCAF7847 /* PaywallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B18226B6A2D87A22928921B /* PaywallView.swift */; };
+		4F50E652681F7BED0D1F359C /* PaywallOneTimeOffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AFBB9015F04AA77453B63CE /* PaywallOneTimeOffer.swift */; };
 		AA000001000000000000AA01 /* Achievement.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000002000000000000AA01 /* Achievement.swift */; };
 		AA000001000000000000AA02 /* LeaderboardEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000002000000000000AA02 /* LeaderboardEntry.swift */; };
 		AA000001000000000000AA04 /* LeaderboardService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000002000000000000AA04 /* LeaderboardService.swift */; };
@@ -175,6 +176,8 @@
 		6613BC32B97108EBBDECDFFF /* TrainUpNextTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F7754704398E8954D7B39F3 /* TrainUpNextTests.swift */; };
 		1FB7D88B33803824376CA53A /* TrainUpNext.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59798F2DEF0DEFA761CD6140 /* TrainUpNext.swift */; };
 		9043BAFAB71621DD45E7DBCE /* OnboardingClimb.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E6D6FCFA616824C10BBE030 /* OnboardingClimb.swift */; };
+		DE53070E965A8DFD63A72A5F /* OnboardingGuided.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7E85814395DA070D5F11BDC /* OnboardingGuided.swift */; };
+		FA20E55D50252D15F344E661 /* OnboardingRouteAssignment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 894F1D5FD96D04FD50A191E9 /* OnboardingRouteAssignment.swift */; };
 		AAAECFEFF4CF9E529EE25AF1 /* OnboardingRivalsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EF51150B70EA17D7A68F138 /* OnboardingRivalsTests.swift */; };
 		ACQS0000000000000000A001 /* AcquisitionSourceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACQS0000000000000000F001 /* AcquisitionSourceTests.swift */; };
 		6AB2A84F503CEB3B24EA7B02 /* GameResultVariants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C2DF53B78B5FCB8CB4CE832 /* GameResultVariants.swift */; };
@@ -185,6 +188,7 @@
 		9EEDE594764E516C800CB774 /* ReviewPromptTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E85809019436FFAD02732FA /* ReviewPromptTests.swift */; };
 		66D54B460C783516EEF1DB92 /* ProgressReset.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBC11E4627572CA98ABA5040 /* ProgressReset.swift */; };
 		89E3A0F68C6D99973A05BC90 /* SettingsCleanupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9405E0DF2F66609AC140B112 /* SettingsCleanupTests.swift */; };
+		0EF557358BC1C0AA2C8515D9 /* OnboardingRouteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08978292CCC36FF4C4C3506B /* OnboardingRouteTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -269,6 +273,7 @@
 		3EDD34095382917612B530DD /* MindRestore.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MindRestore.entitlements; sourceTree = "<group>"; };
 		4ABD9792A0473A14E54F8F87 /* StoreService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreService.swift; sourceTree = "<group>"; };
 		4B18226B6A2D87A22928921B /* PaywallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaywallView.swift; sourceTree = "<group>"; };
+		1AFBB9015F04AA77453B63CE /* PaywallOneTimeOffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaywallOneTimeOffer.swift; sourceTree = "<group>"; };
 		4B93885923C4848ACCA6ADDA /* StreakBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreakBadge.swift; sourceTree = "<group>"; };
 		55274562ADD2916F382380DF /* User.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = User.swift; sourceTree = "<group>"; };
 		69BA16CD97233B209118C979 /* ConfettiView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfettiView.swift; sourceTree = "<group>"; };
@@ -430,6 +435,8 @@
 		8F7754704398E8954D7B39F3 /* TrainUpNextTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainUpNextTests.swift; sourceTree = "<group>"; };
 		59798F2DEF0DEFA761CD6140 /* TrainUpNext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainUpNext.swift; sourceTree = "<group>"; };
 		4E6D6FCFA616824C10BBE030 /* OnboardingClimb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingClimb.swift; sourceTree = "<group>"; };
+		E7E85814395DA070D5F11BDC /* OnboardingGuided.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingGuided.swift; sourceTree = "<group>"; };
+		894F1D5FD96D04FD50A191E9 /* OnboardingRouteAssignment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingRouteAssignment.swift; sourceTree = "<group>"; };
 		8EF51150B70EA17D7A68F138 /* OnboardingRivalsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingRivalsTests.swift; sourceTree = "<group>"; };
 		ACQS0000000000000000F001 /* AcquisitionSourceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcquisitionSourceTests.swift; sourceTree = "<group>"; };
 		1C2DF53B78B5FCB8CB4CE832 /* GameResultVariants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameResultVariants.swift; sourceTree = "<group>"; };
@@ -440,6 +447,7 @@
 		0E85809019436FFAD02732FA /* ReviewPromptTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewPromptTests.swift; sourceTree = "<group>"; };
 		CBC11E4627572CA98ABA5040 /* ProgressReset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressReset.swift; sourceTree = "<group>"; };
 		9405E0DF2F66609AC140B112 /* SettingsCleanupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsCleanupTests.swift; sourceTree = "<group>"; };
+		08978292CCC36FF4C4C3506B /* OnboardingRouteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingRouteTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -756,6 +764,7 @@
 			isa = PBXGroup;
 			children = (
 				4B18226B6A2D87A22928921B /* PaywallView.swift */,
+				1AFBB9015F04AA77453B63CE /* PaywallOneTimeOffer.swift */,
 			);
 			path = Paywall;
 			sourceTree = "<group>";
@@ -854,6 +863,8 @@
 			isa = PBXGroup;
 			children = (
 				4E6D6FCFA616824C10BBE030 /* OnboardingClimb.swift */,
+				E7E85814395DA070D5F11BDC /* OnboardingGuided.swift */,
+				894F1D5FD96D04FD50A191E9 /* OnboardingRouteAssignment.swift */,
 				71A70D542F9C30C7009C563D /* FocusOnboardingPages.swift */,
 				BB000002000000000000BB04 /* OnboardingPaywallView.swift */,
 				ONNS0002000000000000ON01 /* OnboardingNewScreens.swift */,
@@ -920,6 +931,7 @@
 			isa = PBXGroup;
 			children = (
 				9405E0DF2F66609AC140B112 /* SettingsCleanupTests.swift */,
+				08978292CCC36FF4C4C3506B /* OnboardingRouteTests.swift */,
 				0E85809019436FFAD02732FA /* ReviewPromptTests.swift */,
 				8FF4CCBFE423D93713CD3839 /* GameEndDataTests.swift */,
 				8EF51150B70EA17D7A68F138 /* OnboardingRivalsTests.swift */,
@@ -1300,6 +1312,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				9043BAFAB71621DD45E7DBCE /* OnboardingClimb.swift in Sources */,
+				DE53070E965A8DFD63A72A5F /* OnboardingGuided.swift in Sources */,
+				FA20E55D50252D15F344E661 /* OnboardingRouteAssignment.swift in Sources */,
 				1FB7D88B33803824376CA53A /* TrainUpNext.swift in Sources */,
 				D0B900A5EF06583F9890A400 /* InsightsWeekView.swift in Sources */,
 				53FCCDB842BA08B9EE1728AB /* InsightsModels.swift in Sources */,
@@ -1378,6 +1392,7 @@
 				71A70D552F9C30C7009C563D /* FocusOnboardingPages.swift in Sources */,
 				DEEP0002000000000000DD01 /* DeepLinkRouter.swift in Sources */,
 				A6BB59590520057ADCAF7847 /* PaywallView.swift in Sources */,
+				4F50E652681F7BED0D1F359C /* PaywallOneTimeOffer.swift in Sources */,
 				PROF0001000000000000PF01 /* ProfileView.swift in Sources */,
 				CFCCD0671D224CBDDF84E15C /* ProgressDashboardView.swift in Sources */,
 				15446FA296EDA6025F1B64EF /* ProgressRing.swift in Sources */,
@@ -1454,6 +1469,7 @@
 				AAAECFEFF4CF9E529EE25AF1 /* OnboardingRivalsTests.swift in Sources */,
 				ACQS0000000000000000A001 /* AcquisitionSourceTests.swift in Sources */,
 				89E3A0F68C6D99973A05BC90 /* SettingsCleanupTests.swift in Sources */,
+				0EF557358BC1C0AA2C8515D9 /* OnboardingRouteTests.swift in Sources */,
 				9EEDE594764E516C800CB774 /* ReviewPromptTests.swift in Sources */,
 				E9E9DD202DA6ABF001232EE5 /* GameEndDataTests.swift in Sources */,
 				6613BC32B97108EBBDECDFFF /* TrainUpNextTests.swift in Sources */,

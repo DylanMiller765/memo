@@ -408,16 +408,19 @@ struct PaywallView: View {
     /// Onboarding paywall: where Memo stands, so the hill's crest meets his feet.
     @State private var climbCrestY: CGFloat?
     @State private var showCodeRedemption = false
+    /// The one-time offer shows the first time someone closes the paywall, then never again.
+    @AppStorage("paywall.exitOfferSeen") private var exitOfferSeen = false
+    @State private var showingExitOffer = false
     /// Set when the offer-code sheet opens; cleared once a redemption lands.
     @State private var awaitingOfferCode = false
     private var compactPhone: Bool { UIScreen.main.bounds.height < 700 }
-    private let exitOfferRegularPriceFallback = 59.99
-    private let exitOfferRegularPriceTextFallback = "$59.99"
+    private let exitOfferRegularPriceFallback = 39.99
+    private let exitOfferRegularPriceTextFallback = "$39.99"
 
     private var shouldShowCloseButton: Bool {
-        // The onboarding paywall has no dismiss route. An X that opened a
-        // different offer looked like a broken close control.
-        !isHardPaywall
+        // The onboarding paywall has no dismiss route, so its X exists only while it
+        // leads somewhere: the one-time offer. Once that's been seen, the X goes away.
+        !isHardPaywall || (canShowExitOffer && !showingExitOffer)
     }
 
     /// Keyed off the SELECTED PLAN, not off trial presence. There are three
@@ -488,6 +491,32 @@ struct PaywallView: View {
                 if shouldShowCloseButton {
                     closeButton(safeTop: proxy.safeAreaInsets.top, width: proxy.size.width)
                 }
+                if showingExitOffer {
+                    PaywallOneTimeOffer(
+                        style: PaywallOneTimeOffer.debugStyle,
+                        priceText: productDisplayPrice(for: StoreService.annualUltraExitOfferProductID, fallback: "$29.99"),
+                        regularPriceText: regularAnnualPriceText,
+                        weeklyText: weeklyPriceText(for: StoreService.annualUltraExitOfferProductID, fallbackAnnualPrice: 29.99),
+                        discountPercent: exitOfferDiscountPercent,
+                        trialLabel: storeService.exitOfferTrialLabel,
+                        isBusy: storeService.isLoading,
+                        onClaim: {
+                            Task {
+                                await purchase(productID: StoreService.annualUltraExitOfferProductID, plan: "annual_founder", isExitOffer: true)
+                            }
+                        },
+                        onDecline: {
+                            Analytics.paywallExitOfferDeclined(trigger: triggerSource, isHighIntent: isHighIntent)
+                            if isHardPaywall {
+                                withAnimation(.easeInOut(duration: 0.25)) { showingExitOffer = false }
+                            } else {
+                                dismiss()
+                            }
+                        }
+                    )
+                    .transition(.opacity)
+                    .zIndex(10)
+                }
                 #if DEBUG
                 if !ProcessInfo.processInfo.arguments.contains("--hide-dev-controls") {
                     debugSkipButton(safeTop: proxy.safeAreaInsets.top)
@@ -509,6 +538,11 @@ struct PaywallView: View {
         }
         .preferredColorScheme(.dark)
         .interactiveDismissDisabled(isHardPaywall)
+        #if DEBUG
+        .onAppear {
+            if ProcessInfo.processInfo.arguments.contains("--show-one-time-offer") { showingExitOffer = true }
+        }
+        #endif
         .offerCodeRedemption(isPresented: $showCodeRedemption)
         .onChange(of: showCodeRedemption) { wasShowing, isShowing in
             guard wasShowing && !isShowing else { return }
@@ -2087,13 +2121,50 @@ struct PaywallView: View {
 
     // MARK: - Close Button
 
+    private var exitOfferDiscountPercent: Int {
+        let regular = productPrice(for: StoreService.annualUltraProductID, fallback: 39.99)
+        let offer = productPrice(for: StoreService.annualUltraExitOfferProductID, fallback: 29.99)
+        guard regular > 0, offer < regular else { return 0 }
+        return Int(((1 - offer / regular) * 100).rounded())
+    }
+
+    private var canShowExitOffer: Bool {
+        !exitOfferSeen && !storeService.isProUser && exitOfferDiscountPercent > 0
+            && storeService.products.contains { $0.id == StoreService.annualUltraExitOfferProductID }
+    }
+
+    private func closeTapped() {
+        guard presentOneTimeOffer(reason: "close_tapped") else {
+            Analytics.paywallDismissed(trigger: triggerSource, selectedPlan: selectedPlan.analyticsName, isHighIntent: isHighIntent)
+            dismiss()
+            return
+        }
+    }
+
+    /// Shows the one-time offer if this install hasn't seen it. Returns false when it can't.
+    private func presentOneTimeOffer(reason: String) -> Bool {
+        guard canShowExitOffer, !showingExitOffer else { return false }
+        exitOfferSeen = true
+        let offer = productPrice(for: StoreService.annualUltraExitOfferProductID, fallback: 29.99)
+        let regular = productPrice(for: StoreService.annualUltraProductID, fallback: 39.99)
+        Analytics.paywallExitOfferShown(
+            trigger: triggerSource, selectedPlan: selectedPlan.analyticsName,
+            offerProductID: StoreService.annualUltraExitOfferProductID,
+            displayedPrice: offer, regularPrice: regular, discountLabel: "\(exitOfferDiscountPercent)% off",
+            displayedPriceText: productDisplayPrice(for: StoreService.annualUltraExitOfferProductID, fallback: "$29.99"),
+            regularPriceText: regularAnnualPriceText,
+            reason: reason
+        )
+        withAnimation(.spring(response: 0.45, dampingFraction: 0.86)) { showingExitOffer = true }
+        return true
+    }
+
     private func closeButton(safeTop: CGFloat, width: CGFloat) -> some View {
         let cappedTopPadding = min(max(12, safeTop + 8), 68)
         let cappedTapRegionHeight = min(max(74, safeTop + 62), 124)
 
         return Button {
-            Analytics.paywallDismissed(trigger: triggerSource, selectedPlan: selectedPlan.analyticsName, isHighIntent: isHighIntent)
-            dismiss()
+            closeTapped()
         } label: {
             ZStack {
                 Circle()
@@ -2186,7 +2257,12 @@ struct PaywallView: View {
             isExitOffer: isExitOffer
         )
         // Snapshot before buying: the purchase itself consumes eligibility.
-        let trialDaysAtPurchase = storeService.annualFreeTrialDays
+        // Only the product actually being bought decides whether this is a trial.
+        let trialDaysAtPurchase: Int? = switch productID {
+        case StoreService.annualUltraProductID: storeService.annualFreeTrialDays
+        case StoreService.annualUltraExitOfferProductID: storeService.exitOfferFreeTrialDays
+        default: nil
+        }
         let outcome = await storeService.purchase(product)
         let price = NSDecimalNumber(decimal: product.price).doubleValue
         switch outcome {
@@ -2213,9 +2289,7 @@ struct PaywallView: View {
             )
             // Was: any annual purchase counted as a trial start. That logged
             // trial_started for full-price buys by trial-ineligible users.
-            let hasTrial = productID == StoreService.annualUltraProductID
-                && !isExitOffer
-                && trialDaysAtPurchase != nil
+            let hasTrial = trialDaysAtPurchase != nil
             Analytics.subscriptionStarted(
                 plan: plan,
                 productID: productID,
@@ -2228,7 +2302,7 @@ struct PaywallView: View {
             )
             // Only schedule after a verified trial purchase, using StoreKit's
             // subscription expiration instead of an approximate calendar date.
-            if productID == StoreService.annualUltraProductID, trialDaysAtPurchase != nil {
+            if trialDaysAtPurchase != nil {
                 if let endDate = await storeService.currentEntitlementExpirationDate(for: productID) {
                     NotificationService.shared.recordTrialStarted(endDate: endDate)
                 }
@@ -2245,6 +2319,8 @@ struct PaywallView: View {
                 isHighIntent: isHighIntent,
                 isExitOffer: isExitOffer
             )
+            // They were about to buy and backed out of Apple's sheet: the best moment for the one-time offer.
+            if !isExitOffer { _ = presentOneTimeOffer(reason: "purchase_cancelled") }
         case .pending:
             Analytics.paywallPurchasePending(
                 plan: plan,

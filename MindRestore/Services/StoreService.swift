@@ -39,6 +39,25 @@ final class StoreService {
     /// must not promise them "$0.00" and then present a full-price sheet.
     var annualIntroOffer: Product.SubscriptionOffer?
     var isEligibleForAnnualIntroOffer = false
+    /// The one-time offer's own intro offer (App Store Connect decides whether it's a
+    /// free trial). Eligibility is per subscription group, so the annual check applies.
+    var exitOfferIntroOffer: Product.SubscriptionOffer?
+    var isEligibleForIntroOffers = false
+
+    var exitOfferFreeTrialDays: Int? {
+        guard isEligibleForIntroOffers,
+              let offer = exitOfferIntroOffer,
+              offer.paymentMode == .freeTrial else { return nil }
+        return offer.period.approximateDays
+    }
+
+    /// e.g. "7 days" when the one-time offer comes with a free trial this account can use.
+    var exitOfferTrialLabel: String? {
+        guard isEligibleForIntroOffers,
+              let offer = exitOfferIntroOffer,
+              offer.paymentMode == .freeTrial else { return nil }
+        return offer.period.trialLengthLabel
+    }
 
     /// e.g. "7 days". Nil whenever no usable free trial exists — the single
     /// switch every "free trial" claim on the paywall should read.
@@ -70,6 +89,8 @@ final class StoreService {
         let eligible = await subscription.isEligibleForIntroOffer
         annualIntroOffer = offer
         isEligibleForAnnualIntroOffer = eligible && offer != nil
+        isEligibleForIntroOffers = eligible
+        exitOfferIntroOffer = products.first(where: { $0.id == Self.annualUltraExitOfferProductID })?.subscription?.introductoryOffer
     }
 
     // MARK: Product IDs

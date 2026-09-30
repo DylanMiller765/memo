@@ -648,9 +648,10 @@ enum Analytics {
         regularPrice: Double,
         discountLabel: String,
         displayedPriceText: String,
-        regularPriceText: String
+        regularPriceText: String,
+        reason: String? = nil
     ) {
-        PostHogSDK.shared.capture("paywall.exit_offer_shown", properties: paywallExitOfferProperties(
+        var props = paywallExitOfferProperties(
             trigger: trigger,
             selectedPlan: selectedPlan,
             offerProductID: offerProductID,
@@ -659,7 +660,14 @@ enum Analytics {
             discountLabel: discountLabel,
             displayedPriceText: displayedPriceText,
             regularPriceText: regularPriceText
-        ))
+        )
+        // close_tapped or purchase_cancelled: which moment showed the one-time offer.
+        if let reason { props["offer_reason"] = reason }
+        PostHogSDK.shared.capture("paywall.exit_offer_shown", properties: props)
+    }
+
+    static func paywallExitOfferDeclined(trigger: String, isHighIntent: Bool) {
+        PostHogSDK.shared.capture("paywall.exit_offer_declined", properties: ["trigger": trigger, "is_high_intent": isHighIntent])
     }
 
     static func paywallConverted(

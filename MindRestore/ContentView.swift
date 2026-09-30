@@ -401,6 +401,15 @@ struct ContentView: View {
             return OnboardingPage.welcome.rawValue
         case "onboarding-attribution":
             return OnboardingPage.attribution.rawValue
+        case "onboarding-guided-age": return OnboardingPage.guidedAge.rawValue
+        case "onboarding-guided-screen-time": return OnboardingPage.guidedScreenTime.rawValue
+        case "onboarding-guided-calculating": return OnboardingPage.guidedCalculating.rawValue
+        case "onboarding-guided-shock": return OnboardingPage.guidedShock.rawValue
+        case "onboarding-guided-years-back": return OnboardingPage.guidedYearsBack.rawValue
+        case "onboarding-guided-screen-time-access": return OnboardingPage.guidedScreenTimeAccess.rawValue
+        case "onboarding-guided-notifications": return OnboardingPage.guidedNotifications.rawValue
+        case "onboarding-guided-plan": return OnboardingPage.guidedPlan.rawValue
+        case "onboarding-guided-congrats": return OnboardingPage.guidedCongrats.rawValue
         case "onboarding-attention", "onboarding-attention-result", "onboarding-bridge":
             return OnboardingPage.motivationBridge.rawValue
         case "onboarding-slot", "onboarding-game", "onboarding-game-reward", "onboarding-rank":
