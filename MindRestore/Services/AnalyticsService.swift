@@ -296,6 +296,48 @@ enum Analytics {
         ["source": source?.rawValue ?? "skipped"]
     }
 
+    // MARK: Onboarding demo beats
+    // The demo is four beats inside one onboarding step; these show which beat loses people.
+
+    static func demoStageViewedProperties(stage: String, secondsSinceDemoStart: Double, run: Int) -> [String: Any] {
+        ["stage": stage, "seconds_since_demo_start": Int(secondsSinceDemoStart.rounded()), "run": run]
+    }
+
+    static func demoGameEndedProperties(levelsCleared: Int, secondsInGame: Double, run: Int) -> [String: Any] {
+        [
+            "levels_cleared": levelsCleared,
+            "seconds_in_game": Int(secondsInGame.rounded()),
+            "ended_by": OnboardingDemoRun.reachedCap(levelsCleared) ? "cap" : "miss",
+            "run": run
+        ]
+    }
+
+    /// stage: slot, game, unlock or rank.
+    static func onboardingDemoStageViewed(stage: String, secondsSinceDemoStart: Double, run: Int) {
+        PostHogSDK.shared.capture(
+            "onboarding.demo_stage_viewed",
+            properties: demoStageViewedProperties(stage: stage, secondsSinceDemoStart: secondsSinceDemoStart, run: run)
+        )
+    }
+
+    static func onboardingDemoSlotLanded(secondsSinceDemoStart: Double) {
+        PostHogSDK.shared.capture(
+            "onboarding.demo_slot_landed",
+            properties: ["seconds_since_demo_start": Int(secondsSinceDemoStart.rounded())]
+        )
+    }
+
+    static func onboardingDemoGameEnded(levelsCleared: Int, secondsInGame: Double, run: Int) {
+        PostHogSDK.shared.capture(
+            "onboarding.demo_game_ended",
+            properties: demoGameEndedProperties(levelsCleared: levelsCleared, secondsInGame: secondsInGame, run: run)
+        )
+    }
+
+    static func onboardingDemoPlayAgain(run: Int) {
+        PostHogSDK.shared.capture("onboarding.demo_play_again", properties: ["run": run])
+    }
+
     /// "Where did you find Memo?" A skip is logged but never stored on the person.
     static func onboardingAttributionSelected(source: AcquisitionSource?) {
         PostHogSDK.shared.capture(
@@ -665,6 +707,16 @@ enum Analytics {
         // close_tapped or purchase_cancelled: which moment showed the one-time offer.
         if let reason { props["offer_reason"] = reason }
         PostHogSDK.shared.capture("paywall.exit_offer_shown", properties: props)
+    }
+
+    /// Someone should have seen the one-time offer and didn't (product not loaded, or no discount).
+    static func paywallExitOfferUnavailable(trigger: String, reason: String, blocker: String, storefront: String?) {
+        PostHogSDK.shared.capture("paywall.exit_offer_unavailable", properties: [
+            "trigger": trigger,
+            "offer_reason": reason,
+            "blocker": blocker,
+            "storefront": storefront ?? "unknown"
+        ])
     }
 
     static func paywallExitOfferDeclined(trigger: String, isHighIntent: Bool) {

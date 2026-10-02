@@ -27,6 +27,8 @@ final class ChimpTestViewModel {
     private var pendingAdvance = false
     /// Onboarding's demo: one life, so the run ends on the first miss.
     var isOnboardingPreview = false
+    /// Onboarding's demo also ends, as a win, once this many numbers are cleared.
+    var previewLevelCap: Int?
     var lives = 3
     var nextExpected = 1
     var numbersHidden = false
@@ -141,6 +143,12 @@ final class ChimpTestViewModel {
                 bestLevel = max(bestLevel, currentLevel)
                 currentLevel += 1
                 onLevelCleared?(bestLevel)
+                if isOnboardingPreview, let cap = previewLevelCap, bestLevel >= cap {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                        self?.finishGame()
+                    }
+                    return
+                }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
                     guard let self else { return }
                     if self.holdAdvance { self.pendingAdvance = true } else { self.setupLevel() }
@@ -207,6 +215,8 @@ struct ChimpTestView: View {
     /// Onboarding's demo: no chrome, nothing saved, ends on the first miss.
     var isOnboardingPreview = false
     var onPreviewComplete: (() -> Void)? = nil
+    /// Ends the preview as a win at this many numbers (nil = play until the first miss).
+    var previewLevelCap: Int? = nil
     /// Numbers remembered so far (the level just cleared).
     var onPreviewProgress: ((Int) -> Void)? = nil
     @State private var viewModel = ChimpTestViewModel()
@@ -261,6 +271,7 @@ struct ChimpTestView: View {
             }
             if autoStart && viewModel.phase == .setup {
                 viewModel.isOnboardingPreview = isOnboardingPreview
+                viewModel.previewLevelCap = isOnboardingPreview ? previewLevelCap : nil
                 if !isOnboardingPreview {
                     Analytics.exerciseStarted(game: ExerciseType.chimpTest.rawValue)
                 }

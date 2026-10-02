@@ -580,7 +580,11 @@ struct PaywallView: View {
                 Task {
                     await storeService.startIfNeeded()
                     await storeService.loadProducts()
+                    await storeService.reloadMissingProducts()
                 }
+            } else {
+                // A partial load leaves the one-time offer (and the hard paywall's X) off.
+                Task { await storeService.reloadMissingProducts() }
             }
             Analytics.paywallShown(
                 trigger: triggerSource,
@@ -2128,22 +2132,43 @@ struct PaywallView: View {
         return Int(((1 - offer / regular) * 100).rounded())
     }
 
-    private var canShowExitOffer: Bool {
-        !exitOfferSeen && !storeService.isProUser && exitOfferDiscountPercent > 0
-            && storeService.products.contains { $0.id == StoreService.annualUltraExitOfferProductID }
+    private var exitOfferBlocker: ExitOfferGate.Blocker? {
+        ExitOfferGate.blocker(
+            seen: exitOfferSeen,
+            isPro: storeService.isProUser,
+            hasProduct: storeService.products.contains { $0.id == StoreService.annualUltraExitOfferProductID },
+            discountPercent: exitOfferDiscountPercent
+        )
     }
 
+    private var canShowExitOffer: Bool { exitOfferBlocker == nil }
+
     private func closeTapped() {
-        guard presentOneTimeOffer(reason: "close_tapped") else {
-            Analytics.paywallDismissed(trigger: triggerSource, selectedPlan: selectedPlan.analyticsName, isHighIntent: isHighIntent)
-            dismiss()
-            return
+        Task {
+            guard await presentOneTimeOffer(reason: "close_tapped") else {
+                Analytics.paywallDismissed(trigger: triggerSource, selectedPlan: selectedPlan.analyticsName, isHighIntent: isHighIntent)
+                dismiss()
+                return
+            }
         }
     }
 
     /// Shows the one-time offer if this install hasn't seen it. Returns false when it can't.
-    private func presentOneTimeOffer(reason: String) -> Bool {
-        guard canShowExitOffer, !showingExitOffer else { return false }
+    /// A missing offer product gets one reload; if it still can't show when it should, that's logged.
+    private func presentOneTimeOffer(reason: String) async -> Bool {
+        guard !showingExitOffer else { return false }
+        if exitOfferBlocker == .productMissing {
+            await storeService.reloadMissingProducts()
+        }
+        if let blocker = exitOfferBlocker {
+            if blocker.isUnexpected {
+                Analytics.paywallExitOfferUnavailable(
+                    trigger: triggerSource, reason: reason, blocker: blocker.rawValue,
+                    storefront: await Storefront.current?.countryCode
+                )
+            }
+            return false
+        }
         exitOfferSeen = true
         let offer = productPrice(for: StoreService.annualUltraExitOfferProductID, fallback: 29.99)
         let regular = productPrice(for: StoreService.annualUltraProductID, fallback: 39.99)
@@ -2320,7 +2345,7 @@ struct PaywallView: View {
                 isExitOffer: isExitOffer
             )
             // They were about to buy and backed out of Apple's sheet: the best moment for the one-time offer.
-            if !isExitOffer { _ = presentOneTimeOffer(reason: "purchase_cancelled") }
+            if !isExitOffer { _ = await presentOneTimeOffer(reason: "purchase_cancelled") }
         case .pending:
             Analytics.paywallPurchasePending(
                 plan: plan,

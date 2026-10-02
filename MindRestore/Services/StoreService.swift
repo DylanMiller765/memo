@@ -169,6 +169,28 @@ final class StoreService {
         productLoadTask = nil
     }
 
+    nonisolated static let requestedProductIDs: Set<String> = [
+        weeklyProductID,
+        annualProductID,
+        weeklyUltraProductID,
+        monthlyUltraProductID,
+        annualUltraProductID,
+        annualUltraExitOfferProductID
+    ]
+
+    /// The App Store can answer with only some of the products. A load that
+    /// returned anything counts as done, so fetch the stragglers on demand
+    /// (this silently switched the one-time offer off for a user on Oct 1, 2026).
+    func reloadMissingProducts() async {
+        let missing = Self.requestedProductIDs.subtracting(products.map(\.id))
+        guard !missing.isEmpty,
+              let loaded = try? await Product.products(for: missing),
+              !loaded.isEmpty else { return }
+        let known = Set(products.map(\.id))
+        products = (products + loaded.filter { !known.contains($0.id) }).sorted { $0.price < $1.price }
+        await refreshAnnualIntroOffer()
+    }
+
     private func performProductLoad() async {
         isLoading = true
         defer { isLoading = false }
@@ -176,14 +198,7 @@ final class StoreService {
         // One flaky request at launch used to leave the paywall permanently
         // dead ("offer is not ready yet" on every plan). Retry with backoff;
         // only surface an error if all attempts come back empty.
-        let requestIDs: Set<String> = [
-            Self.weeklyProductID,
-            Self.annualProductID,
-            Self.weeklyUltraProductID,
-            Self.monthlyUltraProductID,
-            Self.annualUltraProductID,
-            Self.annualUltraExitOfferProductID
-        ]
+        let requestIDs = Self.requestedProductIDs
 
         var lastError: Error?
         for attempt in 0..<3 {

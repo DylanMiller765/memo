@@ -2482,7 +2482,7 @@ struct OnboardingLockedAppFan: View {
 // MARK: 3 · Try it
 
 /// One interactive page in four beats: the production slot, the production
-/// Chimp Test (played until the first miss), the unlock that game earns, then
+/// Chimp Test (played until the first miss or a short cap), the unlock that game earns, then
 /// where the score lands on this week's real leaderboard. The Chimp Test is
 /// the game the TikTok slides feature ("chimps average 7").
 /// Nothing here is submitted or unlocked for real.
@@ -2497,8 +2497,16 @@ struct OnboardingPlayableLoopPage: View {
     @State private var gameRun = 0
     @State private var board: OnboardingBoardState = .loading
     @State private var unlockRevealed = false
+    @State private var demoStartedAt = Date.now
+    @State private var gameStartedAt = Date.now
 
-    private enum Stage: Int { case slot, game, unlock, rank }
+    private enum Stage: Int {
+        case slot, game, unlock, rank
+        var analyticsName: String { ["slot", "game", "unlock", "rank"][rawValue] }
+    }
+
+    /// 1 for the first game, 2 after "play again", and so on.
+    private var analyticsRun: Int { gameRun + 1 }
 
     init(previewCompleted: Bool = false, previewStage: Int? = nil, onContinue: @escaping (Int) -> Void) {
         self.onContinue = onContinue
@@ -2545,7 +2553,7 @@ struct OnboardingPlayableLoopPage: View {
                         level: levelsCleared,
                         compact: compact,
                         unit: BoardUnit.forGame(.chimpTest),
-                        footnote: levelsCleared > 0 ? "Chimps average 7. You remembered \(levelsCleared)." : nil,
+                        footnote: OnboardingDemoRun.rankFootnote(levelsCleared: levelsCleared),
                         onPlayAgain: playAgain
                     )
                     .padding(.horizontal, OBLayout.gutter)
@@ -2564,6 +2572,20 @@ struct OnboardingPlayableLoopPage: View {
             guard stage.rawValue >= Stage.unlock.rawValue else { return }
             await loadBoard()
         }
+        .onAppear {
+            demoStartedAt = .now
+            logStageViewed(stage)
+        }
+        .onChange(of: stage) { _, newStage in logStageViewed(newStage) }
+    }
+
+    private func logStageViewed(_ stage: Stage) {
+        if stage == .game { gameStartedAt = .now }
+        Analytics.onboardingDemoStageViewed(
+            stage: stage.analyticsName,
+            secondsSinceDemoStart: Date.now.timeIntervalSince(demoStartedAt),
+            run: analyticsRun
+        )
     }
 
     // MARK: Stages
@@ -2586,6 +2608,7 @@ struct OnboardingPlayableLoopPage: View {
                     mode: .demo,
                     onHill: true,
                     onLanded: { _ in
+                        Analytics.onboardingDemoSlotLanded(secondsSinceDemoStart: Date.now.timeIntervalSince(demoStartedAt))
                         withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) {
                             landedMinutes = UnlockRulebook.minutes(for: .great, isPersonalBest: false)
                         }
@@ -2633,6 +2656,7 @@ struct OnboardingPlayableLoopPage: View {
                 autoStart: true,
                 isOnboardingPreview: true,
                 onPreviewComplete: { finishGame() },
+                previewLevelCap: OnboardingDemoRun.levelCap,
                 onPreviewProgress: { levelsCleared = $0 }
             )
             .id(gameRun)
@@ -2677,14 +2701,14 @@ struct OnboardingPlayableLoopPage: View {
         }
     }
 
-    /// Honest about the run: the first ticket pays out either way.
-    private var payoutIntro: String {
-        if levelsCleared > 7 { return "You beat the chimps. Your ticket pays out." }
-        if levelsCleared == 7 { return "You tied the chimps. Your ticket pays out." }
-        return "Nice try. Memo pays out anyway on your first run."
-    }
+    private var payoutIntro: String { OnboardingDemoRun.payoutIntro(levelsCleared: levelsCleared) }
 
     private func finishGame() {
+        Analytics.onboardingDemoGameEnded(
+            levelsCleared: levelsCleared,
+            secondsInGame: Date.now.timeIntervalSince(gameStartedAt),
+            run: analyticsRun
+        )
         unlockRevealed = false
         withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.35)) {
             stage = .unlock
@@ -2692,6 +2716,7 @@ struct OnboardingPlayableLoopPage: View {
     }
 
     private func playAgain() {
+        Analytics.onboardingDemoPlayAgain(run: analyticsRun + 1)
         levelsCleared = 0
         gameRun += 1
         advance(to: .game)
@@ -3363,6 +3388,8 @@ struct OnboardingLeaderboardClimb: View {
             if let footnote {
                 Label(footnote, systemImage: "pawprint.fill")
                     .font(.system(size: compact ? 13 : 15, weight: .heavy, design: .rounded))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
                     .foregroundStyle(.white)
                     .padding(.horizontal, 14).padding(.vertical, 8)
                     .background(Capsule().fill(Color.white.opacity(0.1)))
