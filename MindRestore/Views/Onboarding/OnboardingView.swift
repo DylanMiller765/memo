@@ -283,7 +283,7 @@ struct OnboardingView: View {
             ]
         case .concise:
             return [
-                .welcome, .attribution, .motivationBridge, .goals,
+                .welcome, .attribution, .guidedAge, .motivationBridge, .goals,
                 .trialTrustBridge, .trialReminderBridge
             ]
         case .guided:
@@ -791,7 +791,7 @@ struct OnboardingView: View {
         case .goals: return "story_playable_loop"
         case .trialTrustBridge: return "trial_offer"
         case .trialReminderBridge: return "trial_reminder"
-        case .guidedAge: return "guided_age"
+        case .guidedAge: return onboardingVariant == .guided ? "guided_age" : "age"
         case .guidedScreenTime: return "guided_screen_time"
         case .guidedCalculating: return "guided_calculating"
         case .guidedShock: return "guided_years_lost"
@@ -1668,15 +1668,24 @@ struct OnboardingView: View {
 
     private var guidedAgePage: some View {
         OnboardingGuidedChoicePage(
-            title: "Quick one:\nhow old are you?", detail: "For the math. It stays on your phone.",
+            title: "Quick one:\nhow old are you?", detail: "Helps Memo fit your day.",
             options: GuidedAgeBand.allCases, label: \.title,
-            initial: GuidedAgeBand.allCases.first { $0.age == selectedAge }
+            initial: GuidedAgeBand.allCases.first { $0.age == selectedAge },
+            onSkip: {
+                OnboardingAgeTracking.record(nil)
+                trackOnboardingStepCompleted(ageStepName, extraProperties: ["age_band": OnboardingAgeTracking.value(for: nil)])
+                goToNextRoute()
+            }
         ) { band in
             selectedAge = band.age
-            trackOnboardingStepCompleted("guided_age", extraProperties: ["age_band": band.rawValue])
+            OnboardingAgeTracking.record(band)
+            trackOnboardingStepCompleted(ageStepName, extraProperties: ["age_band": band.rawValue])
             goToNextRoute()
         }
     }
+
+    /// The guided arm keeps its original step name so its funnel stays comparable.
+    private var ageStepName: String { onboardingVariant == .guided ? "guided_age" : "age" }
 
     private var guidedScreenTimePage: some View {
         OnboardingGuidedChoicePage(

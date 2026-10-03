@@ -46,6 +46,7 @@
 		A33BC116471F3B0282CF3629 /* StreakBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B93885923C4848ACCA6ADDA /* StreakBadge.swift */; };
 		A6BB59590520057ADCAF7847 /* PaywallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B18226B6A2D87A22928921B /* PaywallView.swift */; };
 		4F50E652681F7BED0D1F359C /* PaywallOneTimeOffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AFBB9015F04AA77453B63CE /* PaywallOneTimeOffer.swift */; };
+		13D0ED0DD43B5F7676D2CDAA /* PaywallBlocker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 484299DC8B2C79B2F02FFD6E /* PaywallBlocker.swift */; };
 		AA000001000000000000AA01 /* Achievement.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000002000000000000AA01 /* Achievement.swift */; };
 		AA000001000000000000AA02 /* LeaderboardEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000002000000000000AA02 /* LeaderboardEntry.swift */; };
 		AA000001000000000000AA04 /* LeaderboardService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000002000000000000AA04 /* LeaderboardService.swift */; };
@@ -192,6 +193,7 @@
 		89E3A0F68C6D99973A05BC90 /* SettingsCleanupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9405E0DF2F66609AC140B112 /* SettingsCleanupTests.swift */; };
 		0EF557358BC1C0AA2C8515D9 /* OnboardingRouteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08978292CCC36FF4C4C3506B /* OnboardingRouteTests.swift */; };
 		C4C212DD9513B751A21971AF /* InternalDeviceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76C51F522BE2F909A63670F5 /* InternalDeviceTests.swift */; };
+		6B9DE2F0EB7148F53414F97C /* PaywallBlockerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39C4F042F23CD703ABCB9A25 /* PaywallBlockerTests.swift */; };
 		BB357899547E3D46C0132585 /* OnboardingDemoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAC2EAC320BB4FB6C6E8D08C /* OnboardingDemoTests.swift */; };
 /* End PBXBuildFile section */
 
@@ -278,6 +280,7 @@
 		4ABD9792A0473A14E54F8F87 /* StoreService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreService.swift; sourceTree = "<group>"; };
 		4B18226B6A2D87A22928921B /* PaywallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaywallView.swift; sourceTree = "<group>"; };
 		1AFBB9015F04AA77453B63CE /* PaywallOneTimeOffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaywallOneTimeOffer.swift; sourceTree = "<group>"; };
+		484299DC8B2C79B2F02FFD6E /* PaywallBlocker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaywallBlocker.swift; sourceTree = "<group>"; };
 		4B93885923C4848ACCA6ADDA /* StreakBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreakBadge.swift; sourceTree = "<group>"; };
 		55274562ADD2916F382380DF /* User.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = User.swift; sourceTree = "<group>"; };
 		69BA16CD97233B209118C979 /* ConfettiView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfettiView.swift; sourceTree = "<group>"; };
@@ -455,6 +458,7 @@
 		9405E0DF2F66609AC140B112 /* SettingsCleanupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsCleanupTests.swift; sourceTree = "<group>"; };
 		08978292CCC36FF4C4C3506B /* OnboardingRouteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingRouteTests.swift; sourceTree = "<group>"; };
 		76C51F522BE2F909A63670F5 /* InternalDeviceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InternalDeviceTests.swift; sourceTree = "<group>"; };
+		39C4F042F23CD703ABCB9A25 /* PaywallBlockerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaywallBlockerTests.swift; sourceTree = "<group>"; };
 		DAC2EAC320BB4FB6C6E8D08C /* OnboardingDemoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingDemoTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -774,6 +778,7 @@
 			children = (
 				4B18226B6A2D87A22928921B /* PaywallView.swift */,
 				1AFBB9015F04AA77453B63CE /* PaywallOneTimeOffer.swift */,
+				484299DC8B2C79B2F02FFD6E /* PaywallBlocker.swift */,
 			);
 			path = Paywall;
 			sourceTree = "<group>";
@@ -943,6 +948,7 @@
 				9405E0DF2F66609AC140B112 /* SettingsCleanupTests.swift */,
 				08978292CCC36FF4C4C3506B /* OnboardingRouteTests.swift */,
 				76C51F522BE2F909A63670F5 /* InternalDeviceTests.swift */,
+				39C4F042F23CD703ABCB9A25 /* PaywallBlockerTests.swift */,
 				DAC2EAC320BB4FB6C6E8D08C /* OnboardingDemoTests.swift */,
 				0E85809019436FFAD02732FA /* ReviewPromptTests.swift */,
 				8FF4CCBFE423D93713CD3839 /* GameEndDataTests.swift */,
@@ -1406,6 +1412,7 @@
 				DEEP0002000000000000DD01 /* DeepLinkRouter.swift in Sources */,
 				A6BB59590520057ADCAF7847 /* PaywallView.swift in Sources */,
 				4F50E652681F7BED0D1F359C /* PaywallOneTimeOffer.swift in Sources */,
+				13D0ED0DD43B5F7676D2CDAA /* PaywallBlocker.swift in Sources */,
 				PROF0001000000000000PF01 /* ProfileView.swift in Sources */,
 				CFCCD0671D224CBDDF84E15C /* ProgressDashboardView.swift in Sources */,
 				15446FA296EDA6025F1B64EF /* ProgressRing.swift in Sources */,
@@ -1485,6 +1492,7 @@
 				89E3A0F68C6D99973A05BC90 /* SettingsCleanupTests.swift in Sources */,
 				0EF557358BC1C0AA2C8515D9 /* OnboardingRouteTests.swift in Sources */,
 				C4C212DD9513B751A21971AF /* InternalDeviceTests.swift in Sources */,
+				6B9DE2F0EB7148F53414F97C /* PaywallBlockerTests.swift in Sources */,
 				BB357899547E3D46C0132585 /* OnboardingDemoTests.swift in Sources */,
 				9EEDE594764E516C800CB774 /* ReviewPromptTests.swift in Sources */,
 				E9E9DD202DA6ABF001232EE5 /* GameEndDataTests.swift in Sources */,

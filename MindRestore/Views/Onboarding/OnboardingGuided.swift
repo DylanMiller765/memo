@@ -253,6 +253,8 @@ struct OnboardingGuidedChoicePage<Option: Identifiable & Equatable>: View {
     let options: [Option]
     let label: (Option) -> String
     var initial: Option?
+    /// A quiet "Skip" under the answers (the age question).
+    var onSkip: (() -> Void)? = nil
     let onPick: (Option) -> Void
 
     @State private var picked: Option?
@@ -270,6 +272,17 @@ struct OnboardingGuidedChoicePage<Option: Identifiable & Equatable>: View {
                 }
             }
             .padding(.top, compact ? 16 : 24)
+            if let onSkip {
+                Button("Skip") {
+                    guard !answered else { return }
+                    answered = true
+                    onSkip()
+                }
+                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                .foregroundStyle(.white.opacity(0.6))
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .padding(.top, 6)
+            }
             Spacer(minLength: 0)
         } bar: {
             EmptyView()

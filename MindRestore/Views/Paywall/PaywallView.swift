@@ -410,6 +410,9 @@ struct PaywallView: View {
     @State private var showCodeRedemption = false
     /// The one-time offer shows the first time someone closes the paywall, then never again.
     @AppStorage("paywall.exitOfferSeen") private var exitOfferSeen = false
+    @AppStorage(PaywallBlockerPrompt.askedKey) private var blockerAsked = false
+    @State private var askingBlocker = false
+    @State private var dismissAfterBlocker = false
     @State private var showingExitOffer = false
     /// Set when the offer-code sheet opens; cleared once a redemption lands.
     @State private var awaitingOfferCode = false
@@ -509,6 +512,12 @@ struct PaywallView: View {
                             Analytics.paywallExitOfferDeclined(trigger: triggerSource, isHighIntent: isHighIntent)
                             if isHardPaywall {
                                 withAnimation(.easeInOut(duration: 0.25)) { showingExitOffer = false }
+                                askBlockerIfNeeded(.offerDeclined)
+                            } else if PaywallBlockerPrompt.shouldAsk(.offerDeclined, alreadyAsked: blockerAsked, isPro: storeService.isProUser) {
+                                // Ask before leaving; the paywall closes once they answer.
+                                withAnimation(.easeInOut(duration: 0.25)) { showingExitOffer = false }
+                                dismissAfterBlocker = true
+                                askBlockerIfNeeded(.offerDeclined)
                             } else {
                                 dismiss()
                             }
@@ -538,6 +547,12 @@ struct PaywallView: View {
         }
         .preferredColorScheme(.dark)
         .interactiveDismissDisabled(isHardPaywall)
+        .sheet(isPresented: $askingBlocker, onDismiss: { if dismissAfterBlocker { dismiss() } }) {
+            PaywallBlockerSheet { answerBlocker($0) }
+                .presentationDetents([.height(500)])
+                .presentationDragIndicator(.visible)
+                .presentationBackground(Color(red: 0.07, green: 0.08, blue: 0.16))
+        }
         #if DEBUG
         .onAppear {
             if ProcessInfo.processInfo.arguments.contains("--show-one-time-offer") { showingExitOffer = true }
@@ -2143,6 +2158,18 @@ struct PaywallView: View {
 
     private var canShowExitOffer: Bool { exitOfferBlocker == nil }
 
+    private func askBlockerIfNeeded(_ moment: PaywallBlockerPrompt.Moment) {
+        guard PaywallBlockerPrompt.shouldAsk(moment, alreadyAsked: blockerAsked, isPro: storeService.isProUser) else { return }
+        blockerAsked = true
+        askingBlocker = true
+    }
+
+    private func answerBlocker(_ blocker: PaywallBlocker?) {
+        PaywallBlockerPrompt.record(blocker?.rawValue ?? "dismissed", plan: selectedPlan.analyticsName, trigger: triggerSource)
+        askingBlocker = false
+        if dismissAfterBlocker { dismiss() }
+    }
+
     private func closeTapped() {
         Task {
             guard await presentOneTimeOffer(reason: "close_tapped") else {
@@ -2345,7 +2372,10 @@ struct PaywallView: View {
                 isExitOffer: isExitOffer
             )
             // They were about to buy and backed out of Apple's sheet: the best moment for the one-time offer.
-            if !isExitOffer { _ = await presentOneTimeOffer(reason: "purchase_cancelled") }
+            if !isExitOffer {
+                let offerShown = await presentOneTimeOffer(reason: "purchase_cancelled")
+                askBlockerIfNeeded(.purchaseCancelled(offerShown: offerShown))
+            }
         case .pending:
             Analytics.paywallPurchasePending(
                 plan: plan,
